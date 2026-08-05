@@ -46,8 +46,10 @@ final class TaskRunSaveProbe: @unchecked Sendable {
         observedMainThread = observedMainThread || Thread.isMainThread
         let isFirstSave = storedSnapshots.count == 1
         lock.unlock()
-        if blocksFirstSave && isFirstSave {
+        if isFirstSave {
             firstSaveStarted.signal()
+        }
+        if blocksFirstSave && isFirstSave {
             releaseFirstSave.wait()
         }
         if failsFirstSave && isFirstSave {

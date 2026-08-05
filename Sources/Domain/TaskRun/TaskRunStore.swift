@@ -10,19 +10,23 @@ struct TaskRunStore: Sendable {
     let rootDirectory: URL
     private let fileManager: FileManager
     private let retentionPolicy: TaskRunRetentionPolicy
+    private let now: @Sendable () -> Date
 
     init(
         rootDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config/cocxy/task-runs", isDirectory: true),
         fileManager: FileManager = .default,
-        retentionPolicy: TaskRunRetentionPolicy = .default
+        retentionPolicy: TaskRunRetentionPolicy = .default,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.rootDirectory = rootDirectory.standardizedFileURL
         self.fileManager = fileManager
         self.retentionPolicy = retentionPolicy
+        self.now = now
     }
 
-    func save(_ run: TaskRun) throws {
+    @discardableResult
+    func save(_ run: TaskRun) throws -> TaskRunStoreSaveReport {
         do {
             try Self.validate(run)
             try ensureDirectory(rootDirectory)
@@ -44,16 +48,25 @@ struct TaskRunStore: Sendable {
                 [.posixPermissions: NSNumber(value: 0o600)],
                 ofItemAtPath: destination.path
             )
-            let maintenance = try enforceRetention(in: projectDirectory)
-            if let failure = maintenance.failures.first {
-                throw TaskRunStoreError.persistenceFailed(
-                    "Snapshot retention failed for \(failure.path): \(failure.reason)"
-                )
-            }
+            guard run.status.isFinished else { return .empty }
+            return retentionReportAfterSuccessfulSave(in: projectDirectory)
         } catch let error as TaskRunStoreError {
             throw error
         } catch {
             throw TaskRunStoreError.persistenceFailed(error.localizedDescription)
+        }
+    }
+
+    private func retentionReportAfterSuccessfulSave(in directory: URL) -> TaskRunStoreSaveReport {
+        do {
+            let maintenance = try enforceRetention(in: directory)
+            return TaskRunStoreSaveReport(
+                maintenanceFailures: maintenance.failures,
+                prunedSnapshotCount: maintenance.prunedRuns.count
+            )
+        } catch {
+            let failure = TaskRunStoreRejectedFile(path: directory.path, reason: String(describing: error))
+            return TaskRunStoreSaveReport(maintenanceFailures: [failure])
         }
     }
 
@@ -150,7 +163,12 @@ struct TaskRunStore: Sendable {
             directory,
             loadedIDs: &loadedIDs
         )
-        let maintenance = try enforceRetention(on: report.runs, in: directory)
+        let expirationDate = now().addingTimeInterval(-retentionPolicy.maximumInterruptedRunAge)
+        let maintenance = try enforceRetention(
+            on: report.runs,
+            in: directory,
+            pruneInterruptedBefore: expirationDate
+        )
         let prunedIDs = Set(maintenance.prunedRuns.map(\.id))
         return TaskRunStoreLoadReport(
             runs: report.runs.filter { !prunedIDs.contains($0.id) },
@@ -208,14 +226,23 @@ struct TaskRunStore: Sendable {
 
     private func enforceRetention(
         on runs: [TaskRun],
-        in directory: URL
+        in directory: URL,
+        pruneInterruptedBefore expirationDate: Date? = nil
     ) throws -> (prunedRuns: [TaskRun], failures: [TaskRunStoreRejectedFile]) {
         let finished = runs.filter(\.status.isFinished).sorted { lhs, rhs in
             if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
             if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
             return lhs.id < rhs.id
         }
-        let prunable = finished.dropFirst(retentionPolicy.maximumFinishedRunsPerProject)
+        let expiredInterrupted = expirationDate.map { cutoff in
+            runs.filter {
+                !$0.status.isFinished && $0.recoveredFromInterruption
+                    && $0.updatedAt <= cutoff
+            }
+        } ?? []
+        let prunable = Array(
+            finished.dropFirst(retentionPolicy.maximumFinishedRunsPerProject)
+        ) + expiredInterrupted
         var prunedRuns: [TaskRun] = []
         var failures: [TaskRunStoreRejectedFile] = []
         for run in prunable {
@@ -373,6 +400,7 @@ struct TaskRunStore: Sendable {
 
 enum TaskRunPersistenceEvent: Sendable, Equatable {
     case saved(runID: String)
+    case maintenanceFailed(runID: String, failures: [TaskRunStoreRejectedFile])
     case failed(runID: String, message: String)
 }
 
@@ -384,13 +412,15 @@ final class TaskRunPersistenceCoordinator: @unchecked Sendable {
 
     typealias SaveOperation = @Sendable (TaskRun) throws -> Void
     typealias EventHandler = @Sendable (TaskRunPersistenceEvent) -> Void
+    private typealias ReportingSaveOperation = @Sendable (TaskRun) throws -> TaskRunStoreSaveReport
 
     private let queue: DispatchQueue
     private let lock = NSLock()
-    private let saveOperation: SaveOperation
+    private let saveOperation: ReportingSaveOperation
     private let eventHandler: EventHandler
     private let maximumRetryAttempts: Int
     private let retryDelay: TimeInterval
+    private let coalescingDelay: TimeInterval
     private var pendingRuns: [String: PendingRun] = [:]
     private var suppressionCounts: [String: Int] = [:]
     private var nextGeneration: UInt64 = 0
@@ -401,6 +431,7 @@ final class TaskRunPersistenceCoordinator: @unchecked Sendable {
         label: String = "dev.cocxy.task-run-persistence",
         maximumRetryAttempts: Int = 3,
         retryDelay: TimeInterval = 0.05,
+        coalescingDelay: TimeInterval = 0.05,
         eventHandler: @escaping EventHandler = { _ in }
     ) {
         self.queue = DispatchQueue(label: label, qos: .utility)
@@ -408,20 +439,26 @@ final class TaskRunPersistenceCoordinator: @unchecked Sendable {
         self.eventHandler = eventHandler
         self.maximumRetryAttempts = max(1, maximumRetryAttempts)
         self.retryDelay = max(0, retryDelay)
+        self.coalescingDelay = max(0, coalescingDelay)
     }
 
     init(
         label: String = "dev.cocxy.task-run-persistence",
         maximumRetryAttempts: Int = 3,
         retryDelay: TimeInterval = 0.05,
+        coalescingDelay: TimeInterval = 0.05,
         saveOperation: @escaping SaveOperation,
         eventHandler: @escaping EventHandler = { _ in }
     ) {
         self.queue = DispatchQueue(label: label, qos: .utility)
-        self.saveOperation = saveOperation
+        self.saveOperation = {
+            try saveOperation($0)
+            return .empty
+        }
         self.eventHandler = eventHandler
         self.maximumRetryAttempts = max(1, maximumRetryAttempts)
         self.retryDelay = max(0, retryDelay)
+        self.coalescingDelay = max(0, coalescingDelay)
     }
 
     func enqueue(_ run: TaskRun) {
@@ -434,9 +471,7 @@ final class TaskRunPersistenceCoordinator: @unchecked Sendable {
             return true
         }
         guard shouldSchedule else { return }
-        queue.async { [self] in
-            drainPendingRuns()
-        }
+        scheduleDrain()
     }
 
     func suppress(runID: String) {
@@ -469,7 +504,7 @@ final class TaskRunPersistenceCoordinator: @unchecked Sendable {
             return true
         }
         if shouldSchedule {
-            queue.async { [self] in drainPendingRuns() }
+            scheduleDrain()
         }
     }
 
@@ -490,10 +525,14 @@ final class TaskRunPersistenceCoordinator: @unchecked Sendable {
         try queue.sync(execute: operation)
     }
 
-    func performExclusiveSave(_ run: TaskRun) throws {
+    func performExclusiveSave(_ run: TaskRun) throws -> TaskRunStoreSaveReport {
         try queue.sync { [saveOperation] in
             try saveOperation(run)
         }
+    }
+
+    private func scheduleDrain() {
+        queue.asyncAfter(deadline: .now() + coalescingDelay) { [self] in drainPendingRuns() }
     }
 
     private func drainPendingRuns() {
@@ -514,9 +553,10 @@ final class TaskRunPersistenceCoordinator: @unchecked Sendable {
             guard let pending else { return }
 
             var finalError: Error?
+            var saveReport = TaskRunStoreSaveReport.empty
             for attempt in 1...maximumRetryAttempts {
                 do {
-                    try saveOperation(pending.run)
+                    saveReport = try saveOperation(pending.run)
                     finalError = nil
                     break
                 } catch {
@@ -537,6 +577,11 @@ final class TaskRunPersistenceCoordinator: @unchecked Sendable {
                 eventHandler(.failed(
                     runID: pending.run.id,
                     message: String(describing: finalError)
+                ))
+            } else if !saveReport.maintenanceFailures.isEmpty {
+                eventHandler(.maintenanceFailed(
+                    runID: pending.run.id,
+                    failures: saveReport.maintenanceFailures
                 ))
             } else {
                 eventHandler(.saved(runID: pending.run.id))

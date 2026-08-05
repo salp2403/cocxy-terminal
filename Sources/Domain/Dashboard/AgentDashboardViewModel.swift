@@ -422,6 +422,19 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// Mirrors all candidates in one parallel task as subagents of a single
     /// dashboard row. Provider hook rows stay folded into this aggregate.
     func syncTaskRun(_ run: TaskRun, fallbackTabId: UUID) {
+        updateTaskRunSession(run, fallbackTabId: fallbackTabId)
+        rebuildSessions()
+    }
+
+    func syncTaskRuns(_ snapshots: [(run: TaskRun, fallbackTabId: UUID)]) {
+        guard !snapshots.isEmpty else { return }
+        for snapshot in snapshots {
+            updateTaskRunSession(snapshot.run, fallbackTabId: snapshot.fallbackTabId)
+        }
+        rebuildSessions()
+    }
+
+    private func updateTaskRunSession(_ run: TaskRun, fallbackTabId: UUID) {
         let subagents = run.candidates.map { candidate in
             let branch = candidate.worktree?.branch ?? "Preparing worktree"
             let cost = candidate.estimatedCostMicros > 0
@@ -468,7 +481,6 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             lastActivityTime: run.updatedAt,
             subagents: subagents
         )
-        rebuildSessions()
     }
 
     func removeTaskRun(runID: String) {

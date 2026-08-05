@@ -63,15 +63,22 @@ extension AppDelegate {
         }
         coordinator?.suppress(runID: run.id)
         do {
-            try await Task.detached(priority: .utility) {
+            let report = try await Task.detached(priority: .utility) {
                 if let coordinator {
-                    try coordinator.performExclusiveSave(run)
+                    return try coordinator.performExclusiveSave(run)
                 } else {
-                    try store.save(run)
+                    return try store.save(run)
                 }
             }.value
             let replayRun = await MainActor.run { () -> TaskRun? in
-                self.handleTaskRunPersistenceEvent(.saved(runID: run.id))
+                self.handleTaskRunPersistenceEvent(
+                    report.maintenanceFailures.isEmpty
+                        ? .saved(runID: run.id)
+                        : .maintenanceFailed(
+                            runID: run.id,
+                            failures: report.maintenanceFailures
+                        )
+                )
                 if let latest = self.activeTaskRuns[run.id], latest != run {
                     return latest
                 }
@@ -131,16 +138,18 @@ extension AppDelegate {
     private func installRestoredTaskRuns(_ report: TaskRunRestorationReport) {
         let localizer = appLocalizer()
         var installedRunIDs: Set<String> = []
+        var dashboardSnapshots: [(run: TaskRun, fallbackTabId: UUID)] = []
         for run in report.runs where activeTaskRuns[run.id] == nil {
             activeTaskRuns[run.id] = run
             installedRunIDs.insert(run.id)
             let fallbackTabID = run.candidates.compactMap(\.worktree?.tabID?.rawValue).first
                 ?? UUID()
-            agentDashboardViewModel?.syncTaskRun(run, fallbackTabId: fallbackTabID)
-            for controller in allWindowControllers {
-                guard controller.dashboardViewModel !== agentDashboardViewModel else { continue }
-                controller.dashboardViewModel?.syncTaskRun(run, fallbackTabId: fallbackTabID)
-            }
+            dashboardSnapshots.append((run, fallbackTabID))
+        }
+        agentDashboardViewModel?.syncTaskRuns(dashboardSnapshots)
+        for controller in allWindowControllers {
+            guard controller.dashboardViewModel !== agentDashboardViewModel else { continue }
+            controller.dashboardViewModel?.syncTaskRuns(dashboardSnapshots)
         }
         taskInboxStore.updateTaskRuns(Array(activeTaskRuns.values))
         for run in report.runs where installedRunIDs.contains(run.id)
@@ -198,6 +207,13 @@ extension AppDelegate {
         switch event {
         case .saved(let runID):
             taskRunPersistenceIssues.removeValue(forKey: runID)
+        case .maintenanceFailed(let runID, let failures):
+            taskRunPersistenceIssues[runID] = appLocalizer()
+                .taskRunRetentionFailureMessage(count: failures.count)
+            let details = failures.map { "\($0.path): \($0.reason)" }.joined(separator: " | ")
+            Self.taskRunPersistenceLogger.error(
+                "Task run retention failed after saving \(runID, privacy: .public): \(details, privacy: .private)"
+            )
         case .failed(let runID, let message):
             taskRunPersistenceIssues[runID] = appLocalizer().taskRunSaveFailureMessage(runID: runID)
             Self.taskRunPersistenceLogger.error(

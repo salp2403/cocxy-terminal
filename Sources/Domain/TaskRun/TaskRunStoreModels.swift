@@ -28,12 +28,35 @@ struct TaskRunStoreRejectedFile: Sendable, Equatable {
 }
 
 struct TaskRunRetentionPolicy: Sendable, Equatable {
-    static let `default` = TaskRunRetentionPolicy(maximumFinishedRunsPerProject: 32)
+    static let `default` = TaskRunRetentionPolicy(
+        maximumFinishedRunsPerProject: 32,
+        maximumInterruptedRunAge: 30 * 24 * 60 * 60
+    )
 
     let maximumFinishedRunsPerProject: Int
+    let maximumInterruptedRunAge: TimeInterval
 
-    init(maximumFinishedRunsPerProject: Int) {
+    init(
+        maximumFinishedRunsPerProject: Int,
+        maximumInterruptedRunAge: TimeInterval = 30 * 24 * 60 * 60
+    ) {
         self.maximumFinishedRunsPerProject = max(0, maximumFinishedRunsPerProject)
+        self.maximumInterruptedRunAge = max(0, maximumInterruptedRunAge)
+    }
+}
+
+struct TaskRunStoreSaveReport: Sendable, Equatable {
+    static let empty = TaskRunStoreSaveReport()
+
+    let maintenanceFailures: [TaskRunStoreRejectedFile]
+    let prunedSnapshotCount: Int
+
+    init(
+        maintenanceFailures: [TaskRunStoreRejectedFile] = [],
+        prunedSnapshotCount: Int = 0
+    ) {
+        self.maintenanceFailures = maintenanceFailures
+        self.prunedSnapshotCount = prunedSnapshotCount
     }
 }
 
