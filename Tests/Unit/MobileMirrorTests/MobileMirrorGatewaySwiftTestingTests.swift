@@ -228,6 +228,97 @@ struct MobileMirrorGatewaySwiftTestingTests {
         #expect(received.localizedCaseInsensitiveContains("mobile-secret") == false)
         #expect(received.localizedCaseInsensitiveContains("signed-action") == false)
     }
+
+    @Test("forwarded peers receive independent gateway connection budgets")
+    func forwardedPeerAdmissionUsesPreambleAddress() throws {
+        let secret = "forwarded-peer-admission"
+        let gateway = MobileMirrorGateway(
+            trustedRelaySecret: secret,
+            connectionLimits: MobileMirrorConnectionLimits(
+                maximumTotal: 3,
+                maximumPerAddress: 1,
+                maximumStartsPerWindow: 4,
+                maximumFailuresPerWindow: 2,
+                rateWindow: 10
+            )
+        ) { _, _ in .eventStream }
+        let port = try gateway.start()
+        defer { gateway.stop() }
+
+        let first = try Self.openRelayedEventStream(
+            port: port,
+            secret: secret,
+            remoteAddress: "192.168.10.20"
+        )
+        defer { Darwin.close(first) }
+        let second = try Self.openRelayedEventStream(
+            port: port,
+            secret: secret,
+            remoteAddress: "192.168.10.21"
+        )
+        defer { Darwin.close(second) }
+
+        let duplicate = try Self.connect(port: port)
+        defer { Darwin.close(duplicate) }
+        let duplicateRequest = MobileMirrorRelayPreamble.encode(
+            secret: secret,
+            remoteAddress: "192.168.10.20"
+        ) + Data("GET /events HTTP/1.1\r\nHost: local\r\n\r\n".utf8)
+        #expect(MobileMirrorGateway.sendAll(duplicateRequest, to: duplicate))
+        #expect(Self.receiveHTTPHead(from: duplicate).hasPrefix("HTTP/1.1 429"))
+    }
+
+    private static func openRelayedEventStream(
+        port: UInt16,
+        secret: String,
+        remoteAddress: String
+    ) throws -> Int32 {
+        let descriptor = try connect(port: port)
+        let request = MobileMirrorRelayPreamble.encode(
+            secret: secret,
+            remoteAddress: remoteAddress
+        ) + Data("GET /events HTTP/1.1\r\nHost: local\r\n\r\n".utf8)
+        guard MobileMirrorGateway.sendAll(request, to: descriptor),
+              receiveHTTPHead(from: descriptor).hasPrefix("HTTP/1.1 200 OK\r\n") else {
+            Darwin.close(descriptor)
+            throw CocoaError(.fileReadUnknown)
+        }
+        return descriptor
+    }
+
+    private static func connect(port: UInt16) throws -> Int32 {
+        let descriptor = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { throw CocoaError(.fileReadUnknown) }
+        var timeout = timeval(tv_sec: 1, tv_usec: 0)
+        setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout.size(ofValue: timeout)))
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = port.bigEndian
+        inet_pton(AF_INET, MobileMirrorGateway.loopbackAddress, &address.sin_addr)
+        let result = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard result == 0 else {
+            Darwin.close(descriptor)
+            throw CocoaError(.fileReadUnknown)
+        }
+        return descriptor
+    }
+
+    private static func receiveHTTPHead(from descriptor: Int32) -> String {
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while data.range(of: Data("\r\n\r\n".utf8)) == nil {
+            let count = Darwin.recv(descriptor, &buffer, buffer.count, 0)
+            if count > 0 { data.append(buffer, count: count); continue }
+            if count < 0, errno == EINTR { continue }
+            break
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
 }
 
 private final class MobileMirrorStalledRoute: @unchecked Sendable {

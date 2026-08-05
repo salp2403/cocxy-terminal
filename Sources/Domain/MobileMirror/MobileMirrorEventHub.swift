@@ -41,8 +41,7 @@ final class MobileMirrorEventHub: @unchecked Sendable {
         ) { [weak self] descriptor, identifier in
             self?.remove(descriptor: descriptor, identifier: identifier)
         }
-        heartbeatQueue.async { [weak self] in
-            guard let self else { return }
+        heartbeatQueue.sync {
             self.lock.lock()
             self.clients[descriptor]?.stop()
             self.clients[descriptor] = writer
@@ -76,6 +75,14 @@ final class MobileMirrorEventHub: @unchecked Sendable {
             }
             self.send(payload)
         }
+    }
+
+    func disconnect(descriptor: Int32) {
+        lock.lock()
+        let client = clients.removeValue(forKey: descriptor)
+        clientOrder.removeAll { $0 == descriptor }
+        lock.unlock()
+        client?.stop()
     }
 
     func stop() {

@@ -32,6 +32,10 @@ final class MobileMirrorGateway: @unchecked Sendable {
     static let maximumConnections = 16
     static let loopbackAddress = "127.0.0.1"
 
+    private struct ClientState {
+        var admittedAddress: String?
+    }
+
     let bindAddress = MobileMirrorGateway.loopbackAddress
     let eventHub: MobileMirrorEventHub
 
@@ -40,6 +44,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
     private let clientIdentityLabel: String?
     private let trustedRelaySecret: String?
     private let requestTimeout: TimeInterval
+    private let maximumPendingConnections: Int
     private let monotonicNow: @Sendable () -> TimeInterval
     private let listenerQueue = DispatchQueue(label: "dev.cocxy.mobile.listener")
     private let workerQueue = DispatchQueue(
@@ -49,7 +54,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
     )
     private let stateLock = NSLock()
     private var listenerSource: DispatchSourceRead?
-    private var clientDescriptors: [Int32: String] = [:]
+    private var clientDescriptors: [Int32: ClientState] = [:]
     private var connectionPolicy: MobileMirrorConnectionPolicy
     private(set) var port: UInt16?
 
@@ -72,6 +77,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
         self.requestTimeout = requestTimeout.isFinite
             ? min(60, max(0.05, requestTimeout))
             : 8
+        self.maximumPendingConnections = max(1, connectionLimits.maximumTotal)
         self.connectionPolicy = MobileMirrorConnectionPolicy(limits: connectionLimits)
         self.monotonicNow = monotonicNow
         self.routeHandler = routeHandler
@@ -167,18 +173,20 @@ final class MobileMirrorGateway: @unchecked Sendable {
             configureClientSocket(descriptor)
             let remoteAddress = Self.numericAddress(remote) ?? "unknown"
             stateLock.lock()
-            guard port != nil else {
+            guard port != nil,
+                  clientDescriptors.count < maximumPendingConnections else {
                 stateLock.unlock()
                 Darwin.shutdown(descriptor, SHUT_RDWR)
                 Darwin.close(descriptor)
                 continue
             }
-            let decision = connectionPolicy.admit(
-                address: remoteAddress,
-                now: monotonicNow()
-            )
+            let decision = trustedRelaySecret == nil
+                ? connectionPolicy.admit(address: remoteAddress, now: monotonicNow())
+                : .accepted
             if decision == .accepted {
-                clientDescriptors[descriptor] = remoteAddress
+                clientDescriptors[descriptor] = ClientState(
+                    admittedAddress: trustedRelaySecret == nil ? remoteAddress : nil
+                )
             }
             stateLock.unlock()
             guard decision == .accepted else {
@@ -235,6 +243,13 @@ final class MobileMirrorGateway: @unchecked Sendable {
                     }
                     relayedRemoteAddress = address
                     consumedRelayPreamble = true
+                    guard admitRelayedConnection(descriptor, address: address) else {
+                        respond(
+                            .error("Too many local requests.", status: 429),
+                            to: descriptor
+                        )
+                        return
+                    }
                 }
                 if let request = try MobileMirrorHTTPRequest.parseIfComplete(data) {
                     let identity = MobileMirrorClientIdentity(
@@ -284,6 +299,19 @@ final class MobileMirrorGateway: @unchecked Sendable {
             data.append(buffer, count: count)
             return
         }
+    }
+
+    private func admitRelayedConnection(_ descriptor: Int32, address: String) -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard port != nil,
+              let client = clientDescriptors[descriptor],
+              client.admittedAddress == nil,
+              connectionPolicy.admit(address: address, now: monotonicNow()) == .accepted else {
+            return false
+        }
+        clientDescriptors[descriptor]?.admittedAddress = address
+        return true
     }
 
     private func route(
@@ -344,6 +372,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
             ) { [self] in
                 finish(descriptor)
             }
+            monitorEventStreamClosure(descriptor)
         case .proxy(let target):
             proxy(request: request, to: target, client: descriptor)
         }
@@ -352,6 +381,19 @@ final class MobileMirrorGateway: @unchecked Sendable {
     private func respond(_ response: MobileMirrorHTTPResponse, to descriptor: Int32) {
         _ = Self.sendAll(response.encoded(), to: descriptor)
         finish(descriptor)
+    }
+
+    private func monitorEventStreamClosure(_ descriptor: Int32) {
+        workerQueue.async { [self] in
+            var byte: UInt8 = 0
+            while true {
+                let count = Darwin.recv(descriptor, &byte, 1, MSG_PEEK)
+                if count < 0, errno == EINTR { continue }
+                eventHub.disconnect(descriptor: descriptor)
+                finish(descriptor)
+                return
+            }
+        }
     }
 
     private func proxy(
@@ -439,12 +481,12 @@ final class MobileMirrorGateway: @unchecked Sendable {
 
     private func finish(_ descriptor: Int32) {
         stateLock.lock()
-        let remoteAddress = clientDescriptors.removeValue(forKey: descriptor)
-        if let remoteAddress {
+        let client = clientDescriptors.removeValue(forKey: descriptor)
+        if let remoteAddress = client?.admittedAddress {
             connectionPolicy.release(address: remoteAddress)
         }
         stateLock.unlock()
-        guard remoteAddress != nil else { return }
+        guard client != nil else { return }
         Darwin.shutdown(descriptor, SHUT_RDWR)
         Darwin.close(descriptor)
     }
@@ -492,74 +534,6 @@ final class MobileMirrorGateway: @unchecked Sendable {
             }
         }
         return result == 0 ? String(cString: host) : nil
-    }
-}
-
-private enum MobileMirrorRouteOutcome: Sendable {
-    case result(MobileMirrorHTTPRouteResult)
-    case timedOut
-}
-
-private final class MobileMirrorRouteCompletion: @unchecked Sendable {
-    private let lock = NSLock()
-    private let completion: @Sendable (MobileMirrorRouteOutcome) -> Void
-    private var routeTask: Task<Void, Never>?
-    private var timeoutTask: Task<Void, Never>?
-    private var isResolved = false
-
-    init(completion: @escaping @Sendable (MobileMirrorRouteOutcome) -> Void) {
-        self.completion = completion
-    }
-
-    func install(routeTask: Task<Void, Never>) {
-        lock.lock()
-        if isResolved {
-            lock.unlock()
-            routeTask.cancel()
-            return
-        }
-        self.routeTask = routeTask
-        lock.unlock()
-    }
-
-    func install(timeoutTask: Task<Void, Never>) {
-        lock.lock()
-        if isResolved {
-            lock.unlock()
-            timeoutTask.cancel()
-            return
-        }
-        self.timeoutTask = timeoutTask
-        lock.unlock()
-    }
-
-    func cancelRouteAndWait() async {
-        let state = lock.withLock {
-            (isResolved: isResolved, task: routeTask)
-        }
-        guard !state.isResolved else { return }
-
-        state.task?.cancel()
-        await state.task?.value
-        resolve(.timedOut)
-    }
-
-    func resolve(_ outcome: MobileMirrorRouteOutcome) {
-        let tasks: (Task<Void, Never>?, Task<Void, Never>?)
-        lock.lock()
-        guard !isResolved else {
-            lock.unlock()
-            return
-        }
-        isResolved = true
-        tasks = (routeTask, timeoutTask)
-        routeTask = nil
-        timeoutTask = nil
-        lock.unlock()
-
-        tasks.0?.cancel()
-        tasks.1?.cancel()
-        completion(outcome)
     }
 }
 

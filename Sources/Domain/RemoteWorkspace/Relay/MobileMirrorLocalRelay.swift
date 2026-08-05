@@ -162,7 +162,7 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
     typealias BindAddressPolicy = @Sendable (String) -> Bool
     typealias PeerAddressNormalizer = @Sendable (String) -> String?
 
-    static let maximumConnections = 16
+    static let idleTimeout: TimeInterval = 45
 
     private let id = UUID()
     private let gatewayPort: UInt16
@@ -170,6 +170,8 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
     private let addressProvider: AddressProvider
     private let bindAddressPolicy: BindAddressPolicy
     private let peerAddressNormalizer: PeerAddressNormalizer
+    private let connectionLimits: MobileMirrorConnectionLimits
+    private let connectionIdleTimeout: TimeInterval
     private let listenerQueue = DispatchQueue(label: "dev.cocxy.mobile.relay.listener")
     private let workerQueue = DispatchQueue(
         label: "dev.cocxy.mobile.relay.connections",
@@ -179,7 +181,7 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
     private let lock = NSLock()
     private var listenerSource: DispatchSourceRead?
     private var connections: [UUID: MobileMirrorLocalRelayConnection] = [:]
-    private var pendingConnections = 0
+    private var connectionPolicy: MobileMirrorConnectionPolicy
     private(set) var lease: MobileMirrorLocalRelayLease?
 
     init(
@@ -191,13 +193,18 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
         bindAddressPolicy: @escaping BindAddressPolicy = {
             MobileMirrorPrivateNetworkAddress.isPrivateIPv4($0)
         },
-        peerAddressNormalizer: @escaping PeerAddressNormalizer = { $0 }
+        peerAddressNormalizer: @escaping PeerAddressNormalizer = { $0 },
+        connectionLimits: MobileMirrorConnectionLimits = .default,
+        connectionIdleTimeout: TimeInterval = MobileMirrorLocalRelay.idleTimeout
     ) {
         self.gatewayPort = gatewayPort
         self.preambleSecret = preambleSecret
         self.addressProvider = addressProvider
         self.bindAddressPolicy = bindAddressPolicy
         self.peerAddressNormalizer = peerAddressNormalizer
+        self.connectionLimits = connectionLimits
+        self.connectionIdleTimeout = max(1, connectionIdleTimeout)
+        self.connectionPolicy = MobileMirrorConnectionPolicy(limits: connectionLimits)
     }
 
     func start() throws -> MobileMirrorLocalRelayLease {
@@ -237,7 +244,7 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
             }
         }
         guard bindResult == 0 else { throw MobileMirrorLocalRelayError.bindFailed(errno) }
-        guard Darwin.listen(descriptor, Int32(Self.maximumConnections)) == 0 else {
+        guard Darwin.listen(descriptor, Int32(max(1, connectionLimits.maximumTotal))) == 0 else {
             throw MobileMirrorLocalRelayError.listenFailed(errno)
         }
         var bound = sockaddr_in()
@@ -280,7 +287,7 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
         lease = nil
         activeConnections = Array(connections.values)
         connections.removeAll()
-        pendingConnections = 0
+        connectionPolicy.reset()
         lock.unlock()
         source?.cancel()
         activeConnections.forEach { $0.close() }
@@ -302,11 +309,11 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
             guard let numericAddress = Self.numericIPv4(remote),
                   let remoteAddress = peerAddressNormalizer(numericAddress),
                   MobileMirrorPrivateNetworkAddress.isPrivateIPv4(remoteAddress),
-                  reserveConnectionSlot() else {
+                  reserveConnectionSlot(for: remoteAddress) else {
                 Darwin.close(client)
                 continue
             }
-            Self.configureSocket(client)
+            Self.configureSocket(client, receiveTimeout: min(15, connectionIdleTimeout))
             workerQueue.async { [weak self] in
                 guard let self else {
                     Darwin.close(client)
@@ -317,15 +324,14 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
         }
     }
 
-    private func reserveConnectionSlot() -> Bool {
+    private func reserveConnectionSlot(for remoteAddress: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard lease != nil,
-              connections.count + pendingConnections < Self.maximumConnections else {
-            return false
-        }
-        pendingConnections += 1
-        return true
+        guard lease != nil else { return false }
+        return connectionPolicy.admit(
+            address: remoteAddress,
+            now: ProcessInfo.processInfo.systemUptime
+        ) == .accepted
     }
 
     private func openConnection(client: Int32, remoteAddress: String) {
@@ -335,23 +341,25 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
             connection = try MobileMirrorLocalRelayConnection(
                 client: client,
                 gatewayPort: gatewayPort,
+                remoteAddress: remoteAddress,
                 preamble: MobileMirrorRelayPreamble.encode(
                     secret: preambleSecret,
                     remoteAddress: remoteAddress
                 ),
                 queue: workerQueue,
+                idleTimeout: connectionIdleTimeout,
                 onClose: { [weak self] in self?.removeConnection(connectionID) }
             )
         } catch {
             Darwin.close(client)
             lock.lock()
-            pendingConnections = max(0, pendingConnections - 1)
+            connectionPolicy.release(address: remoteAddress)
             lock.unlock()
             return
         }
         lock.lock()
-        pendingConnections = max(0, pendingConnections - 1)
         guard lease != nil else {
+            connectionPolicy.release(address: remoteAddress)
             lock.unlock()
             connection.start()
             connection.close()
@@ -364,13 +372,28 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
 
     private func removeConnection(_ id: UUID) {
         lock.lock()
-        connections.removeValue(forKey: id)
+        let remoteAddress = connections.removeValue(forKey: id)?.remoteAddress
+        if let remoteAddress { connectionPolicy.release(address: remoteAddress) }
         lock.unlock()
     }
 
-    fileprivate static func configureSocket(_ descriptor: Int32) {
+    fileprivate static func configureSocket(_ descriptor: Int32, receiveTimeout: TimeInterval) {
         var one: Int32 = 1
         setsockopt(descriptor, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout.size(ofValue: one)))
+        setsockopt(descriptor, SOL_SOCKET, SO_KEEPALIVE, &one, socklen_t(MemoryLayout.size(ofValue: one)))
+        var keepalive: Int32 = 15
+        setsockopt(descriptor, IPPROTO_TCP, TCP_KEEPALIVE, &keepalive, socklen_t(MemoryLayout.size(ofValue: keepalive)))
+        var interval: Int32 = 5
+        setsockopt(descriptor, IPPROTO_TCP, TCP_KEEPINTVL, &interval, socklen_t(MemoryLayout.size(ofValue: interval)))
+        var probes: Int32 = 3
+        setsockopt(descriptor, IPPROTO_TCP, TCP_KEEPCNT, &probes, socklen_t(MemoryLayout.size(ofValue: probes)))
+        let seconds = floor(receiveTimeout)
+        var timeout = timeval(
+            tv_sec: Int(seconds),
+            tv_usec: Int32((receiveTimeout - seconds) * 1_000_000)
+        )
+        setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout.size(ofValue: timeout)))
+        setsockopt(descriptor, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout.size(ofValue: timeout)))
         _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
         let flags = fcntl(descriptor, F_GETFL)
         if flags >= 0 { _ = fcntl(descriptor, F_SETFL, flags & ~O_NONBLOCK) }
@@ -396,31 +419,39 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
 }
 
 private final class MobileMirrorLocalRelayConnection: @unchecked Sendable {
+    let remoteAddress: String
+
     private let client: Int32
     private let upstream: Int32
     private let queue: DispatchQueue
+    private let idleTimeout: TimeInterval
     private let onClose: @Sendable () -> Void
     private let lock = NSLock()
     private var completedDirections = 0
     private var isClosing = false
     private var didNotifyClose = false
+    private var lastActivity = ProcessInfo.processInfo.systemUptime
 
     init(
         client: Int32,
         gatewayPort: UInt16,
+        remoteAddress: String,
         preamble: Data,
         queue: DispatchQueue,
+        idleTimeout: TimeInterval,
         onClose: @escaping @Sendable () -> Void
     ) throws {
         self.client = client
+        self.remoteAddress = remoteAddress
         self.queue = queue
+        self.idleTimeout = idleTimeout
         self.onClose = onClose
         let upstream = Darwin.socket(AF_INET, SOCK_STREAM, 0)
         guard upstream >= 0 else {
             throw MobileMirrorLocalRelayError.socketCreationFailed(errno)
         }
         self.upstream = upstream
-        MobileMirrorLocalRelay.configureSocket(upstream)
+        MobileMirrorLocalRelay.configureSocket(upstream, receiveTimeout: min(15, idleTimeout))
         var address = sockaddr_in()
         address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         address.sin_family = sa_family_t(AF_INET)
@@ -451,6 +482,7 @@ private final class MobileMirrorLocalRelayConnection: @unchecked Sendable {
         while true {
             let count = Darwin.recv(source, &buffer, buffer.count, 0)
             if count > 0 {
+                recordActivity()
                 guard Self.sendAll(Data(buffer[0..<count]), to: destination) else {
                     requestClose()
                     break
@@ -458,8 +490,10 @@ private final class MobileMirrorLocalRelayConnection: @unchecked Sendable {
                 continue
             }
             if count < 0, errno == EINTR { continue }
-            if count == 0 { Darwin.shutdown(destination, SHUT_WR) }
-            if count < 0 { requestClose() }
+            if count < 0, (errno == EAGAIN || errno == EWOULDBLOCK), !hasExpired {
+                continue
+            }
+            requestClose()
             break
         }
         finishDirection()
@@ -475,6 +509,18 @@ private final class MobileMirrorLocalRelayConnection: @unchecked Sendable {
         lock.unlock()
         Darwin.shutdown(client, SHUT_RDWR)
         Darwin.shutdown(upstream, SHUT_RDWR)
+    }
+
+    private func recordActivity() {
+        lock.lock()
+        lastActivity = ProcessInfo.processInfo.systemUptime
+        lock.unlock()
+    }
+
+    private var hasExpired: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return ProcessInfo.processInfo.systemUptime - lastActivity >= idleTimeout
     }
 
     private func finishDirection() {

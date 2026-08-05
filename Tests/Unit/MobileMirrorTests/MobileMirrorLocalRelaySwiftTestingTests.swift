@@ -108,6 +108,88 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
         #expect(lease.port > 0)
     }
 
+    @Test("relay rejects a non-private peer before forwarding bytes")
+    func relayRejectsNonPrivatePeer() throws {
+        let secret = "non-private-peer-test"
+        let gateway = MobileMirrorGateway(trustedRelaySecret: secret) { _, _ in
+            .response(.json(["status": "unexpected"]))
+        }
+        let gatewayPort = try gateway.start()
+        let relay = MobileMirrorLocalRelay(
+            gatewayPort: gatewayPort,
+            preambleSecret: secret,
+            addressProvider: { MobileMirrorGateway.loopbackAddress },
+            bindAddressPolicy: { $0 == MobileMirrorGateway.loopbackAddress }
+        )
+        let lease = try relay.start()
+        defer {
+            relay.stop()
+            gateway.stop()
+        }
+
+        let client = try Self.connect(address: lease.address, port: lease.port)
+        defer { Darwin.close(client) }
+        _ = Self.sendAll(Data("GET /health HTTP/1.1\r\nHost: local\r\n\r\n".utf8), to: client)
+
+        #expect(Self.receiveHTTPHead(from: client).isEmpty)
+    }
+
+    @Test("relay enforces per-peer slots and releases them when either side closes")
+    func relayConnectionSlotsRecover() throws {
+        let secret = "relay-slot-test"
+        let relayedAddress = "192.168.42.44"
+        let limits = MobileMirrorConnectionLimits(
+            maximumTotal: 2,
+            maximumPerAddress: 1,
+            maximumStartsPerWindow: 4,
+            maximumFailuresPerWindow: 2,
+            rateWindow: 10
+        )
+        let gateway = MobileMirrorGateway(
+            trustedRelaySecret: secret,
+            connectionLimits: limits
+        ) { request, _ in
+            request.path == "/events"
+                ? .eventStream
+                : .response(.json(["status": "ok"]))
+        }
+        let gatewayPort = try gateway.start()
+        let relay = MobileMirrorLocalRelay(
+            gatewayPort: gatewayPort,
+            preambleSecret: secret,
+            addressProvider: { MobileMirrorGateway.loopbackAddress },
+            bindAddressPolicy: { $0 == MobileMirrorGateway.loopbackAddress },
+            peerAddressNormalizer: { _ in relayedAddress },
+            connectionLimits: limits
+        )
+        let lease = try relay.start()
+        defer {
+            relay.stop()
+            gateway.stop()
+        }
+
+        let held = try Self.connect(address: lease.address, port: lease.port)
+        #expect(Self.sendAll(Self.requestData(path: "/events"), to: held))
+        #expect(Self.receiveHTTPHead(from: held).hasPrefix("HTTP/1.1 200 OK\r\n"))
+
+        let rejected = try Self.connect(address: lease.address, port: lease.port)
+        defer { Darwin.close(rejected) }
+        _ = Self.sendAll(Self.requestData(path: "/health"), to: rejected)
+        #expect(Self.receiveHTTPHead(from: rejected).isEmpty)
+        Darwin.close(held)
+
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        var recovered = false
+        repeat {
+            let candidate = try Self.connect(address: lease.address, port: lease.port)
+            _ = Self.sendAll(Self.requestData(path: "/health"), to: candidate)
+            recovered = Self.receiveHTTPHead(from: candidate).hasPrefix("HTTP/1.1 200 OK\r\n")
+            Darwin.close(candidate)
+            if !recovered { Thread.sleep(forTimeInterval: 0.02) }
+        } while !recovered && ContinuousClock.now < deadline
+        #expect(recovered)
+    }
+
     @Test("compiled mobile shell starts without a terminal surface")
     @MainActor
     func staticAssetsNeedNoTerminal() async throws {
@@ -125,27 +207,10 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
     }
 
     private static func request(address: String, port: UInt16, path: String) throws -> Data {
-        let descriptor = Darwin.socket(AF_INET, SOCK_STREAM, 0)
-        guard descriptor >= 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
+        let descriptor = try connect(address: address, port: port)
         defer { Darwin.close(descriptor) }
 
-        var socketAddress = sockaddr_in()
-        socketAddress.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        socketAddress.sin_family = sa_family_t(AF_INET)
-        socketAddress.sin_port = port.bigEndian
-        guard inet_pton(AF_INET, address, &socketAddress.sin_addr) == 1 else {
-            throw POSIXError(.EINVAL)
-        }
-        let connected = withUnsafePointer(to: &socketAddress) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-        guard connected == 0 else {
-            throw POSIXError(.init(rawValue: errno) ?? .ECONNREFUSED)
-        }
-
-        let request = Data("GET \(path) HTTP/1.1\r\nHost: \(address):\(port)\r\nConnection: close\r\n\r\n".utf8)
+        let request = requestData(path: path, host: "\(address):\(port)")
         guard sendAll(request, to: descriptor) else {
             throw POSIXError(.init(rawValue: errno) ?? .EIO)
         }
@@ -164,6 +229,51 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
             }
             return response
         }
+    }
+
+    private static func connect(address: String, port: UInt16) throws -> Int32 {
+        let descriptor = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
+        var timeout = timeval(tv_sec: 1, tv_usec: 0)
+        setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout.size(ofValue: timeout)))
+        var socketAddress = sockaddr_in()
+        socketAddress.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        socketAddress.sin_family = sa_family_t(AF_INET)
+        socketAddress.sin_port = port.bigEndian
+        guard inet_pton(AF_INET, address, &socketAddress.sin_addr) == 1 else {
+            Darwin.close(descriptor)
+            throw POSIXError(.EINVAL)
+        }
+        let connected = withUnsafePointer(to: &socketAddress) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard connected == 0 else {
+            let code = errno
+            Darwin.close(descriptor)
+            throw POSIXError(.init(rawValue: code) ?? .ECONNREFUSED)
+        }
+        return descriptor
+    }
+
+    private static func requestData(path: String, host: String = "local") -> Data {
+        Data("GET \(path) HTTP/1.1\r\nHost: \(host)\r\nConnection: close\r\n\r\n".utf8)
+    }
+
+    private static func receiveHTTPHead(from descriptor: Int32) -> String {
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while data.range(of: Data("\r\n\r\n".utf8)) == nil {
+            let count = Darwin.recv(descriptor, &buffer, buffer.count, 0)
+            if count > 0 {
+                data.append(buffer, count: count)
+                continue
+            }
+            if count < 0, errno == EINTR { continue }
+            break
+        }
+        return String(decoding: data, as: UTF8.self)
     }
 
     private static func sendAll(_ data: Data, to descriptor: Int32) -> Bool {
