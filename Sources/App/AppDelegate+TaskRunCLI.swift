@@ -370,9 +370,9 @@ extension AppDelegate {
 
     @MainActor
     func canonicalTaskRunWorkingDirectory(for tab: Tab) -> String {
-        (tab.worktreeRoot ?? tab.workingDirectory)
-            .resolvingSymlinksInPath()
-            .standardizedFileURL.path
+        ProjectPathCanonicalizer.canonicalURL(
+            tab.worktreeRoot ?? tab.workingDirectory
+        ).path
     }
 
     @MainActor

@@ -280,7 +280,7 @@ struct TabConfigStoreSwiftTestingTests {
     func startupAuthorizationBindsExactContext() throws {
         let config = TabConfig(
             name: "api",
-            workingDirectory: "/tmp/project",
+            workingDirectory: "/private/tmp/project",
             command: "npm run dev",
             environment: ["QUOTE": "it's safe"]
         )
@@ -295,7 +295,7 @@ struct TabConfigStoreSwiftTestingTests {
 
         let request = try #require(TabConfigStartupSecurity.makeAuthorizationRequest(
             snapshot: snapshot,
-            workingDirectory: URL(fileURLWithPath: "/tmp/project"),
+            workingDirectory: URL(fileURLWithPath: "/private/tmp/project"),
             destinationTabID: tabID,
             launchOrigin: .userInterface,
             now: now
@@ -304,10 +304,37 @@ struct TabConfigStoreSwiftTestingTests {
         #expect(request.sourceDigest == TabConfigStartupSecurity.sourceDigest(for: sourceData))
         #expect(request.destinationTabID == tabID)
         #expect(request.launchOrigin == .userInterface)
-        #expect(request.workingDirectory == "/tmp/project")
+        #expect(request.workingDirectory == "/private/tmp/project")
         #expect(request.startupInput == "QUOTE='it'\\''s safe' npm run dev\r")
         #expect(request.expiresAt == now.addingTimeInterval(TabConfigStartupSecurity.authorizationLifetime))
         #expect(TabConfigStartupSecurity.approvalPreview(request).hasSuffix("\\r"))
+    }
+
+    @Test("startup authorization canonicalizes a symlinked directory")
+    func startupAuthorizationCanonicalizesSymlinkedDirectory() throws {
+        let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
+            .appendingPathComponent("cocxy-tab-config-auth-\(UUID().uuidString)", isDirectory: true)
+        let physical = root.appendingPathComponent("physical", isDirectory: true)
+        let alias = root.appendingPathComponent("alias", isDirectory: true)
+        try FileManager.default.createDirectory(at: physical, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: physical)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let config = TabConfig(name: "linked", workingDirectory: alias.path, command: "pwd")
+        let sourceData = Data(TabConfigTOMLCodec.render(config).utf8)
+        let snapshot = TabConfigSnapshot(
+            config: config,
+            sourceData: sourceData,
+            sourceDigest: TabConfigStartupSecurity.sourceDigest(for: sourceData)
+        )
+
+        let request = try #require(TabConfigStartupSecurity.makeAuthorizationRequest(
+            snapshot: snapshot,
+            workingDirectory: alias,
+            destinationTabID: TabID(),
+            launchOrigin: .userInterface
+        ))
+
+        #expect(request.workingDirectory == physical.path)
     }
 
     @Test("commandless environment-free config needs no startup approval")

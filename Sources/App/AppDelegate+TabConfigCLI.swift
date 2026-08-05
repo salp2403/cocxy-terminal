@@ -43,7 +43,7 @@ extension AppDelegate {
         do {
             let config = TabConfig(
                 name: name,
-                workingDirectory: projectDirectory.standardizedFileURL.path,
+                workingDirectory: ProjectPathCanonicalizer.canonicalURL(projectDirectory).path,
                 command: command,
                 environment: environment,
                 theme: theme ?? configService?.current.appearance.theme,
@@ -203,9 +203,11 @@ extension AppDelegate {
             guard let controller,
                   Date() < authorization.expiresAt,
                   controller.tabManager.activeTabID == authorization.destinationTabID,
-                  controller.tabConfigAuthorizationWorkingDirectory(
+                  let currentWorkingDirectory = controller.tabConfigAuthorizationWorkingDirectory(
                     for: authorization.destinationTabID
-                  )?.standardizedFileURL.path == authorization.workingDirectory,
+                  ),
+                  ProjectPathCanonicalizer.canonicalURL(currentWorkingDirectory).path
+                    == authorization.workingDirectory,
                   let surfaceID = controller.tabSurfaceMap[authorization.destinationTabID] else {
                 return
             }

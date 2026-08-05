@@ -128,7 +128,7 @@ struct TabConfigLayoutRuntimeSwiftTestingTests {
     }
 
     private func makeFixture() throws -> Fixture {
-        let root = FileManager.default.temporaryDirectory
+        let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
             .appendingPathComponent("cocxy-tab-config-runtime-tests")
             .appendingPathComponent(UUID().uuidString)
         let project = root.appendingPathComponent("project")

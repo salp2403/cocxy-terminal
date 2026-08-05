@@ -10,7 +10,7 @@ final class TabConfigProjectContextStore {
     init() {}
 
     func setProjectRoot(_ projectRoot: URL, for tabID: TabID) {
-        projectRoots[tabID] = projectRoot.standardizedFileURL
+        projectRoots[tabID] = ProjectPathCanonicalizer.canonicalURL(projectRoot)
     }
 
     func projectRoot(for tabID: TabID) -> URL? {

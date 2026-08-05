@@ -117,7 +117,7 @@ private struct TaskRunPromotionState: Equatable {
     init(run: TaskRun, selectedCandidateID: String) {
         runID = run.id
         projectID = run.projectID
-        originRepoPath = run.originRepoPath.resolvingSymlinksInPath().standardizedFileURL
+        originRepoPath = ProjectPathCanonicalizer.canonicalURL(run.originRepoPath)
         worktreeBasePath = run.worktreeBasePath
         baseCommit = run.baseCommit
         runStatus = run.status

@@ -202,9 +202,11 @@ extension MainWindowController {
               tabManager.tab(for: request.destinationTabID) != nil else {
             return false
         }
-        return tabConfigAuthorizationWorkingDirectory(
+        guard let currentWorkingDirectory = tabConfigAuthorizationWorkingDirectory(
             for: request.destinationTabID
-        )?.standardizedFileURL.path == request.workingDirectory
+        ) else { return false }
+        return ProjectPathCanonicalizer.canonicalURL(currentWorkingDirectory).path
+            == request.workingDirectory
     }
 
     @MainActor

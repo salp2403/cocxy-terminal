@@ -429,7 +429,10 @@ struct TabConfigStore {
         let target = rootDirectory.appendingPathComponent(normalized)
             .appendingPathExtension("toml")
             .standardizedFileURL
-        guard target.path.hasPrefix(rootDirectory.path + "/") else {
+        let canonicalRoot = ProjectPathCanonicalizer.canonicalURL(rootDirectory)
+        let canonicalTarget = ProjectPathCanonicalizer.canonicalURL(target)
+        let rootPrefix = canonicalRoot.path == "/" ? "/" : canonicalRoot.path + "/"
+        guard canonicalTarget.path.hasPrefix(rootPrefix) else {
             throw TabConfigStoreError.invalidName(name)
         }
         return target

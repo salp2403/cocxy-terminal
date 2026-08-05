@@ -74,12 +74,12 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
         )
 
         #expect(result != nil)
-        #expect(requests.map { $0.workingDirectory?.standardizedFileURL } == [
-            fixture.apiDirectory.standardizedFileURL,
-            fixture.workerDirectory.standardizedFileURL,
+        #expect(requests.map { $0.workingDirectory?.path } == [
+            fixture.apiDirectory.path,
+            fixture.workerDirectory.path,
         ])
-        #expect(fixture.controller.tabManager.tab(for: tabID)?.workingDirectory.standardizedFileURL
-            == fixture.workspace.standardizedFileURL)
+        #expect(fixture.controller.tabManager.tab(for: tabID)?.workingDirectory.path
+            == fixture.workspace.path)
         #expect(fixture.controller.collectLeafViews().count == 3)
 
         guard case .split(_, .horizontal, let first, let second, let rootRatio) = splitManager.rootNode,
@@ -272,14 +272,14 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
         _ = fixture.delegate.openTabConfigForCLI(named: "api", store: fixture.store)
         let tabID = try #require(fixture.controller.tabManager.activeTabID)
 
-        #expect(fixture.controller.tabConfigProjectContextStore.projectRoot(for: tabID)
-            == fixture.workspace.standardizedFileURL)
+        #expect(fixture.controller.tabConfigProjectContextStore.projectRoot(for: tabID)?.path
+            == fixture.workspace.path)
         fixture.controller.performCloseTab(tabID)
         #expect(fixture.controller.tabConfigProjectContextStore.projectRoot(for: tabID) == nil)
     }
 
     private func makeFixture() throws -> Fixture {
-        let root = FileManager.default.temporaryDirectory
+        let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
             .appendingPathComponent("cocxy-tab-config-launch-tests")
             .appendingPathComponent(UUID().uuidString)
         let workspace = root.appendingPathComponent("workspace")

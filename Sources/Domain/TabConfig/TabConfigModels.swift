@@ -75,7 +75,7 @@ enum TabConfigStartupSecurity {
             id: UUID(),
             configName: snapshot.config.name,
             sourceDigest: snapshot.sourceDigest,
-            workingDirectory: workingDirectory.standardizedFileURL.path,
+            workingDirectory: ProjectPathCanonicalizer.canonicalURL(workingDirectory).path,
             destinationTabID: destinationTabID,
             launchOrigin: launchOrigin,
             command: snapshot.config.command?.trimmingCharacters(in: .whitespacesAndNewlines),

@@ -110,7 +110,7 @@ struct TabConfigLayoutRuntimeResolver {
               isDirectory.boolValue else {
             throw TabConfigLayoutRuntimeError.projectDirectoryUnavailable(standardized.path)
         }
-        return standardized.resolvingSymlinksInPath().standardizedFileURL
+        return ProjectPathCanonicalizer.canonicalURL(standardized)
     }
 
     func projectRelativePath(
@@ -233,9 +233,9 @@ struct TabConfigLayoutRuntimeResolver {
         guard TabConfigLayoutTOMLCodec.isSafeRelativePath(relativePath) else {
             throw TabConfigLayoutRuntimeError.pathOutsideProject(relativePath)
         }
-        let candidate = projectRoot
-            .appendingPathComponent(relativePath)
-            .standardizedFileURL
+        let candidate = ProjectPathCanonicalizer.canonicalURL(
+            projectRoot.appendingPathComponent(relativePath)
+        )
         guard Self.contains(candidate, in: projectRoot) else {
             throw TabConfigLayoutRuntimeError.pathOutsideProject(relativePath)
         }
@@ -255,7 +255,7 @@ struct TabConfigLayoutRuntimeResolver {
         guard fileManager.fileExists(atPath: standardized.path, isDirectory: &isDirectory) else {
             throw TabConfigLayoutRuntimeError.pathUnavailable(standardized.path)
         }
-        let canonical = standardized.resolvingSymlinksInPath().standardizedFileURL
+        let canonical = ProjectPathCanonicalizer.canonicalURL(standardized)
         switch expectedKind {
         case .directory where !isDirectory.boolValue:
             throw TabConfigLayoutRuntimeError.expectedDirectory(standardized.path)

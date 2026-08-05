@@ -43,14 +43,14 @@ extension MainWindowController {
     }
 
     func bindTabConfigProjectDirectory(_ projectDirectory: URL, to tabID: TabID) {
-        let standardized = projectDirectory.standardizedFileURL
-        tabConfigProjectContextStore.setProjectRoot(standardized, for: tabID)
+        let canonical = ProjectPathCanonicalizer.canonicalURL(projectDirectory)
+        tabConfigProjectContextStore.setProjectRoot(canonical, for: tabID)
         tabManager.updateTab(id: tabID) { tab in
-            tab.workingDirectory = standardized
-            tab.projectConfig = ProjectConfigService().loadConfig(for: standardized)
+            tab.workingDirectory = canonical
+            tab.projectConfig = ProjectConfigService().loadConfig(for: canonical)
         }
-        sessionRegistry?.updateWorkingDirectory(sessionIDForTab(tabID), directory: standardized)
-        observeProjectDirectory(standardized)
+        sessionRegistry?.updateWorkingDirectory(sessionIDForTab(tabID), directory: canonical)
+        observeProjectDirectory(canonical)
         tabBarViewModel?.syncWithManager()
         applyProjectConfig(for: tabID)
     }
@@ -63,7 +63,9 @@ extension MainWindowController {
               let primarySurfaceID = tabSurfaceMap[tabID],
               let primaryView = tabSurfaceViews[tabID],
               let primaryDirectory = layout.firstPane.workingDirectory,
-              tabManager.tab(for: tabID)?.workingDirectory.standardizedFileURL == primaryDirectory else {
+              let currentWorkingDirectory = tabManager.tab(for: tabID)?.workingDirectory,
+              ProjectPathCanonicalizer.canonicalURL(currentWorkingDirectory)
+                == ProjectPathCanonicalizer.canonicalURL(primaryDirectory) else {
             throw TabConfigLayoutRuntimeError.inconsistentLayout("primary terminal is unavailable")
         }
 

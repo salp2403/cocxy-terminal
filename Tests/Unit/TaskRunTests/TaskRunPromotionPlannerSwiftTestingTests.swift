@@ -171,12 +171,40 @@ struct TaskRunPromotionPlannerSwiftTestingTests {
         #expect(!preview.allows(newRisk))
     }
 
-    private func makeRun() throws -> TaskRun {
+    @Test("promotion freshness treats symlink aliases as one repository")
+    func promotionFreshnessCanonicalizesRepositoryAliases() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-promotion-root-\(UUID().uuidString)", isDirectory: true)
+        let physical = root.appendingPathComponent("physical", isDirectory: true)
+        let alias = root.appendingPathComponent("alias", isDirectory: true)
+        try FileManager.default.createDirectory(at: physical, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: physical)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let previewRun = try makeRun(originRepoPath: alias.appendingPathComponent("pending"))
+        let currentRun = try makeRun(originRepoPath: physical.appendingPathComponent("pending"))
+        let selected = TaskRunCandidateComparison(candidate: previewRun.candidates[0], diffs: [])
+        let preview = TaskRunPromotionPreview(
+            run: previewRun,
+            comparisons: previewRun.candidates.map {
+                TaskRunCandidateComparison(candidate: $0, diffs: [])
+            },
+            selectedComparison: selected,
+            collisionReport: .empty,
+            mergedCleanupPlan: WorktreeBatchCleanupPlan(removable: [], blocked: [], skipped: []),
+            cleanupEntries: []
+        )
+
+        #expect(preview.matchesPromotionState(currentRun))
+    }
+
+    private func makeRun(
+        originRepoPath: URL = URL(fileURLWithPath: "/tmp/repo")
+    ) throws -> TaskRun {
         let request = try TaskRunRequest.make(prompt: "Ship", agents: "codex,claude")
         return TaskRun(
             id: "promotion-plan",
             request: request,
-            originRepoPath: URL(fileURLWithPath: "/tmp/repo"),
+            originRepoPath: originRepoPath,
             baseCommit: "base"
         )
     }
