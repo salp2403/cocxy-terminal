@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "Le fichier TOML est rechargé depuis le disque avant l’ouverture de l’onglet.";
 "window.tabConfig.save.error" = "Impossible d’enregistrer la configuration de l’onglet.";
 "window.tabConfig.open.error" = "Impossible d’ouvrir la configuration de l’onglet.";
+"tabConfig.warning.save.layoutOmitted" = "Avertissement : la configuration de l'onglet a été enregistrée sans la disposition de ses volets.";
+"tabConfig.warning.open.paneReplaced.one" = "Avertissement : un volet indisponible a été remplacé par un terminal à la racine du projet.";
+"tabConfig.warning.open.paneReplaced.other" = "Avertissement : %d volets indisponibles ont été remplacés par des terminaux à la racine du projet.";
 "tabConfig.startupApproval.title" = "Exécuter l’entrée de démarrage de la configuration d’onglet ?";
 "tabConfig.startupApproval.message" = "Configuration : %@\nRépertoire de travail : %@\nEmpreinte : %@\n\nL’entrée exacte ci-dessous sera envoyée une fois au nouveau terminal et peut exécuter des commandes avec votre compte utilisateur. Vérifiez-la avant de continuer.";
 "tabConfig.startupApproval.runOnce" = "Exécuter une fois";

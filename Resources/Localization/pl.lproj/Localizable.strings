@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "Plik TOML jest ponownie wczytywany z dysku przed otwarciem karty.";
 "window.tabConfig.save.error" = "Nie udało się zapisać konfiguracji karty.";
 "window.tabConfig.open.error" = "Nie udało się otworzyć konfiguracji karty.";
+"tabConfig.warning.save.layoutOmitted" = "Ostrzeżenie: Konfiguracja karty została zapisana bez układu paneli.";
+"tabConfig.warning.open.paneReplaced.one" = "Ostrzeżenie: Jeden niedostępny panel zastąpiono terminalem w katalogu głównym projektu.";
+"tabConfig.warning.open.paneReplaced.other" = "Ostrzeżenie: %d niedostępnych paneli zastąpiono terminalami w katalogu głównym projektu.";
 "tabConfig.startupApproval.title" = "Uruchomić dane startowe konfiguracji karty?";
 "tabConfig.startupApproval.message" = "Konfiguracja: %@\nKatalog roboczy: %@\nOdcisk: %@\n\nDokładne dane wejściowe poniżej zostaną jednorazowo wysłane do nowego terminala i mogą wykonywać polecenia na Twoim koncie użytkownika. Przejrzyj je przed kontynuowaniem.";
 "tabConfig.startupApproval.runOnce" = "Uruchom raz";

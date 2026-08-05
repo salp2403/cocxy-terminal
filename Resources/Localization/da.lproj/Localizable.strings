@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "TOML-filen genindlæses fra disken, før fanen åbnes.";
 "window.tabConfig.save.error" = "Kunne ikke gemme fanekonfiguration.";
 "window.tabConfig.open.error" = "Kunne ikke åbne fanekonfiguration.";
+"tabConfig.warning.save.layoutOmitted" = "Advarsel: Fanekonfigurationen blev gemt uden rudelayoutet.";
+"tabConfig.warning.open.paneReplaced.one" = "Advarsel: En utilgængelig rude blev erstattet med en terminal i projektroden.";
+"tabConfig.warning.open.paneReplaced.other" = "Advarsel: %d utilgængelige ruder blev erstattet med terminaler i projektroden.";
 "tabConfig.startupApproval.title" = "Kør fanekonfigurationens startinput?";
 "tabConfig.startupApproval.message" = "Konfiguration: %@\nArbejdsmappe: %@\nFingeraftryk: %@\n\nDet præcise input nedenfor sendes én gang til den nye terminal og kan udføre kommandoer med din brugerkonto. Gennemgå det, før du fortsætter.";
 "tabConfig.startupApproval.runOnce" = "Kør én gang";

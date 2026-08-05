@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "打开标签页前会从磁盘重新载入 TOML 文件。";
 "window.tabConfig.save.error" = "无法保存标签页配置。";
 "window.tabConfig.open.error" = "无法打开标签页配置。";
+"tabConfig.warning.save.layoutOmitted" = "警告：标签页配置已保存，但未包含窗格布局。";
+"tabConfig.warning.open.paneReplaced.one" = "警告：一个不可用的窗格已替换为项目根目录中的终端。";
+"tabConfig.warning.open.paneReplaced.other" = "警告：%d 个不可用的窗格已替换为项目根目录中的终端。";
 "tabConfig.startupApproval.title" = "要运行标签页配置的启动输入吗？";
 "tabConfig.startupApproval.message" = "配置：%@\n工作目录：%@\n指纹：%@\n\n下方输入将原样发送到新终端一次，可使用您的用户帐户执行命令。继续前请仔细检查。";
 "tabConfig.startupApproval.runOnce" = "运行一次";

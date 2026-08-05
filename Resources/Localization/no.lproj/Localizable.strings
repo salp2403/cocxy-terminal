@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "TOML-filen lastes inn på nytt fra disken før fanen åpnes.";
 "window.tabConfig.save.error" = "Kunne ikke arkivere fanekonfigurasjonen.";
 "window.tabConfig.open.error" = "Kunne ikke åpne fanekonfigurasjonen.";
+"tabConfig.warning.save.layoutOmitted" = "Advarsel: Fanekonfigurasjonen ble lagret uten paneloppsettet.";
+"tabConfig.warning.open.paneReplaced.one" = "Advarsel: Ett utilgjengelig panel ble erstattet med en terminal i prosjektroten.";
+"tabConfig.warning.open.paneReplaced.other" = "Advarsel: %d utilgjengelige paneler ble erstattet med terminaler i prosjektroten.";
 "tabConfig.startupApproval.title" = "Kjør oppstartsinndata fra fanekonfigurasjonen?";
 "tabConfig.startupApproval.message" = "Konfigurasjon: %@\nArbeidsmappe: %@\nFingeravtrykk: %@\n\nDe nøyaktige inndataene nedenfor sendes én gang til den nye terminalen og kan kjøre kommandoer med brukerkontoen din. Se gjennom dem før du fortsetter.";
 "tabConfig.startupApproval.runOnce" = "Kjør én gang";

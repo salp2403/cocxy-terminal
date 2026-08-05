@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "The TOML file is reloaded from disk before the tab opens.";
 "window.tabConfig.save.error" = "Unable to save tab config.";
 "window.tabConfig.open.error" = "Unable to open tab config.";
+"tabConfig.warning.save.layoutOmitted" = "Warning: The tab config was saved without its pane layout.";
+"tabConfig.warning.open.paneReplaced.one" = "Warning: One unavailable pane was replaced with a terminal at the project root.";
+"tabConfig.warning.open.paneReplaced.other" = "Warning: %d unavailable panes were replaced with terminals at the project root.";
 "tabConfig.startupApproval.title" = "Run Tab Config Startup Input?";
 "tabConfig.startupApproval.message" = "Config: %@\nWorking directory: %@\nFingerprint: %@\n\nThe exact input below will be sent once to the new terminal and can execute commands with your user account. Review it before continuing.";
 "tabConfig.startupApproval.runOnce" = "Run Once";

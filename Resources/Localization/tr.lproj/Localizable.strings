@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "Sekme açılmadan önce TOML dosyası diskten yeniden yüklenir.";
 "window.tabConfig.save.error" = "Sekme yapılandırması kaydedilemedi.";
 "window.tabConfig.open.error" = "Sekme yapılandırması açılamadı.";
+"tabConfig.warning.save.layoutOmitted" = "Uyarı: Sekme yapılandırması bölme düzeni olmadan kaydedildi.";
+"tabConfig.warning.open.paneReplaced.one" = "Uyarı: Kullanılamayan bir bölme, proje kökündeki bir terminalle değiştirildi.";
+"tabConfig.warning.open.paneReplaced.other" = "Uyarı: Kullanılamayan %d bölme, proje kökündeki terminallerle değiştirildi.";
 "tabConfig.startupApproval.title" = "Sekme Yapılandırmasının Başlangıç Girdisi Çalıştırılsın mı?";
 "tabConfig.startupApproval.message" = "Yapılandırma: %@\nÇalışma dizini: %@\nParmak izi: %@\n\nAşağıdaki girdi yeni terminale bir kez gönderilecek ve kullanıcı hesabınızla komut çalıştırabilecek. Devam etmeden önce gözden geçirin.";
 "tabConfig.startupApproval.runOnce" = "Bir Kez Çalıştır";

@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "タブを開く前に、TOMLファイルがディスクから再読み込みされます。";
 "window.tabConfig.save.error" = "タブの構成を保存できません。";
 "window.tabConfig.open.error" = "タブの構成を開けません。";
+"tabConfig.warning.save.layoutOmitted" = "警告：タブ設定はペインレイアウトなしで保存されました。";
+"tabConfig.warning.open.paneReplaced.one" = "警告：利用できないペイン 1 個がプロジェクトルートのターミナルに置き換えられました。";
+"tabConfig.warning.open.paneReplaced.other" = "警告：利用できないペイン %d 個がプロジェクトルートのターミナルに置き換えられました。";
 "tabConfig.startupApproval.title" = "タブ構成の起動入力を実行しますか？";
 "tabConfig.startupApproval.message" = "構成: %@\n作業ディレクトリ: %@\nフィンガープリント: %@\n\n以下の入力内容が新しいターミナルに一度だけ送信され、ユーザアカウントでコマンドが実行される可能性があります。続ける前に内容を確認してください。";
 "tabConfig.startupApproval.runOnce" = "一度だけ実行";

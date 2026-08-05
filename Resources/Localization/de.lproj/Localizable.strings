@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "Die TOML-Datei wird erneut von der Festplatte geladen, bevor der Tab geöffnet wird.";
 "window.tabConfig.save.error" = "Tab-Konfiguration konnte nicht gesichert werden.";
 "window.tabConfig.open.error" = "Tab-Konfiguration konnte nicht geöffnet werden.";
+"tabConfig.warning.save.layoutOmitted" = "Warnung: Die Tab-Konfiguration wurde ohne Fensteraufteilung gespeichert.";
+"tabConfig.warning.open.paneReplaced.one" = "Warnung: Ein nicht verfügbares Fenster wurde durch ein Terminal im Projektstamm ersetzt.";
+"tabConfig.warning.open.paneReplaced.other" = "Warnung: %d nicht verfügbare Fenster wurden durch Terminals im Projektstamm ersetzt.";
 "tabConfig.startupApproval.title" = "Starteingabe der Tab-Konfiguration ausführen?";
 "tabConfig.startupApproval.message" = "Konfiguration: %@\nArbeitsverzeichnis: %@\nFingerabdruck: %@\n\nDie unten angezeigte Eingabe wird einmal an das neue Terminal gesendet und kann Befehle mit deinem Benutzerkonto ausführen. Prüfe sie, bevor du fortfährst.";
 "tabConfig.startupApproval.runOnce" = "Einmal ausführen";

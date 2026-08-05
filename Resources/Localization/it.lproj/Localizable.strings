@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "Il file TOML viene ricaricato dal disco prima di aprire la scheda.";
 "window.tabConfig.save.error" = "Impossibile salvare la configurazione della scheda.";
 "window.tabConfig.open.error" = "Impossibile aprire la configurazione della scheda.";
+"tabConfig.warning.save.layoutOmitted" = "Avviso: La configurazione della scheda è stata salvata senza il layout dei riquadri.";
+"tabConfig.warning.open.paneReplaced.one" = "Avviso: Un riquadro non disponibile è stato sostituito con un terminale nella radice del progetto.";
+"tabConfig.warning.open.paneReplaced.other" = "Avviso: %d riquadri non disponibili sono stati sostituiti con terminali nella radice del progetto.";
 "tabConfig.startupApproval.title" = "Eseguire l'input di avvio della configurazione scheda?";
 "tabConfig.startupApproval.message" = "Configurazione: %@\nDirectory di lavoro: %@\nImpronta: %@\n\nL'input esatto qui sotto verrà inviato una sola volta al nuovo terminale e può eseguire comandi con il tuo account utente. Verificalo prima di continuare.";
 "tabConfig.startupApproval.runOnce" = "Esegui una volta";

@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "يُعاد تحميل ملف TOML من القرص قبل فتح علامة التبويب.";
 "window.tabConfig.save.error" = "تعذّر حفظ تهيئة علامة التبويب.";
 "window.tabConfig.open.error" = "تعذّر فتح تهيئة علامة التبويب.";
+"tabConfig.warning.save.layoutOmitted" = "تحذير: حُفظ إعداد علامة التبويب من دون تخطيط الأجزاء.";
+"tabConfig.warning.open.paneReplaced.one" = "تحذير: تم استبدال جزء واحد غير متاح بوحدة طرفية في جذر المشروع.";
+"tabConfig.warning.open.paneReplaced.other" = "تحذير: تم استبدال %d من الأجزاء غير المتاحة بوحدات طرفية في جذر المشروع.";
 "tabConfig.startupApproval.title" = "هل تريد تشغيل إدخال بدء تشغيل تهيئة علامة التبويب؟";
 "tabConfig.startupApproval.message" = "التهيئة: %@\nدليل العمل: %@\nالبصمة: %@\n\nسيُرسَل الإدخال الدقيق أدناه مرة واحدة إلى الطرفية الجديدة، ويمكنه تنفيذ أوامر باستخدام حساب المستخدم الخاص بك. راجعه قبل المتابعة.";
 "tabConfig.startupApproval.runOnce" = "تشغيل مرة واحدة";

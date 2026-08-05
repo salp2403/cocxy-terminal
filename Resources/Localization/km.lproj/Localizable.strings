@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "ឯកសារ TOML នឹងត្រូវផ្ទុកឡើងវិញពីថាស មុនពេលផ្ទាំងបើក។";
 "window.tabConfig.save.error" = "មិនអាចរក្សាទុក config ផ្ទាំងបានទេ។";
 "window.tabConfig.open.error" = "មិនអាចបើក config ផ្ទាំងបានទេ។";
+"tabConfig.warning.save.layoutOmitted" = "ការព្រមាន៖ ការកំណត់ផ្ទាំងត្រូវបានរក្សាទុកដោយគ្មានប្លង់ផ្ទាំងរង។";
+"tabConfig.warning.open.paneReplaced.one" = "ការព្រមាន៖ ផ្ទាំងរងដែលមិនអាចប្រើបានមួយត្រូវបានជំនួសដោយស្ថានីយនៅឫសគម្រោង។";
+"tabConfig.warning.open.paneReplaced.other" = "ការព្រមាន៖ ផ្ទាំងរងដែលមិនអាចប្រើបានចំនួន %d ត្រូវបានជំនួសដោយស្ថានីយនៅឫសគម្រោង។";
 "tabConfig.startupApproval.title" = "ដំណើរការការបញ្ចូលចាប់ផ្តើមរបស់ Tab Config ឬ?";
 "tabConfig.startupApproval.message" = "Config: %@\nថតការងារ: %@\nFingerprint: %@\n\nការបញ្ចូលពិតប្រាកដខាងក្រោមនឹងត្រូវផ្ញើម្តងមួយទៅស្ថានីយថ្មី ហើយអាចប្រតិបត្តិពាក្យបញ្ជាជាមួយគណនីអ្នកប្រើរបស់អ្នក។ សូមពិនិត្យវាមុនបន្ត។";
 "tabConfig.startupApproval.runOnce" = "រត់ម្តង";

@@ -119,4 +119,35 @@ struct TabConfigCLIArgumentParserSwiftTestingTests {
         #expect(request.params?["output"] == "shared-api.toml")
         #expect(request.params?["force"] == "true")
     }
+
+    @Test("tab config save and open surface localized degradation warnings")
+    func formattersSurfaceWarnings() {
+        let save = CLISocketResponse(
+            id: "save",
+            success: true,
+            data: [
+                "path": "/tmp/api.toml",
+                "warning": "Warning: The tab config was saved without its pane layout.",
+            ],
+            error: nil
+        )
+        let open = CLISocketResponse(
+            id: "open",
+            success: true,
+            data: [
+                "name": "api",
+                "warning": "Aviso: Se reemplazo un panel no disponible.",
+            ],
+            error: nil
+        )
+
+        #expect(OutputFormatter.formatSuccess(
+            command: .tabConfigSave(name: "api", command: nil, theme: nil, environment: [:]),
+            response: save
+        ) == "Tab config saved: /tmp/api.toml\nWarning: The tab config was saved without its pane layout.")
+        #expect(OutputFormatter.formatSuccess(
+            command: .tabConfigOpen(name: "api"),
+            response: open
+        ) == "Tab opened from config: api\nAviso: Se reemplazo un panel no disponible.")
+    }
 }

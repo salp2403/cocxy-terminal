@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "Tệp TOML được tải lại từ ổ đĩa trước khi tab mở.";
 "window.tabConfig.save.error" = "Không thể lưu cấu hình tab.";
 "window.tabConfig.open.error" = "Không thể mở cấu hình tab.";
+"tabConfig.warning.save.layoutOmitted" = "Cảnh báo: Cấu hình thẻ đã được lưu mà không có bố cục ngăn.";
+"tabConfig.warning.open.paneReplaced.one" = "Cảnh báo: Một ngăn không khả dụng đã được thay bằng cửa sổ dòng lệnh tại thư mục gốc dự án.";
+"tabConfig.warning.open.paneReplaced.other" = "Cảnh báo: %d ngăn không khả dụng đã được thay bằng các cửa sổ dòng lệnh tại thư mục gốc dự án.";
 "tabConfig.startupApproval.title" = "Chạy nội dung khởi động của cấu hình tab?";
 "tabConfig.startupApproval.message" = "Cấu hình: %@\nThư mục làm việc: %@\nDấu vân tay: %@\n\nNội dung chính xác bên dưới sẽ được gửi một lần đến terminal mới và có thể thực thi lệnh bằng tài khoản người dùng của bạn. Hãy xem lại trước khi tiếp tục.";
 "tabConfig.startupApproval.runOnce" = "Chạy một lần";

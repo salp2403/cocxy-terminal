@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "O arquivo TOML é recarregado do disco antes da abertura da aba.";
 "window.tabConfig.save.error" = "Não foi possível salvar a configuração da aba.";
 "window.tabConfig.open.error" = "Não foi possível abrir a configuração da aba.";
+"tabConfig.warning.save.layoutOmitted" = "Aviso: A configuração da aba foi salva sem o layout dos painéis.";
+"tabConfig.warning.open.paneReplaced.one" = "Aviso: Um painel indisponível foi substituído por um terminal na raiz do projeto.";
+"tabConfig.warning.open.paneReplaced.other" = "Aviso: %d painéis indisponíveis foram substituídos por terminais na raiz do projeto.";
 "tabConfig.startupApproval.title" = "Executar a Entrada de Inicialização da Configuração da Aba?";
 "tabConfig.startupApproval.message" = "Configuração: %@\nDiretório de trabalho: %@\nImpressão digital: %@\n\nA entrada exata abaixo será enviada uma vez ao novo terminal e poderá executar comandos com a sua conta de usuário. Revise-a antes de continuar.";
 "tabConfig.startupApproval.runOnce" = "Executar uma Vez";

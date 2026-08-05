@@ -10,7 +10,6 @@ import Foundation
 /// - `notify`, `new-tab`, etc.: Simple confirmation message.
 /// - `config-path`, `config-get`: Data-driven output.
 public enum OutputFormatter {
-
     public static func formatDiagnosticData(_ data: [String: String]) -> String {
         formatDataAsJSON(data)
     }
@@ -68,15 +67,11 @@ public enum OutputFormatter {
         case .tabMove:
             return "Tab moved."
         case .tabConfigSave:
-            if let path = response.data?["path"] {
-                return "Tab config saved: \(path)"
-            }
-            return "Tab config saved."
+            return appendingWarning(response, to: response.data?["path"]
+                .map { "Tab config saved: \($0)" } ?? "Tab config saved.")
         case .tabConfigOpen:
-            if let name = response.data?["name"] {
-                return "Tab opened from config: \(name)"
-            }
-            return "Tab opened from config."
+            return appendingWarning(response, to: response.data?["name"]
+                .map { "Tab opened from config: \($0)" } ?? "Tab opened from config.")
         case .tabConfigList:
             return formatDataOrJSON(response: response)
         case .tabConfigPath:
@@ -950,5 +945,10 @@ public enum OutputFormatter {
             return "{}"
         }
         return jsonString
+    }
+
+    private static func appendingWarning(_ response: CLISocketResponse, to output: String) -> String {
+        guard let warning = response.data?["warning"], !warning.isEmpty else { return output }
+        return "\(output)\n\(warning)"
     }
 }

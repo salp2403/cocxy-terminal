@@ -21,6 +21,7 @@ extension AppDelegate {
 
         let layout: TabConfigLayout?
         let layoutWarning: String?
+        let localizer = appLocalizer()
         do {
             layout = try controller.captureTabConfigLayout(
                 for: tabID,
@@ -29,7 +30,10 @@ extension AppDelegate {
             layoutWarning = nil
         } catch {
             layout = nil
-            layoutWarning = "Saved without pane layout: \(error.localizedDescription)"
+            layoutWarning = localizer.string(
+                "tabConfig.warning.save.layoutOmitted",
+                fallback: "Warning: The tab config was saved without its pane layout."
+            )
             NSLog(
                 "[AppDelegate] Saving tab config without pane layout: %@",
                 error.localizedDescription
@@ -74,6 +78,7 @@ extension AppDelegate {
         store: TabConfigStore
     ) -> (id: String, title: String, path: String, warning: String?)? {
         guard let controller = focusedWindowController() else { return nil }
+        let localizer = appLocalizer()
 
         do {
             let snapshot = try store.loadSnapshot(named: name)
@@ -117,10 +122,19 @@ extension AppDelegate {
             }
 
             let title = controller.tabManager.tab(for: tabID)?.displayTitle ?? config.name
-            let warning: String? = resolvedReport.flatMap { report in
+            let warning: String? = resolvedReport.flatMap { report -> String? in
                 guard !report.warnings.isEmpty else { return nil }
-                let noun = report.warnings.count == 1 ? "pane was" : "panes were"
-                return "\(report.warnings.count) unavailable \(noun) replaced with a terminal at the project root."
+                let key = report.warnings.count == 1
+                    ? "tabConfig.warning.open.paneReplaced.one"
+                    : "tabConfig.warning.open.paneReplaced.other"
+                let fallback = report.warnings.count == 1
+                    ? "Warning: One unavailable pane was replaced with a terminal at the project root."
+                    : "Warning: %d unavailable panes were replaced with terminals at the project root."
+                return String(
+                    format: localizer.string(key, fallback: fallback),
+                    locale: localizer.locale,
+                    report.warnings.count
+                )
             }
             return (id: tabID.rawValue.uuidString, title: title, path: path, warning: warning)
         } catch {

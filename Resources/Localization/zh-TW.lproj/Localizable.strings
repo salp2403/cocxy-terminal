@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "分頁開啟前，會從磁碟重新載入 TOML 檔案。";
 "window.tabConfig.save.error" = "無法儲存分頁設定。";
 "window.tabConfig.open.error" = "無法開啟分頁設定。";
+"tabConfig.warning.save.layoutOmitted" = "警告：分頁設定已儲存，但未包含窗格配置。";
+"tabConfig.warning.open.paneReplaced.one" = "警告：一個無法使用的窗格已替換為專案根目錄中的終端機。";
+"tabConfig.warning.open.paneReplaced.other" = "警告：%d 個無法使用的窗格已替換為專案根目錄中的終端機。";
 "tabConfig.startupApproval.title" = "要執行分頁設定的啟動輸入嗎？";
 "tabConfig.startupApproval.message" = "設定：%@\n工作目錄：%@\n指紋：%@\n\n下方的確切輸入內容只會傳送到新終端機一次，且能以你的使用者帳號執行指令。請先檢查再繼續。";
 "tabConfig.startupApproval.runOnce" = "執行一次";

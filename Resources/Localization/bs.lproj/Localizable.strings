@@ -1623,6 +1623,9 @@
 "window.tabConfig.open.message" = "TOML datoteka ponovo se učitava s diska prije otvaranja kartice.";
 "window.tabConfig.save.error" = "Nije moguće sačuvati konfiguraciju kartice.";
 "window.tabConfig.open.error" = "Nije moguće otvoriti konfiguraciju kartice.";
+"tabConfig.warning.save.layoutOmitted" = "Upozorenje: Konfiguracija kartice je sačuvana bez rasporeda okana.";
+"tabConfig.warning.open.paneReplaced.one" = "Upozorenje: Jedno nedostupno okno zamijenjeno je terminalom u korijenu projekta.";
+"tabConfig.warning.open.paneReplaced.other" = "Upozorenje: %d nedostupnih okana zamijenjeno je terminalima u korijenu projekta.";
 "tabConfig.startupApproval.title" = "Pokrenuti početni unos konfiguracije kartice?";
 "tabConfig.startupApproval.message" = "Konfiguracija: %@\nRadni direktorij: %@\nOtisak: %@\n\nTačan unos u nastavku bit će jednom poslan novom terminalu i može izvršavati naredbe s vašim korisničkim računom. Pregledajte ga prije nastavka.";
 "tabConfig.startupApproval.runOnce" = "Pokreni jednom";
