@@ -169,14 +169,14 @@ final class BrowserContentView: NSView {
 
         // Back button.
         let backButton = createToolbarButton(
-            symbol: "chevron.left",
+            symbol: "chevron.backward",
             action: #selector(goBackAction)
         )
         toolbar.addSubview(backButton)
 
         // Forward button.
         let forwardButton = createToolbarButton(
-            symbol: "chevron.right",
+            symbol: "chevron.forward",
             action: #selector(goForwardAction)
         )
         toolbar.addSubview(forwardButton)

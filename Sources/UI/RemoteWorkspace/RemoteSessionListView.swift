@@ -209,7 +209,7 @@ struct RemoteSessionListView: View {
                         )
                     }
                 }) {
-                    Image(systemName: "arrow.right.circle")
+                    Image(systemName: "arrow.forward.circle")
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)

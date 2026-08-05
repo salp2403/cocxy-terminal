@@ -72,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// divergent snapshots of the same identity map.
     let auroraWorkspaceTitleStore = AuroraWorkspaceTitleStore()
     let relayAuditLog = RelayAuditLog(writer: DiskAuditLogWriter())
+    let applicationLayoutDirectionCoordinator = ApplicationLayoutDirectionCoordinator()
     var mobileMirrorCoordinator: MobileMirrorCoordinator?
     var mobileMirrorWindowController: MobileMirrorWindowController?
     /// Session persistence owner, assigned during initialization.
@@ -314,6 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             themeEngine = ThemeEngineImpl()
         }
         AppLaunchSignposts.measure(.configService) { initializeConfigService() }
+        applicationLayoutDirectionCoordinator.start(localizer: appLocalizer())
         AppLaunchSignposts.measure(.sessionManager) { initializeSessionManager() }
         AppLaunchSignposts.measure(.bridge) { initializeBridge() }
         AppLaunchSignposts.measure(.agentDetectionEngine) { initializeAgentDetectionEngine() }
@@ -442,6 +444,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sessionAutoSaveConfigCancellable = nil
         menuKeybindingsCancellable?.cancel()
         menuKeybindingsCancellable = nil
+        applicationLayoutDirectionCoordinator.stop()
         if NSApp.servicesProvider as AnyObject? === finderServiceProvider {
             NSApp.servicesProvider = nil
         }
@@ -642,10 +645,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .sink { [weak self] config in
                 guard let self else { return }
                 if config.appearance.appLanguage != lastLanguage {
-                    setupMainMenu()
-                    updateMobileMirrorLocalization(AppLocalizer(
+                    let localizer = AppLocalizer(
                         languagePreference: config.appearance.appLanguage
-                    ))
+                    )
+                    setupMainMenu()
+                    updateMobileMirrorLocalization(localizer)
+                    applicationLayoutDirectionCoordinator.update(localizer: localizer)
                     lastLanguage = config.appearance.appLanguage
                 }
                 guard let mainMenu = NSApplication.shared.mainMenu else { return }

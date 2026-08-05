@@ -323,7 +323,7 @@ struct DaemonControlView: View {
             Spacer()
             if onAttachSession != nil {
                 Button(action: { attachSession(session) }) {
-                    Image(systemName: "arrow.right.circle")
+                    Image(systemName: "arrow.forward.circle")
                         .font(.system(size: 10))
                 }
                 .buttonStyle(.plain)

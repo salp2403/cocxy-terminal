@@ -61,7 +61,7 @@ struct StatusBarView: View {
         HStack(spacing: 0) {
             // Left: user@host
             HStack(spacing: 5) {
-                Image(systemName: "chevron.right")
+                Image(systemName: "chevron.forward")
                     .font(.system(size: 8, weight: .bold))
                     .foregroundColor(CocxyColors.swiftUI(CocxyColors.blue))
                 Text(hostname)

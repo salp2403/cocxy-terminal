@@ -1422,7 +1422,7 @@ extension Design {
                         .foregroundStyle(palette.textLow.resolvedColor())
                     countBadge(summary.count)
                     Spacer()
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.forward")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(palette.textLow.resolvedColor())
                         .animation(.easeInOut(duration: 0.18), value: isExpanded)

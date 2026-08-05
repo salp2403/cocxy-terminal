@@ -702,7 +702,7 @@ final class EditorView: NSView, NSTextViewDelegate {
         configureIconButton(saveButton, symbolName: "square.and.arrow.down", tooltip: Self.localizedSave(using: localizer), action: #selector(saveButtonPressed))
         configureIconButton(lspHoverButton, symbolName: "info.circle", tooltip: Self.localizedShowHover(using: localizer), action: #selector(lspHoverButtonPressed))
         configureIconButton(lspCompletionButton, symbolName: "wand.and.stars", tooltip: Self.localizedShowCompletions(using: localizer), action: #selector(lspCompletionButtonPressed))
-        configureIconButton(lspDefinitionButton, symbolName: "arrowshape.turn.up.right", tooltip: Self.localizedGoToDefinition(using: localizer), action: #selector(lspDefinitionButtonPressed))
+        configureIconButton(lspDefinitionButton, symbolName: "arrowshape.turn.up.forward", tooltip: Self.localizedGoToDefinition(using: localizer), action: #selector(lspDefinitionButtonPressed))
         configureIconButton(lspReferencesButton, symbolName: "number", tooltip: Self.localizedFindReferences(using: localizer), action: #selector(lspReferencesButtonPressed))
 
         fileNameLabel.font = .systemFont(ofSize: 12, weight: .semibold)
@@ -721,7 +721,7 @@ final class EditorView: NSView, NSTextViewDelegate {
 
         configureIconButton(
             lspPrimaryActionButton,
-            symbolName: "arrow.right.circle",
+            symbolName: "arrow.forward.circle",
             tooltip: Self.localizedApplySuggestion(using: localizer),
             action: #selector(lspPrimaryActionPressed)
         )

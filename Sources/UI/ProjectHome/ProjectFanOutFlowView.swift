@@ -31,7 +31,7 @@ struct ProjectFanOutFlowView: View {
     private var flowHeader: some View {
         HStack(spacing: 12) {
             Button { viewModel.showInbox() } label: {
-                Image(systemName: "chevron.left")
+                Image(systemName: "chevron.backward")
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)

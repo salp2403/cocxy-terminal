@@ -120,7 +120,7 @@ struct ScrollbackSearchBarView: View {
                 viewModel.navigatePrev()
                 notifyNavigationChanged()
             }) {
-                Image(systemName: "chevron.left")
+                Image(systemName: "chevron.backward")
                     .font(.system(size: 11, weight: .medium))
             }
             .buttonStyle(.plain)
@@ -131,7 +131,7 @@ struct ScrollbackSearchBarView: View {
                 viewModel.navigateNext()
                 notifyNavigationChanged()
             }) {
-                Image(systemName: "chevron.right")
+                Image(systemName: "chevron.forward")
                     .font(.system(size: 11, weight: .medium))
             }
             .buttonStyle(.plain)

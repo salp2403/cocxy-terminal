@@ -456,7 +456,7 @@ struct BrowserImportWizardView: View {
                     .keyboardShortcut(.defaultAction)
             } else {
                 Button { viewModel.goBack() } label: {
-                    Label(localized("common.back", fallback: "Back"), systemImage: "chevron.left")
+                    Label(localized("common.back", fallback: "Back"), systemImage: "chevron.backward")
                 }
                 .disabled(!viewModel.canGoBack)
 
@@ -821,7 +821,7 @@ struct BrowserImportWizardView: View {
 
     private var primaryButtonSymbol: String {
         switch viewModel.step {
-        case .source, .data: return "chevron.right"
+        case .source, .data: return "chevron.forward"
         case .filters: return "doc.text.magnifyingglass"
         case .review: return "tray.and.arrow.down"
         }

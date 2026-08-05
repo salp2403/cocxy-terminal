@@ -101,7 +101,7 @@ struct DashboardSessionRow: View {
                             Text(operationSummary(impact.operations))
                                 .font(.system(size: 8, weight: .semibold, design: .monospaced))
                                 .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
-                            Image(systemName: "chevron.right")
+                            Image(systemName: "chevron.forward")
                                 .font(.system(size: 7, weight: .semibold))
                                 .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
                         }
@@ -186,7 +186,7 @@ struct DashboardSessionRow: View {
         Divider()
 
         Button(action: onNavigate) {
-            Label(localized("agentDashboard.goToTab", fallback: "Go to Tab"), systemImage: "arrow.right.square")
+            Label(localized("agentDashboard.goToTab", fallback: "Go to Tab"), systemImage: "arrow.forward.square")
         }
     }
 

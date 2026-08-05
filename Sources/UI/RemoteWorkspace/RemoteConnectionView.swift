@@ -545,7 +545,7 @@ struct RemoteConnectionView: View {
                 .onSubmit { viewModel.quickConnect() }
 
             Button(action: { viewModel.quickConnect() }) {
-                Image(systemName: "arrow.right.circle.fill")
+                Image(systemName: "arrow.forward.circle.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(
                         viewModel.quickConnectText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -622,7 +622,7 @@ struct RemoteConnectionView: View {
     ) -> some View {
         Button(action: { viewModel.toggleGroupCollapse(group) }) {
             HStack(spacing: 4) {
-                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                Image(systemName: isCollapsed ? "chevron.forward" : "chevron.down")
                     .font(.system(size: 8, weight: .bold))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                     .frame(width: 12)
