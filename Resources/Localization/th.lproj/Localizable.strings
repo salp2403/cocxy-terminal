@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "ปักหมุดโปรเจกต์";
 "projectSidebar.unpin" = "เลิกปักหมุดโปรเจกต์";
 "projectSidebar.unavailable" = "รายการโปรเจกต์ไม่พร้อมใช้งาน";
+"project.registry.recovery.message" = "ไม่สามารถอ่านข้อมูลเมตาของโปรเจกต์บางส่วนได้ Cocxy บันทึกรายการที่ถูกปฏิเสธ (%d) ไว้ในไฟล์กู้คืนส่วนตัว";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d งาน";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d งาน";
 "workspaceToolbar.panel.projectHome" = "หน้าหลักโปรเจกต์";

@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Fijar proyecto";
 "projectSidebar.unpin" = "Dejar de fijar proyecto";
 "projectSidebar.unavailable" = "Lista de proyectos no disponible";
+"project.registry.recovery.message" = "No se pudieron leer algunos metadatos de proyectos. Cocxy guardó los registros rechazados (%d) en un archivo privado de recuperación.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d tarea";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d tareas";
 "workspaceToolbar.panel.projectHome" = "Inicio del proyecto";

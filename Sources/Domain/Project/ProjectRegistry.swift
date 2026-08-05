@@ -115,10 +115,13 @@ struct ProjectRegistryDiscardedRecord: Equatable, Sendable {
 struct ProjectRegistryRecoveryDiagnostic: Equatable, Sendable {
     let discardedRecordCount: Int
     let discardedRecordIdentities: [String]
+    let discardedRecordReasons: [String]
     let quarantineFileURL: URL
 }
 
 struct ProjectRegistryStore: Sendable {
+    static let maximumQuarantineFiles = 5
+
     let fileURL: URL
     private let fileManager: FileManager
 
@@ -159,6 +162,11 @@ struct ProjectRegistryStore: Sendable {
             var discardedRawRecords: [Any] = []
             for (index, rawRecord) in rawRecords.enumerated() {
                 do {
+                    guard JSONSerialization.isValidJSONObject(rawRecord) else {
+                        throw ProjectRegistryStoreError.invalidRecord(
+                            "Record \(index + 1) must be a JSON object"
+                        )
+                    }
                     let recordData = try JSONSerialization.data(withJSONObject: rawRecord)
                     records.append(try Self.decoder.decode(ProjectRecord.self, from: recordData))
                 } catch {
@@ -258,7 +266,36 @@ struct ProjectRegistryStore: Sendable {
             [.posixPermissions: NSNumber(value: 0o600)],
             ofItemAtPath: quarantineURL.path
         )
+        try pruneQuarantineFiles(keeping: quarantineURL)
         return quarantineURL
+    }
+
+    private func pruneQuarantineFiles(keeping newestURL: URL) throws {
+        let root = fileURL.deletingLastPathComponent()
+        let keys: Set<URLResourceKey> = [.contentModificationDateKey, .isRegularFileKey]
+        let candidates = try fileManager.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles]
+        ).filter { url in
+            let name = url.lastPathComponent
+            guard name.hasPrefix("registry-quarantine-"), name.hasSuffix(".json") else {
+                return false
+            }
+            return (try? url.resourceValues(forKeys: keys).isRegularFile) == true
+        }
+        let older = candidates.filter { $0.standardizedFileURL != newestURL.standardizedFileURL }
+            .sorted { lhs, rhs in
+                let left = (try? lhs.resourceValues(forKeys: keys).contentModificationDate)
+                    ?? .distantPast
+                let right = (try? rhs.resourceValues(forKeys: keys).contentModificationDate)
+                    ?? .distantPast
+                if left != right { return left > right }
+                return lhs.lastPathComponent > rhs.lastPathComponent
+            }
+        for staleURL in older.dropFirst(Self.maximumQuarantineFiles - 1) {
+            try fileManager.removeItem(at: staleURL)
+        }
     }
 
     private static func recordIdentity(_ rawRecord: Any, index: Int) -> String {
@@ -351,6 +388,7 @@ final class ProjectRegistry: ObservableObject {
                 recoveryDiagnostic = ProjectRegistryRecoveryDiagnostic(
                     discardedRecordCount: report.discardedRecordCount,
                     discardedRecordIdentities: report.discardedRecords.map(\.identity),
+                    discardedRecordReasons: report.discardedRecords.map(\.reason),
                     quarantineFileURL: quarantineFileURL
                 )
             } else {

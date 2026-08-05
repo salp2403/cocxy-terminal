@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Metti il progetto in evidenza";
 "projectSidebar.unpin" = "Rimuovi il progetto dagli elementi in evidenza";
 "projectSidebar.unavailable" = "Elenco dei progetti non disponibile";
+"project.registry.recovery.message" = "Non è stato possibile leggere alcuni metadati dei progetti. Cocxy ha salvato i record rifiutati (%d) in un file di recupero privato.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d attività";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d attività";
 "workspaceToolbar.panel.projectHome" = "Home del progetto";

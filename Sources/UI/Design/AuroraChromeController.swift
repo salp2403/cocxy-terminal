@@ -14,6 +14,8 @@ final class AuroraChromeController: ObservableObject {
     @Published var projects: [ProjectPresentationItem] = []
     @Published private(set) var projectTaskCounts: [String: Int] = [:]
     @Published var projectRegistryErrorDescription: String?
+    @Published private(set) var projectRegistryRecoveryDiagnostic:
+        ProjectRegistryRecoveryDiagnostic?
     @Published var activeSessionID: String?
 
     @Published var sidebarRenameRequest: Design.AuroraSidebarRenameRequest?
@@ -278,6 +280,12 @@ final class AuroraChromeController: ObservableObject {
         projectRegistry?.$persistenceErrorDescription
             .sink { [weak self] errorDescription in
                 self?.projectRegistryErrorDescription = errorDescription
+            }
+            .store(in: &cancellables)
+
+        projectRegistry?.$recoveryDiagnostic
+            .sink { [weak self] diagnostic in
+                self?.projectRegistryRecoveryDiagnostic = diagnostic
             }
             .store(in: &cancellables)
 
@@ -710,6 +718,12 @@ struct AuroraSidebarHost: View {
             projects: controller.projects,
             projectTaskCounts: controller.projectTaskCounts,
             projectRegistryAvailable: controller.projectRegistryErrorDescription == nil,
+            projectRegistryRecoveryMessage: controller.projectRegistryRecoveryDiagnostic.map {
+                Design.AuroraProjectRegistrySection.localizedRecoveryMessage(
+                    count: $0.discardedRecordCount,
+                    using: controller.localizer
+                )
+            },
             activeSessionID: controller.activeSessionID,
             notesByWorkspace: controller.notesByWorkspace,
             onTogglePalette: { controller.onTogglePalette?() },

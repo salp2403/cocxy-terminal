@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "プロジェクトをピン留め";
 "projectSidebar.unpin" = "プロジェクトのピン留めを解除";
 "projectSidebar.unavailable" = "プロジェクト一覧を利用できません";
+"project.registry.recovery.message" = "一部のプロジェクトメタデータを読み取れませんでした。Cocxy は拒否されたレコード（%d 件）を非公開の復旧ファイルに保存しました。";
 "projectSidebar.taskBadge.accessibility.one" = "%@、%d件のタスク";
 "projectSidebar.taskBadge.accessibility.many" = "%@、%d件のタスク";
 "workspaceToolbar.panel.projectHome" = "プロジェクトホーム";

@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "تثبيت المشروع";
 "projectSidebar.unpin" = "إلغاء تثبيت المشروع";
 "projectSidebar.unavailable" = "قائمة المشاريع غير متاحة";
+"project.registry.recovery.message" = "تعذرت قراءة بعض بيانات المشاريع الوصفية. حفظ Cocxy السجلات المرفوضة (%d) في ملف استرداد خاص.";
 "projectSidebar.taskBadge.accessibility.one" = "%@، %d مهمة";
 "projectSidebar.taskBadge.accessibility.many" = "%@، %d مهام";
 "workspaceToolbar.panel.projectHome" = "الرئيسية للمشروع";

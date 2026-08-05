@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Projekt anheften";
 "projectSidebar.unpin" = "Projekt lösen";
 "projectSidebar.unavailable" = "Projektliste nicht verfügbar";
+"project.registry.recovery.message" = "Einige Projektmetadaten konnten nicht gelesen werden. Cocxy hat die abgelehnten Einträge (%d) in einer privaten Wiederherstellungsdatei gespeichert.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d Aufgabe";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d Aufgaben";
 "workspaceToolbar.panel.projectHome" = "Projektübersicht";

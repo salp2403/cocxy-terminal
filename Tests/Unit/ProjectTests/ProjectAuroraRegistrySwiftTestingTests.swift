@@ -70,6 +70,38 @@ struct ProjectAuroraRegistrySwiftTestingTests {
         #expect(controller.projects.isEmpty)
     }
 
+    @Test("registry recovery reaches Aurora as a localized nonblocking warning")
+    func registryRecoveryProjection() throws {
+        let sandbox = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let registryURL = sandbox.appendingPathComponent("registry.json")
+        try Data(#"[{"id":"/tmp/valid-project"},"invalid"]"#.utf8)
+            .write(to: registryURL)
+        let registry = ProjectRegistry(store: ProjectRegistryStore(fileURL: registryURL))
+        let tabManager = TabManager()
+        let store = AgentStatePerSurfaceStore()
+        let controller = AuroraChromeController(
+            tabManager: tabManager,
+            store: store,
+            projectRegistry: registry
+        )
+
+        controller.beginObservingDomain()
+
+        let diagnostic = try #require(controller.projectRegistryRecoveryDiagnostic)
+        #expect(diagnostic.discardedRecordCount == 1)
+        #expect(controller.projectRegistryErrorDescription == nil)
+        #expect(controller.projects.count == 1)
+        #expect(controller.projects.first?.name == "valid-project")
+        #expect(
+            Design.AuroraProjectRegistrySection.localizedRecoveryMessage(
+                count: diagnostic.discardedRecordCount,
+                using: AppLocalizer(languagePreference: .english)
+            )
+                == "Some project metadata could not be read. Cocxy saved the rejected records (1) in a private recovery file."
+        )
+    }
+
     private func makeSandbox() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("ProjectAuroraRegistry-\(UUID().uuidString)", isDirectory: true)

@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Закрепить проект";
 "projectSidebar.unpin" = "Открепить проект";
 "projectSidebar.unavailable" = "Список проектов недоступен";
+"project.registry.recovery.message" = "Не удалось прочитать часть метаданных проектов. Cocxy сохранил отклонённые записи (%d) в закрытом файле восстановления.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, задач: %d";
 "projectSidebar.taskBadge.accessibility.many" = "%@, задач: %d";
 "workspaceToolbar.panel.projectHome" = "Главная проекта";

@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Ghim dự án";
 "projectSidebar.unpin" = "Bỏ ghim dự án";
 "projectSidebar.unavailable" = "Danh sách dự án không khả dụng";
+"project.registry.recovery.message" = "Không thể đọc một số siêu dữ liệu dự án. Cocxy đã lưu các bản ghi bị từ chối (%d) vào một tệp khôi phục riêng tư.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d tác vụ";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d tác vụ";
 "workspaceToolbar.panel.projectHome" = "Trang chủ dự án";

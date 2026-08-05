@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "프로젝트 고정";
 "projectSidebar.unpin" = "프로젝트 고정 해제";
 "projectSidebar.unavailable" = "프로젝트 목록을 사용할 수 없습니다";
+"project.registry.recovery.message" = "일부 프로젝트 메타데이터를 읽을 수 없습니다. Cocxy가 거부된 레코드(%d개)를 비공개 복구 파일에 저장했습니다.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, 작업 %d개";
 "projectSidebar.taskBadge.accessibility.many" = "%@, 작업 %d개";
 "workspaceToolbar.panel.projectHome" = "프로젝트 홈";

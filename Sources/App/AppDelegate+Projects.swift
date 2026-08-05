@@ -3,6 +3,7 @@
 
 import AppKit
 import Combine
+import os.log
 
 enum ProjectActivationError: Error, LocalizedError {
     case unavailable(String)
@@ -31,7 +32,21 @@ extension NSUserInterfaceItemIdentifier {
 }
 
 extension AppDelegate {
+    nonisolated private static let projectRegistryLogger = Logger(
+        subsystem: "dev.cocxy.terminal",
+        category: "ProjectRegistry"
+    )
+
     func startProjectChangeBroadcasting() {
+        if let diagnostic = projectRegistry.recoveryDiagnostic {
+            let details = zip(
+                diagnostic.discardedRecordIdentities,
+                diagnostic.discardedRecordReasons
+            ).map { "\($0): \($1)" }.joined(separator: " | ")
+            Self.projectRegistryLogger.warning(
+                "Project registry recovered \(diagnostic.discardedRecordCount, privacy: .public) invalid record(s); details=\(details, privacy: .private); quarantine=\(diagnostic.quarantineFileURL.path, privacy: .private)"
+            )
+        }
         projectRegistryChangeCancellable?.cancel()
         var changes: [AnyPublisher<Void, Never>] = [
             projectRegistry.recordsDidChange.map { _ in () }.eraseToAnyPublisher(),

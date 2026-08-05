@@ -11,6 +11,7 @@ extension Design {
         let projects: [ProjectPresentationItem]
         let projectTaskCounts: [String: Int]
         let registryAvailable: Bool
+        var recoveryMessage: String? = nil
         let onActivate: ((String) -> Void)?
         let onSetPinned: ((String, Bool) -> Void)?
         let localizer: AppLocalizer
@@ -30,6 +31,9 @@ extension Design {
                 if !registryAvailable {
                     unavailableRow
                 } else {
+                    if let recoveryMessage {
+                        recoveryRow(recoveryMessage)
+                    }
                     projectGroup(
                         title: localizer.string("projectSidebar.pinned", fallback: "Pinned"),
                         projects: pinned
@@ -168,6 +172,30 @@ extension Design {
             .font(.system(size: 10.5, weight: .medium))
             .foregroundStyle(palette.textMedium.resolvedColor())
             .accessibilityElement(children: .combine)
+        }
+
+        private func recoveryRow(_ message: String) -> some View {
+            HStack(alignment: .top, spacing: Spacing.xSmall) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                Text(message)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.system(size: 10.5, weight: .medium))
+            .foregroundStyle(.orange)
+            .accessibilityElement(children: .combine)
+        }
+
+        static func localizedRecoveryMessage(
+            count: Int,
+            using localizer: AppLocalizer
+        ) -> String {
+            String(
+                format: localizer.string(
+                    "project.registry.recovery.message",
+                    fallback: "Some project metadata could not be read. Cocxy saved the rejected records (%d) in a private recovery file."
+                ),
+                count
+            )
         }
     }
 }

@@ -363,6 +363,8 @@ struct ProjectRegistrySwiftTestingTests {
         let recovery = try #require(registry.recoveryDiagnostic)
         #expect(recovery.discardedRecordCount == 1)
         #expect(recovery.discardedRecordIdentities == ["relative/project"])
+        #expect(recovery.discardedRecordReasons.count == 1)
+        #expect(!recovery.discardedRecordReasons[0].isEmpty)
         #expect(permissionBits(at: recovery.quarantineFileURL) == 0o600)
         let quarantined = try #require(
             JSONSerialization.jsonObject(
@@ -378,6 +380,54 @@ struct ProjectRegistrySwiftTestingTests {
             ProjectID(rawValue: "/tmp/valid-project"),
             ProjectID(rawValue: "/tmp/new-project"),
         ])
+    }
+
+    @Test("scalar records are quarantined without aborting registry recovery")
+    func scalarRecordsAreQuarantined() throws {
+        let sandbox = makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let fileURL = sandbox.appendingPathComponent("registry.json")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        try Data(#"["invalid",42,{"id":"/tmp/valid-project","isPinned":true}]"#.utf8)
+            .write(to: fileURL)
+
+        let report = try ProjectRegistryStore(fileURL: fileURL).loadReport()
+
+        #expect(report.records.map(\.id) == [ProjectID(rawValue: "/tmp/valid-project")])
+        #expect(report.records.first?.isPinned == true)
+        #expect(report.discardedRecords.map(\.identity) == ["record-1", "record-2"])
+        let quarantineURL = try #require(report.quarantineFileURL)
+        let quarantined = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: quarantineURL)) as? [Any]
+        )
+        #expect(quarantined.count == 2)
+        #expect(quarantined[0] as? String == "invalid")
+        #expect((quarantined[1] as? NSNumber)?.intValue == 42)
+    }
+
+    @Test("quarantine retention keeps the newest recovery and caps disk usage")
+    func quarantineRetentionIsBounded() throws {
+        let sandbox = makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let fileURL = sandbox.appendingPathComponent("registry.json")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        let store = ProjectRegistryStore(fileURL: fileURL)
+        var newestURL: URL?
+
+        for index in 0..<7 {
+            try Data("[{\"id\":\"relative/\(index)\"}]".utf8).write(to: fileURL)
+            newestURL = try store.loadReport().quarantineFileURL
+        }
+
+        let quarantineFiles = try FileManager.default.contentsOfDirectory(
+            at: sandbox,
+            includingPropertiesForKeys: nil
+        ).filter {
+            $0.lastPathComponent.hasPrefix("registry-quarantine-")
+                && $0.pathExtension == "json"
+        }
+        #expect(quarantineFiles.count == 5)
+        #expect(newestURL.map { FileManager.default.fileExists(atPath: $0.path) } == true)
     }
 
     @Test("an all-invalid registry is quarantined and remains writable")

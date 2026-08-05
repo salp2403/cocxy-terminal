@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "ខ្ទាស់គម្រោង";
 "projectSidebar.unpin" = "ដកការខ្ទាស់គម្រោង";
 "projectSidebar.unavailable" = "បញ្ជីគម្រោងមិនអាចប្រើបាន";
+"project.registry.recovery.message" = "មិនអាចអានទិន្នន័យមេតាគម្រោងមួយចំនួនបានទេ។ Cocxy បានរក្សាទុកកំណត់ត្រាដែលបានបដិសេធ (%d) ក្នុងឯកសារសង្គ្រោះឯកជន។";
 "projectSidebar.taskBadge.accessibility.one" = "%@, ភារកិច្ច %d";
 "projectSidebar.taskBadge.accessibility.many" = "%@, ភារកិច្ច %d";
 "workspaceToolbar.panel.projectHome" = "ទំព័រដើមគម្រោង";

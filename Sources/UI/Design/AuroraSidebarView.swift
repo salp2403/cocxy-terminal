@@ -10,6 +10,7 @@ extension Design {
         var projects: [ProjectPresentationItem] = []
         var projectTaskCounts: [String: Int] = [:]
         var projectRegistryAvailable: Bool = true
+        var projectRegistryRecoveryMessage: String?
         let activeSessionID: String?
         var notesByWorkspace: [String: AuroraWorkspaceNotesSummary] = [:]
         @State private var query: String = ""
@@ -97,6 +98,7 @@ extension Design {
                                 projects: projects,
                                 projectTaskCounts: projectTaskCounts,
                                 registryAvailable: projectRegistryAvailable,
+                                recoveryMessage: projectRegistryRecoveryMessage,
                                 onActivate: onActivateProject,
                                 onSetPinned: projectRegistryAvailable ? onSetProjectPinned : nil,
                                 localizer: localizer

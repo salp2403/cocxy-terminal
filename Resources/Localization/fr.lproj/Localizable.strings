@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Épingler le projet";
 "projectSidebar.unpin" = "Désépingler le projet";
 "projectSidebar.unavailable" = "Liste des projets indisponible";
+"project.registry.recovery.message" = "Certaines métadonnées de projet n’ont pas pu être lues. Cocxy a enregistré les entrées rejetées (%d) dans un fichier de récupération privé.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d tâche";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d tâches";
 "workspaceToolbar.panel.projectHome" = "Accueil du projet";

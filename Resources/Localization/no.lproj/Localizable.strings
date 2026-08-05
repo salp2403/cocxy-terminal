@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Fest prosjekt";
 "projectSidebar.unpin" = "Løsne prosjekt";
 "projectSidebar.unavailable" = "Prosjektlisten er utilgjengelig";
+"project.registry.recovery.message" = "Noen prosjektmetadata kunne ikke leses. Cocxy lagret de avviste postene (%d) i en privat gjenopprettingsfil.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d oppgave";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d oppgaver";
 "workspaceToolbar.panel.projectHome" = "Prosjektoversikt";

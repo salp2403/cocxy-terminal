@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Prikvači projekt";
 "projectSidebar.unpin" = "Otkači projekt";
 "projectSidebar.unavailable" = "Lista projekata nije dostupna";
+"project.registry.recovery.message" = "Neki metapodaci projekta nisu se mogli pročitati. Cocxy je sačuvao odbačene zapise (%d) u privatnu datoteku za oporavak.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d zadatak";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d zadataka";
 "workspaceToolbar.panel.projectHome" = "Početna stranica projekta";
