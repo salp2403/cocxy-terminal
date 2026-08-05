@@ -17,15 +17,61 @@ struct TaskRunCleanupPreviewEntry: Identifiable, Equatable, Sendable {
     var id: String { worktree.id }
 }
 
+struct TaskCollisionFreshnessToken: Equatable, Sendable {
+    private struct Entry: Hashable, Sendable {
+        let path: String
+        let collisionKind: String
+        let participantID: String
+        let participantKind: String
+    }
+
+    private let entries: Set<Entry>
+
+    init(report: TaskCollisionReport) {
+        entries = Set(report.collisions.flatMap { collision in
+            collision.participants.map { participant in
+                Entry(
+                    path: collision.path,
+                    collisionKind: collision.kind.rawValue,
+                    participantID: participant.id,
+                    participantKind: participant.kind.rawValue
+                )
+            }
+        })
+    }
+
+    func allows(_ current: TaskCollisionFreshnessToken) -> Bool {
+        current.entries.isSubset(of: entries)
+    }
+}
+
 struct TaskRunPromotionPreview: Equatable, Sendable {
     let run: TaskRun
     let comparisons: [TaskRunCandidateComparison]
     let selectedComparison: TaskRunCandidateComparison
     let collisionReport: TaskCollisionReport
+    let collisionFreshnessToken: TaskCollisionFreshnessToken
     let mergedCleanupPlan: WorktreeBatchCleanupPlan
     let cleanupEntries: [TaskRunCleanupPreviewEntry]
 
     var selectedCandidateID: String { selectedComparison.candidate.id }
+
+    init(
+        run: TaskRun,
+        comparisons: [TaskRunCandidateComparison],
+        selectedComparison: TaskRunCandidateComparison,
+        collisionReport: TaskCollisionReport,
+        mergedCleanupPlan: WorktreeBatchCleanupPlan,
+        cleanupEntries: [TaskRunCleanupPreviewEntry]
+    ) {
+        self.run = run
+        self.comparisons = comparisons
+        self.selectedComparison = selectedComparison
+        self.collisionReport = collisionReport
+        self.collisionFreshnessToken = TaskCollisionFreshnessToken(report: collisionReport)
+        self.mergedCleanupPlan = mergedCleanupPlan
+        self.cleanupEntries = cleanupEntries
+    }
 
     func matchesPromotionState(_ currentRun: TaskRun) -> Bool {
         TaskRunPromotionState(

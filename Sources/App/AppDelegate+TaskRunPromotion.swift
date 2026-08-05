@@ -160,7 +160,9 @@ extension AppDelegate {
             excludingIDs: excludedRuntimeIDs,
             excludingWorktreeIDs: Set(run.candidates.compactMap(\.worktree?.id))
         )
-        guard freshCollisionReport == preview.collisionReport else {
+        guard preview.collisionFreshnessToken.allows(
+            TaskCollisionFreshnessToken(report: freshCollisionReport)
+        ) else {
             throw stalePromotionError()
         }
 

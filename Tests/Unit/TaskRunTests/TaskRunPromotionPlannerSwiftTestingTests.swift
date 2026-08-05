@@ -118,6 +118,59 @@ struct TaskRunPromotionPlannerSwiftTestingTests {
         ]))
     }
 
+    @Test("collision freshness ignores labels and accepts only removed risks")
+    func collisionFreshnessUsesStableRiskIdentity() {
+        let planned = TaskCollisionParticipant(
+            id: "candidate",
+            label: "Selected candidate",
+            kind: .candidate
+        )
+        let rival = TaskCollisionParticipant(
+            id: "live-rival",
+            label: "Original label",
+            kind: .liveSession
+        )
+        let preview = TaskCollisionFreshnessToken(report: TaskCollisionReport(collisions: [
+            TaskFileCollision(
+                path: "Sources/App.swift",
+                kind: .overlap,
+                participants: [planned, rival]
+            ),
+        ]))
+        let renamed = TaskCollisionFreshnessToken(report: TaskCollisionReport(collisions: [
+            TaskFileCollision(
+                path: "Sources/App.swift",
+                kind: .overlap,
+                participants: [
+                    planned,
+                    TaskCollisionParticipant(
+                        id: rival.id,
+                        label: "Renamed session",
+                        kind: rival.kind
+                    ),
+                ]
+            ),
+        ]))
+        let newRisk = TaskCollisionFreshnessToken(report: TaskCollisionReport(collisions: [
+            TaskFileCollision(
+                path: "Sources/App.swift",
+                kind: .overlap,
+                participants: [
+                    planned,
+                    TaskCollisionParticipant(
+                        id: "new-rival",
+                        label: "New session",
+                        kind: .liveSession
+                    ),
+                ]
+            ),
+        ]))
+
+        #expect(preview.allows(renamed))
+        #expect(preview.allows(TaskCollisionFreshnessToken(report: .empty)))
+        #expect(!preview.allows(newRisk))
+    }
+
     private func makeRun() throws -> TaskRun {
         let request = try TaskRunRequest.make(prompt: "Ship", agents: "codex,claude")
         return TaskRun(
