@@ -314,13 +314,19 @@ extension MainWindowController {
     private func migrateLegacyNotes(for tabs: [Tab], using store: NoteStore) async {
         var migrations: [NoteWorkspaceID: NoteWorkspaceID] = [:]
         for tab in tabs {
-            let legacyRoot = ProjectPathCanonicalizer.canonicalURL(
-                tab.worktreeRoot ?? tab.workingDirectory
-            )
-            let legacyID = NoteWorkspaceID(workspaceRoot: legacyRoot)
             let canonicalID = NoteWorkspaceID(workspaceRoot: notesGroupingRoot(for: tab))
-            guard legacyID != canonicalID else { continue }
-            migrations[legacyID] = canonicalID
+            let directory = tab.worktreeRoot ?? tab.workingDirectory
+            let publishedRoot = URL(
+                fileURLWithPath: LegacyProjectAliasIdentityResolver.identity(for: directory),
+                isDirectory: true
+            )
+            let developmentRoot = ProjectPathCanonicalizer.canonicalURL(directory)
+            for legacyID in Set([
+                NoteWorkspaceID(workspaceRoot: publishedRoot),
+                NoteWorkspaceID(workspaceRoot: developmentRoot),
+            ]) where legacyID != canonicalID {
+                migrations[legacyID] = canonicalID
+            }
         }
 
         for (legacyID, canonicalID) in migrations {

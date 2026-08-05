@@ -146,9 +146,12 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         #expect(controller.tabForNotesWorkspace(rawID: childID.storageKey) == nil)
     }
 
-    @Test("a symlinked worktree migrates canonical legacy notes into the folded sidebar identity")
+    @Test("a symlinked worktree migrates published and development note identities")
     func worktreeNotesMigrateBeforeSidebarAndOverlayLoads() async throws {
-        let sandbox = FileManager.default.temporaryDirectory
+        let caches = try #require(
+            FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        )
+        let sandbox = caches
             .appendingPathComponent("ProjectNotesMigration-\(UUID().uuidString)", isDirectory: true)
         let storageRoot = sandbox.appendingPathComponent("notes", isDirectory: true)
         let origin = sandbox.appendingPathComponent("origin", isDirectory: true)
@@ -156,6 +159,10 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         let childAlias = sandbox.appendingPathComponent("worktree-alias", isDirectory: true)
         try FileManager.default.createDirectory(at: origin, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: child.appendingPathComponent(".git", isDirectory: true),
+            withIntermediateDirectories: true
+        )
         try FileManager.default.createSymbolicLink(
             at: childAlias,
             withDestinationURL: child
@@ -198,13 +205,21 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
             gitInfoProvider: git,
             projectResolver: resolver
         )
-        let legacyID = NoteWorkspaceID(
-            workspaceRoot: ProjectPathCanonicalizer.canonicalURL(childAlias)
+        let publishedLegacyID = NoteWorkspaceID(workspaceRoot: childAlias.standardizedFileURL)
+        let developmentLegacyID = NoteWorkspaceID(
+            workspaceRoot: childAlias.resolvingSymlinksInPath()
         )
         let canonicalID = NoteWorkspaceID(workspaceRoot: origin)
+        #expect(publishedLegacyID != developmentLegacyID)
         let seedStore = NoteStore(storageRoot: storageRoot, format: .markdown)
-        let first = try await seedStore.create(in: legacyID, body: "# Worktree note")
-        _ = try await seedStore.create(in: legacyID, body: "# Another note")
+        let first = try await seedStore.create(
+            in: publishedLegacyID,
+            body: "# Published worktree note"
+        )
+        _ = try await seedStore.create(
+            in: developmentLegacyID,
+            body: "# Development worktree note"
+        )
 
         let summaries = await controller.fetchAuroraNotesSummaries(for: [canonicalID.rawValue])
         let viewModel = controller.resolveNotesViewModel(config: configService.current.notes)
@@ -217,7 +232,8 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         #expect(viewModel.workspace?.workspaceID == canonicalID)
         #expect(viewModel.notes.count == 2)
         #expect(viewModel.selectedNote?.id == first.id)
-        #expect(try await seedStore.notes(in: legacyID).isEmpty)
+        #expect(try await seedStore.notes(in: publishedLegacyID).isEmpty)
+        #expect(try await seedStore.notes(in: developmentLegacyID).isEmpty)
     }
 
     @Test("workspace rename migrates every open worktree alias to the folded identity")
