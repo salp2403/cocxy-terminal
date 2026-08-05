@@ -781,9 +781,7 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         let screenshotURL = URL(fileURLWithPath: "/tmp/cocxy-agent-computer-use.png")
         let controller = RecordingAgentComputerUseController(result: .screenshot(
             fileURL: screenshotURL,
-            width: 1440,
-            height: 900,
-            scaleFactor: 2
+            width: 1440, height: 900, scaleFactor: 2
         ))
         let executor = AgentLocalToolExecutor(
             workspace: AgentWorkspace(rootURL: root),

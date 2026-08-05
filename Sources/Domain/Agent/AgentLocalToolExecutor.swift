@@ -619,7 +619,6 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         }
         return button
     }
-
     private func computerUseContent(for result: ComputerUseResult) -> AgentJSONValue {
         switch result {
         case .mouseMoved(let x, let y):
