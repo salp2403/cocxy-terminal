@@ -359,7 +359,7 @@ jobs:
               <item>
                 <title>Preview ${VERSION}</title>
                 <pubDate>${DATE}</pubDate>
-                <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+                <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
                 <enclosure
                   url="${DMG_URL}"
                   sparkle:version="${VERSION}"
@@ -453,7 +453,7 @@ jobs:
             desc "Signed early-access builds of the native macOS terminal"
             homepage "https://cocxy.dev/channels.html"
 
-            depends_on macos: ">= :sonoma"
+            depends_on macos: ">= :sequoia"
 
             app "Cocxy Terminal Preview.app"
 

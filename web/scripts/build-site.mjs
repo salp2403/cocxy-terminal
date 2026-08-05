@@ -607,7 +607,7 @@ function softwareSchema(lang = 'en') {
     name: 'Cocxy Terminal',
     applicationCategory: 'DeveloperApplication',
     applicationSubCategory: 'Terminal Emulator',
-    operatingSystem: 'macOS 14.0+',
+    operatingSystem: 'macOS 15.0+',
     url: site,
     downloadUrl: 'https://github.com/salp2403/cocxy-terminal/releases/latest',
     softwareVersion: releaseVersion,
@@ -712,7 +712,7 @@ function home(lang = 'en') {
       <a class="button button-primary" href="#download">${es ? 'Descargar para macOS' : 'Download for macOS'}</a>
       <a class="button button-secondary" href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
     </div>
-    <div class="hero-version" data-reveal="fade-up"><span class="version-badge">v0.0.0</span><span>macOS 14.0+</span><span>${es ? 'Cero telemetría' : 'Zero telemetry'}</span></div>
+    <div class="hero-version" data-reveal="fade-up"><span class="version-badge">v0.0.0</span><span>macOS 15.0+</span><span>${es ? 'Cero telemetría' : 'Zero telemetry'}</span></div>
     <div class="cocxy-window" role="img" aria-label="${es ? 'Cocxy Terminal: barra lateral de espacios de trabajo con sesiones de agentes y barra de estado sin telemetría' : 'Cocxy Terminal showing a workspaces sidebar with agent sessions and a zero-telemetry status bar'}" data-reveal="fade-up">
       <div class="cw-bar">
         <span class="cw-traffic"><i class="is-c"></i><i class="is-m"></i><i class="is-x"></i></span>
@@ -1260,7 +1260,7 @@ function pressBody(lang) {
   <article class="card"><h2>${es ? 'Borrador de nota de lanzamiento' : 'Launch note draft'}</h2><p>${es ? 'Cocxy Terminal es una terminal nativa para macOS, local primero, con Bóveda cifrada, revisión de código y cero telemetría.' : 'Cocxy Terminal is a native macOS terminal, local-first, with encrypted Vault, code review, and zero telemetry.'}</p></article>
   <article class="card"><h2>${es ? 'Guion de demo' : 'Demo outline'}</h2><p>${es ? 'Mostrar terminal, agentes, Bóveda, navegador, Markdown, remotos y descarga en menos de tres minutos.' : 'Show terminal, agents, Vault, browser, Markdown, remotes, and download in under three minutes.'}</p></article>
   <article class="card"><h2>${es ? 'Recursos visuales' : 'Visual assets'}</h2>${es ? '<ul><li>Logo PNG</li><li>Imagen OG</li><li>Captura principal</li><li>Video demo MP4</li></ul><span data-assets="/images/cocxy-preview.png /videos/cocxy-demo.mp4"></span>' : '<ul><li>/images/icon.png</li><li>/images/og-image.png</li><li>/images/cocxy-preview.png</li><li>/videos/cocxy-demo.mp4</li></ul>'}</article>
-  <article class="card"><h2>${es ? 'Datos' : 'Facts'}</h2><ul><li>Cocxy Terminal</li><li>macOS 14+</li><li>MIT</li><li>dev@cocxy.dev</li></ul></article>
+  <article class="card"><h2>${es ? 'Datos' : 'Facts'}</h2><ul><li>Cocxy Terminal</li><li>macOS 15+</li><li>MIT</li><li>dev@cocxy.dev</li></ul></article>
 </div></section>
 <section class="section"><div class="container">
   <video controls preload="metadata" poster="${posterImage}" class="media-frame">
@@ -1638,7 +1638,7 @@ function llms() {
 ## Quick facts
 - Version: ${releaseVersion}
 - License: MIT
-- Platform: macOS 14.0+
+- Platform: macOS 15.0+
 - Source: https://github.com/salp2403/cocxy-terminal
 - Telemetry: zero
 
