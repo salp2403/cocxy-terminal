@@ -865,12 +865,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         let rootView = buildRootView(
             contentFrame: contentFrame, splitView: splitView
         )
-        ApplicationLayoutDirectionCoordinator.apply(
-            ApplicationLayoutDirectionCoordinator.resolvedDirection(
-                for: appLocalizer(for: configService?.current)
-            ),
-            to: rootView
-        )
+        applyShellLayoutDirection(to: rootView)
 
         window.contentView = rootView
         if let config = configService?.current {

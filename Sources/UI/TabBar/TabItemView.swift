@@ -959,15 +959,3 @@ extension TabItemView: NSDraggingSource {
         context == .withinApplication ? .move : []
     }
 }
-
-// MARK: - Flipped Views for Top-Aligned Scroll Content
-
-/// Clip view with flipped coordinate system so content starts from the top.
-final class FlippedClipView: NSClipView {
-    override var isFlipped: Bool { true }
-}
-
-/// Document view with flipped coordinate system for top-aligned layout.
-final class FlippedDocumentView: NSView {
-    override var isFlipped: Bool { true }
-}

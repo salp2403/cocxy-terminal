@@ -63,10 +63,7 @@ extension MainWindowController {
         hostingView.wantsLayer = true
         let panelY = statusBarHostingView?.frame.height ?? 24
         hostingView.frame = NSRect(
-            x: trailingPanelOrigin(
-                containerWidth: overlayContainer.bounds.width,
-                panelWidth: panelWidth
-            ),
+            x: trailingPanelOrigin(containerWidth: overlayContainer.bounds.width, panelWidth: panelWidth),
             y: panelY,
             width: panelWidth,
             height: max(0, overlayContainer.bounds.height - panelY)
@@ -103,10 +100,7 @@ extension MainWindowController {
         isGitHubPaneVisible = false
         gitHubPaneViewModel?.isVisible = false
 
-        let targetX = trailingPanelExitOrigin(
-            containerWidth: overlayContainer.bounds.width,
-            panelWidth: hostingView.frame.width
-        )
+        let targetX = trailingPanelExitOrigin(containerWidth: overlayContainer.bounds.width, panelWidth: hostingView.frame.width)
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)

@@ -14,13 +14,6 @@ public enum OutputFormatter {
         formatDataAsJSON(data)
     }
 
-    public static func formatSuccessWarning(
-        command: ParsedCommand,
-        response: CLISocketResponse
-    ) -> String? {
-        ProjectCLIOutputFormatter.successWarning(command: command, response: response)
-    }
-
     /// Formats a successful response for terminal output.
     ///
     /// - Parameters:
