@@ -12,11 +12,18 @@ struct ProjectRegistrySwiftTestingTests {
         let roots: [String: URL]
 
         init(roots: [String: URL]) {
-            self.roots = roots
+            self.roots = Dictionary(uniqueKeysWithValues: roots.map { path, root in
+                (
+                    ProjectPathCanonicalizer.canonicalURL(
+                        URL(fileURLWithPath: path, isDirectory: true)
+                    ).path,
+                    root
+                )
+            })
         }
 
         func workspaceRoot(for directory: URL) -> URL? {
-            roots[directory.standardizedFileURL.path]
+            roots[ProjectPathCanonicalizer.canonicalURL(directory).path]
         }
     }
 
@@ -37,7 +44,7 @@ struct ProjectRegistrySwiftTestingTests {
         #expect(record.defaultAgents.isEmpty)
     }
 
-    @Test("raw persisted IDs reject relative paths and NUL bytes")
+    @Test("unsafe persisted IDs are quarantined before canonicalization")
     func unsafeRawIDsAreRejectedBeforeCanonicalization() throws {
         let sandbox = makeSandbox()
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
@@ -53,9 +60,12 @@ struct ProjectRegistrySwiftTestingTests {
             }
             let fileURL = sandbox.appendingPathComponent("registry-\(index).json")
             try Data(payload.utf8).write(to: fileURL)
-            #expect(throws: ProjectRegistryStoreError.self) {
-                try ProjectRegistryStore(fileURL: fileURL).load()
-            }
+            let report = try ProjectRegistryStore(fileURL: fileURL).loadReport()
+            #expect(report.records.isEmpty)
+            #expect(report.discardedRecordCount == 1)
+            #expect(report.quarantineFileURL.map {
+                FileManager.default.fileExists(atPath: $0.path)
+            } == true)
         }
     }
 
@@ -293,7 +303,14 @@ struct ProjectRegistrySwiftTestingTests {
         )
 
         #expect(items.map(\.name) == ["Frontend", "html"])
-        #expect(items.map(\.parentPath) == ["/tmp/one", "/tmp/two"])
+        #expect(items.map(\.parentPath) == [
+            ProjectPathCanonicalizer.canonicalURL(
+                URL(fileURLWithPath: "/tmp/one", isDirectory: true)
+            ).path,
+            ProjectPathCanonicalizer.canonicalURL(
+                URL(fileURLWithPath: "/tmp/two", isDirectory: true)
+            ).path,
+        ])
         #expect(items[0].isPinned)
         #expect(items[0].isLive)
         #expect(items[0].isAvailable)
@@ -342,12 +359,49 @@ struct ProjectRegistrySwiftTestingTests {
 
         #expect(registry.records.map(\.id) == [ProjectID(rawValue: "/tmp/valid-project")])
         #expect(registry.records.first?.isPinned == true)
-        #expect(registry.persistenceErrorDescription?.contains("1 invalid record") == true)
+        #expect(registry.persistenceErrorDescription == nil)
+        let recovery = try #require(registry.recoveryDiagnostic)
+        #expect(recovery.discardedRecordCount == 1)
+        #expect(recovery.discardedRecordIdentities == ["relative/project"])
+        #expect(permissionBits(at: recovery.quarantineFileURL) == 0o600)
+        let quarantined = try #require(
+            JSONSerialization.jsonObject(
+                with: Data(contentsOf: recovery.quarantineFileURL)
+            ) as? [[String: Any]]
+        )
+        #expect(quarantined.count == 1)
+        #expect(quarantined.first?["id"] as? String == "relative/project")
         try registry.recordOpen(descriptor("/tmp/new-project"))
         #expect(registry.persistenceErrorDescription == nil)
+        #expect(registry.recoveryDiagnostic == recovery)
         #expect(Set(try ProjectRegistryStore(fileURL: fileURL).load().map(\.id)) == [
             ProjectID(rawValue: "/tmp/valid-project"),
             ProjectID(rawValue: "/tmp/new-project"),
+        ])
+    }
+
+    @Test("an all-invalid registry is quarantined and remains writable")
+    func allInvalidRecordsRecoverToWritableRegistry() throws {
+        let sandbox = makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let fileURL = sandbox.appendingPathComponent("registry.json")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        try Data(#"[{"id":"relative/project"}]"#.utf8).write(to: fileURL)
+
+        let registry = ProjectRegistry(store: ProjectRegistryStore(fileURL: fileURL))
+
+        #expect(registry.records.isEmpty)
+        #expect(registry.persistenceErrorDescription == nil)
+        let recovery = try #require(registry.recoveryDiagnostic)
+        #expect(recovery.discardedRecordCount == 1)
+        #expect(recovery.discardedRecordIdentities == ["relative/project"])
+        #expect(FileManager.default.fileExists(atPath: recovery.quarantineFileURL.path))
+
+        try registry.recordOpen(descriptor("/tmp/recovered-project"))
+
+        #expect(registry.records.map(\.id) == [ProjectID(rawValue: "/tmp/recovered-project")])
+        #expect(try ProjectRegistryStore(fileURL: fileURL).load().map(\.id) == [
+            ProjectID(rawValue: "/tmp/recovered-project"),
         ])
     }
 

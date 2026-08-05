@@ -101,7 +101,21 @@ enum ProjectRegistryStoreError: Error, Equatable, CustomStringConvertible {
 
 struct ProjectRegistryStoreLoadReport: Equatable, Sendable {
     let records: [ProjectRecord]
+    let discardedRecords: [ProjectRegistryDiscardedRecord]
+    let quarantineFileURL: URL?
+
+    var discardedRecordCount: Int { discardedRecords.count }
+}
+
+struct ProjectRegistryDiscardedRecord: Equatable, Sendable {
+    let identity: String
+    let reason: String
+}
+
+struct ProjectRegistryRecoveryDiagnostic: Equatable, Sendable {
     let discardedRecordCount: Int
+    let discardedRecordIdentities: [String]
+    let quarantineFileURL: URL
 }
 
 struct ProjectRegistryStore: Sendable {
@@ -123,7 +137,11 @@ struct ProjectRegistryStore: Sendable {
 
     func loadReport() throws -> ProjectRegistryStoreLoadReport {
         guard fileManager.fileExists(atPath: fileURL.path) else {
-            return ProjectRegistryStoreLoadReport(records: [], discardedRecordCount: 0)
+            return ProjectRegistryStoreLoadReport(
+                records: [],
+                discardedRecords: [],
+                quarantineFileURL: nil
+            )
         }
         do {
             try validateRoot(createIfMissing: false)
@@ -137,31 +155,36 @@ struct ProjectRegistryStore: Sendable {
                 throw ProjectRegistryStoreError.invalidRecord("Registry root must be an array")
             }
             var records: [ProjectRecord] = []
-            var discardedRecordCount = 0
-            for rawRecord in rawRecords {
+            var discardedRecords: [ProjectRegistryDiscardedRecord] = []
+            var discardedRawRecords: [Any] = []
+            for (index, rawRecord) in rawRecords.enumerated() {
                 do {
                     let recordData = try JSONSerialization.data(withJSONObject: rawRecord)
                     records.append(try Self.decoder.decode(ProjectRecord.self, from: recordData))
                 } catch {
-                    discardedRecordCount += 1
+                    discardedRawRecords.append(rawRecord)
+                    discardedRecords.append(ProjectRegistryDiscardedRecord(
+                        identity: Self.recordIdentity(rawRecord, index: index),
+                        reason: String(describing: error)
+                    ))
                 }
-            }
-            if records.isEmpty, discardedRecordCount > 0 {
-                throw ProjectRegistryStoreError.invalidRecord(
-                    "No valid project records remain after validation"
-                )
             }
             let migrated = Self.coalescedCanonicalRecords(records)
             let rawIDs = (rawRecords as? [[String: Any]])?
                 .compactMap { $0["id"] as? String } ?? []
-            if discardedRecordCount > 0
+            var quarantineFileURL: URL?
+            if !discardedRawRecords.isEmpty {
+                quarantineFileURL = try quarantine(discardedRawRecords)
+            }
+            if !discardedRecords.isEmpty
                 || migrated.count != records.count
                 || rawIDs != records.map(\.id.rawValue) {
                 try save(migrated)
             }
             return ProjectRegistryStoreLoadReport(
                 records: migrated,
-                discardedRecordCount: discardedRecordCount
+                discardedRecords: discardedRecords,
+                quarantineFileURL: quarantineFileURL
             )
         } catch let error as ProjectRegistryStoreError {
             throw error
@@ -219,6 +242,32 @@ struct ProjectRegistryStore: Sendable {
         guard values.isSymbolicLink != true else {
             throw ProjectRegistryStoreError.symbolicLinkRejected(url.path)
         }
+    }
+
+    private func quarantine(_ rawRecords: [Any]) throws -> URL {
+        let quarantineURL = fileURL.deletingLastPathComponent().appendingPathComponent(
+            "registry-quarantine-\(UUID().uuidString.lowercased()).json",
+            isDirectory: false
+        )
+        let data = try JSONSerialization.data(
+            withJSONObject: rawRecords,
+            options: [.prettyPrinted, .sortedKeys]
+        )
+        try data.write(to: quarantineURL, options: .atomic)
+        try fileManager.setAttributes(
+            [.posixPermissions: NSNumber(value: 0o600)],
+            ofItemAtPath: quarantineURL.path
+        )
+        return quarantineURL
+    }
+
+    private static func recordIdentity(_ rawRecord: Any, index: Int) -> String {
+        guard let object = rawRecord as? [String: Any],
+              let identity = object["id"] as? String,
+              !identity.isEmpty else {
+            return "record-\(index + 1)"
+        }
+        return identity
     }
 
     private static func coalescedCanonicalRecords(
@@ -280,6 +329,7 @@ enum ProjectRegistryError: Error, Equatable, CustomStringConvertible {
 final class ProjectRegistry: ObservableObject {
     @Published private(set) var records: [ProjectRecord]
     @Published private(set) var persistenceErrorDescription: String?
+    @Published private(set) var recoveryDiagnostic: ProjectRegistryRecoveryDiagnostic?
     let recordsDidChange = PassthroughSubject<[ProjectRecord], Never>()
 
     private let store: ProjectRegistryStore
@@ -295,12 +345,21 @@ final class ProjectRegistry: ObservableObject {
         do {
             let report = try store.loadReport()
             records = report.records
-            persistenceErrorDescription = report.discardedRecordCount == 0
-                ? nil
-                : "Recovered the project registry after discarding \(report.discardedRecordCount) invalid record(s)."
+            persistenceErrorDescription = nil
+            if let quarantineFileURL = report.quarantineFileURL,
+               !report.discardedRecords.isEmpty {
+                recoveryDiagnostic = ProjectRegistryRecoveryDiagnostic(
+                    discardedRecordCount: report.discardedRecordCount,
+                    discardedRecordIdentities: report.discardedRecords.map(\.identity),
+                    quarantineFileURL: quarantineFileURL
+                )
+            } else {
+                recoveryDiagnostic = nil
+            }
         } catch {
             records = []
             persistenceErrorDescription = String(describing: error)
+            recoveryDiagnostic = nil
             canPersist = false
         }
         records.sort(by: Self.sortRecords)
