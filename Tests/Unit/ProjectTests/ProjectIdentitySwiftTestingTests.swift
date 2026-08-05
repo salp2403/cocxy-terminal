@@ -83,11 +83,26 @@ struct ProjectIdentitySwiftTestingTests {
 
         let descriptor = resolver.resolveProject(for: directory)
 
-        #expect(descriptor.id.rawValue == directory.standardizedFileURL.path)
-        #expect(descriptor.rootURL == directory.standardizedFileURL)
+        #expect(descriptor.id.rawValue == ProjectPathCanonicalizer.canonicalURL(directory).path)
+        #expect(descriptor.rootURL == ProjectPathCanonicalizer.canonicalURL(directory))
         #expect(descriptor.automaticName == "cocxy-project-fallback")
         #expect(descriptor.displayName == "cocxy-project-fallback")
         #expect(descriptor.parent == nil)
+    }
+
+    @Test("descriptor-bound standalone projects preserve canonical root identity")
+    func verifiedStandaloneCanonicalizesTrustedRootAliases() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-verified-project-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let verifiedDirectory = try ProjectDirectoryRoot.open(directory)
+        let expected = ProjectPathCanonicalizer.canonicalURL(directory)
+
+        let descriptor = try ProjectDescriptor.verifiedStandalone(verifiedDirectory)
+
+        #expect(descriptor.rootURL == expected)
+        #expect(descriptor.id.rawValue == expected.path)
     }
 
     @Test("linked worktree folds under its origin while preserving child identity")
@@ -131,7 +146,7 @@ struct ProjectIdentitySwiftTestingTests {
         #expect(descriptor.id == ProjectID(rootURL: child))
         #expect(descriptor.parent == ProjectID(rootURL: origin))
         #expect(descriptor.groupingID == ProjectID(rootURL: origin))
-        #expect(descriptor.groupingRootURL == origin.standardizedFileURL)
+        #expect(descriptor.groupingRootURL == ProjectPathCanonicalizer.canonicalURL(origin))
         #expect(descriptor.groupingAutomaticName == "origin")
     }
 
@@ -192,7 +207,7 @@ struct ProjectIdentitySwiftTestingTests {
         let direct = resolver.resolveProject(for: physical)
 
         #expect(linked.id == direct.id)
-        #expect(linked.rootURL == physical.standardizedFileURL)
+        #expect(linked.rootURL == ProjectPathCanonicalizer.canonicalURL(physical))
         #expect(resolver.cachedEntryCount == 1)
         #expect(rootResolver.callCount == 1)
     }
@@ -217,6 +232,9 @@ struct ProjectIdentitySwiftTestingTests {
         #expect(resolver.invalidatedPaths.isEmpty)
 
         controller.handleCurrentDirectoryChange(child, tabID: tab.id, surfaceID: nil)
-        #expect(resolver.invalidatedPaths == [root.path, child.path])
+        #expect(resolver.invalidatedPaths == [
+            ProjectPathCanonicalizer.canonicalURL(root).path,
+            ProjectPathCanonicalizer.canonicalURL(child).path,
+        ])
     }
 }

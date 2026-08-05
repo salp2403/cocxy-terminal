@@ -25,14 +25,15 @@ struct TaskCollisionDetectorSwiftTestingTests {
     func prelaunchCollision() {
         let report = TaskCollisionDetector.beforeLaunch(
             plannedPaths: ["Sources/App.swift", "/tmp/cocxy-project/Tests/New.swift"],
-            liveSessions: [
-                session(id: "same", projectID: projectID, touched: ["Sources/App.swift"]),
-                session(
+            liveWork: [
+                liveSession(id: "same", projectID: projectID, touched: ["Sources/App.swift"]),
+                liveSession(
                     id: "other",
                     projectID: ProjectID(rawValue: "/tmp/another-project"),
                     touched: ["Sources/App.swift"]
                 ),
             ],
+            otherWork: [],
             projectID: projectID,
             projectRoot: root
         )
@@ -45,11 +46,12 @@ struct TaskCollisionDetectorSwiftTestingTests {
     func reportedConflict() {
         let report = TaskCollisionDetector.beforeLaunch(
             plannedPaths: [],
-            liveSessions: [session(
+            liveWork: [liveSession(
                 id: "live",
                 projectID: projectID,
                 conflicts: ["Sources/Shared.swift"]
             )],
+            otherWork: [],
             projectID: projectID,
             projectRoot: root
         )
@@ -70,10 +72,11 @@ struct TaskCollisionDetectorSwiftTestingTests {
         let selected = comparison(id: "candidate", teamID: "candidate-team", files: ["A.swift"])
         let report = TaskCollisionDetector.beforePromotion(
             candidate: selected,
-            liveSessions: [
-                session(id: "candidate-team", projectID: projectID, touched: ["A.swift"]),
-                session(id: "independent", projectID: projectID, touched: ["A.swift"]),
+            liveWork: [
+                liveSession(id: "candidate-team", projectID: projectID, touched: ["A.swift"]),
+                liveSession(id: "independent", projectID: projectID, touched: ["A.swift"]),
             ],
+            otherWork: [],
             projectID: projectID,
             projectRoot: root
         )
@@ -212,6 +215,34 @@ struct TaskCollisionDetectorSwiftTestingTests {
         ) == ["Sources/A.swift"])
     }
 
+    @Test("normalization resolves symlink aliases before enforcing project boundaries")
+    func normalizationResolvesSymlinks() throws {
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-project-\(UUID().uuidString)", isDirectory: true)
+        let physicalRoot = temporaryRoot.appendingPathComponent("physical", isDirectory: true)
+        let aliasedRoot = temporaryRoot.appendingPathComponent("alias", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+        try FileManager.default.createDirectory(
+            at: physicalRoot.appendingPathComponent("Sources", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(
+            at: aliasedRoot,
+            withDestinationURL: physicalRoot
+        )
+        let canonicalRoot = ProjectPathCanonicalizer.canonicalURL(physicalRoot)
+        let canonicalFile = ProjectPathCanonicalizer.canonicalURL(
+            canonicalRoot.appendingPathComponent("Sources/App.swift")
+        )
+
+        #expect(ProjectPathCanonicalizer.canonicalURL(aliasedRoot) == canonicalRoot)
+        #expect(canonicalFile.path.hasPrefix(canonicalRoot.path + "/"))
+        #expect(TaskCollisionDetector.normalize(
+            [canonicalRoot.appendingPathComponent("Sources/App.swift").path],
+            projectRoot: aliasedRoot
+        ) == ["Sources/App.swift"])
+    }
+
     @Test("legacy candidate payload defaults new touched file metadata")
     func legacyCandidatePayload() throws {
         let data = Data(#"{"id":"old","provider":"codex","teamID":"old-team","status":"finished","estimatedCostMicros":0}"#.utf8)
@@ -262,6 +293,24 @@ struct TaskCollisionDetectorSwiftTestingTests {
             model: nil,
             filesTouched: touched.map { FileImpact(path: $0) },
             fileConflicts: conflicts
+        )
+    }
+
+    private func liveSession(
+        id: String,
+        projectID: ProjectID,
+        touched: [String] = [],
+        conflicts: [String] = []
+    ) -> TaskCollisionLiveSession {
+        TaskCollisionLiveSession(
+            session: session(
+                id: id,
+                projectID: projectID,
+                touched: touched,
+                conflicts: conflicts
+            ),
+            effectiveRoot: root,
+            worktreeID: nil
         )
     }
 }

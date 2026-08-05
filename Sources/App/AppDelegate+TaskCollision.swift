@@ -181,7 +181,11 @@ extension AppDelegate {
             }.first
             return TaskCollisionLiveSession(
                 session: session,
-                effectiveRoot: (tab?.worktreeRoot ?? tab?.workingDirectory)
+                effectiveRoot: tab.map {
+                    $0.worktreeRoot ?? projectResolver.resolveProject(
+                        for: $0.workingDirectory
+                    ).rootURL
+                }
                     ?? URL(fileURLWithPath: session.projectIdentity?.rawValue ?? "/", isDirectory: true),
                 worktreeID: tab?.worktreeID
             )

@@ -2,6 +2,7 @@
 // ProjectIdentity.swift - Canonical local project identity and resolution.
 
 import Foundation
+import Darwin
 
 struct ProjectID: RawRepresentable, Codable, Hashable, Sendable {
     let rawValue: String
@@ -17,7 +18,7 @@ struct ProjectID: RawRepresentable, Codable, Hashable, Sendable {
     }
 
     init(verifiedRootURL: URL) {
-        rawValue = verifiedRootURL.standardizedFileURL.path
+        rawValue = ProjectPathCanonicalizer.canonicalURL(verifiedRootURL).path
     }
 
     init(from decoder: Decoder) throws {
@@ -39,7 +40,51 @@ struct ProjectID: RawRepresentable, Codable, Hashable, Sendable {
 
 enum ProjectPathCanonicalizer {
     static func canonicalURL(_ url: URL) -> URL {
-        url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let standardized = url.standardizedFileURL
+        var existingAncestor = standardized
+        var missingComponents: [String] = []
+
+        while !FileManager.default.fileExists(atPath: existingAncestor.path) {
+            let parent = existingAncestor.deletingLastPathComponent()
+            guard parent.path != existingAncestor.path else { break }
+            missingComponents.insert(existingAncestor.lastPathComponent, at: 0)
+            existingAncestor = parent
+        }
+
+        let resolvedAncestor = fullyResolvedRealPath(for: existingAncestor)
+            ?? existingAncestor.resolvingSymlinksInPath().standardizedFileURL
+        let resolved = missingComponents.reduce(resolvedAncestor) { partial, component in
+            partial.appendingPathComponent(component)
+        }
+        return URL(
+            fileURLWithPath: resolved.path,
+            isDirectory: url.hasDirectoryPath
+        )
+    }
+
+    private static func fullyResolvedRealPath(for url: URL) -> URL? {
+        guard var resolved = realPath(for: url) else { return nil }
+        var visitedPaths: Set<String> = []
+
+        while visitedPaths.insert(resolved.path).inserted {
+            guard let next = realPath(for: resolved),
+                  next.path != resolved.path else {
+                break
+            }
+            resolved = next
+        }
+        return resolved
+    }
+
+    private static func realPath(for url: URL) -> URL? {
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        return url.path.withCString { source in
+            buffer.withUnsafeMutableBufferPointer { destination in
+                guard let baseAddress = destination.baseAddress,
+                      Darwin.realpath(source, baseAddress) != nil else { return nil }
+                return URL(fileURLWithPath: String(cString: baseAddress))
+            }
+        }
     }
 }
 
@@ -75,7 +120,9 @@ struct ProjectDescriptor: Equatable, Sendable {
     static func verifiedStandalone(
         _ directory: ProjectDirectoryRoot
     ) throws -> ProjectDescriptor {
-        let rootURL = try directory.descriptorBoundURL()
+        let rootURL = ProjectPathCanonicalizer.canonicalURL(
+            try directory.descriptorBoundURL()
+        )
         let id = ProjectID(verifiedRootURL: rootURL)
         let name = automaticName(for: rootURL)
         return ProjectDescriptor(
