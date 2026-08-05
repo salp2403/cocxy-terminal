@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "صِل ملف تعريف SSH أو استخدم المرحّل المحلي.";
 "mobile.mirror.transport.detail.unavailable" = "ملف تعريف SSH المحدد غير متاح. استخدم ملفًا متصلًا آخر أو المرحّل المحلي.";
 "mobile.mirror.transport.localDetail" = "يشفّر TLS مرحّل الشبكة الخاصة هذا. تبقى خوادم الطرفية على واجهة loopback ولا تُستخدم أي خدمة سحابية.";
-"mobile.mirror.tls.fingerprint" = "رمز تثبيت SHA-256 للشهادة";
-"mobile.mirror.tls.verify" = "قارن رمز التثبيت هذا بشهادة الجلسة قبل المتابعة.";
+"mobile.mirror.security.title" = "محمي من طرف إلى طرف";
+"mobile.mirror.security.detail" = "يتم تشفير مخرجات الطرفية وتوثيق الإجراءات باستخدام رمز QR.";
+"mobile.mirror.tls.warning" = "سيعرض هاتفك تحذيرًا بشأن الشهادة قبل الاقتران.";
 "mobile.mirror.transport.sshOptional" = "استخدام ملف تعريف SSH متصل";
 "mobile.mirror.transport.sshLabel" = "اتصال SSH آمن";
 "mobile.mirror.transport.sshDetail" = "SSH اختياري، ولا تُنشر نقطة نهاية الإقران إلا عبر الاتصال المحدد.";

@@ -218,23 +218,26 @@ struct MobileMirrorView: View {
             }
             Text(localizer.string("mobile.mirror.scan", fallback: "Scan with your phone"))
                 .font(.subheadline.weight(.medium))
-            if let fingerprint = coordinator.localPairingCertificateFingerprint {
-                VStack(spacing: 6) {
+            VStack(spacing: 6) {
+                Text(localizer.string(
+                    "mobile.mirror.security.title",
+                    fallback: "End-to-end protected"
+                ))
+                .font(.caption.weight(.semibold))
+                Text(localizer.string(
+                    "mobile.mirror.security.detail",
+                    fallback: "Terminal output is encrypted and actions are authenticated with this QR code."
+                ))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                if !coordinator.usesSSHTunnel {
                     Text(localizer.string(
-                        "mobile.mirror.tls.fingerprint",
-                        fallback: "SHA-256 certificate pin"
+                        "mobile.mirror.tls.warning",
+                        fallback: "Your phone will show a certificate warning before pairing."
                     ))
-                    .font(.caption.weight(.semibold))
-                    Text(MobileMirrorPairingURL.displayFingerprint(fingerprint))
-                        .font(.system(.caption2, design: .monospaced))
-                        .textSelection(.enabled)
-                        .multilineTextAlignment(.center)
-                    Text(localizer.string(
-                        "mobile.mirror.tls.verify",
-                        fallback: "Compare this pin with the session certificate before continuing."
-                    ))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
                 }
             }

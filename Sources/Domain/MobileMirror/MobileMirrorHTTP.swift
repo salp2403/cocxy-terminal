@@ -74,6 +74,7 @@ struct MobileMirrorHTTPRequest: Equatable, Sendable {
         let protectedHeaders = Set([
             "authorization", "content-length", "cookie", "host", "origin",
             "x-cocxy-timestamp", "x-cocxy-nonce", "x-cocxy-signature",
+            "x-cocxy-terminal-key",
         ])
         var headers: [String: String] = [:]
         for line in lines.dropFirst() {
@@ -225,6 +226,19 @@ struct MobileMirrorProxyTarget: Equatable, Sendable {
     let port: UInt16
     let bearerToken: String
     let rewrittenPath: String
+    let terminalEncryptionKey: Data?
+
+    init(
+        port: UInt16,
+        bearerToken: String,
+        rewrittenPath: String,
+        terminalEncryptionKey: Data? = nil
+    ) {
+        self.port = port
+        self.bearerToken = bearerToken
+        self.rewrittenPath = rewrittenPath
+        self.terminalEncryptionKey = terminalEncryptionKey
+    }
 }
 
 enum MobileMirrorHTTPRouteResult: Sendable {

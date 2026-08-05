@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "SSH 프로필을 연결하거나 로컬 릴레이를 사용하십시오.";
 "mobile.mirror.transport.detail.unavailable" = "선택한 SSH 프로필을 사용할 수 없습니다. 연결된 다른 프로필이나 로컬 릴레이를 사용하십시오.";
 "mobile.mirror.transport.localDetail" = "TLS가 이 개인 네트워크 릴레이를 암호화합니다. 터미널 서버는 루프백에 유지되며 클라우드 서비스는 사용되지 않습니다.";
-"mobile.mirror.tls.fingerprint" = "인증서 SHA-256 핀";
-"mobile.mirror.tls.verify" = "계속하기 전에 이 핀을 세션 인증서와 비교하세요.";
+"mobile.mirror.security.title" = "종단 간 보호";
+"mobile.mirror.security.detail" = "터미널 출력은 암호화되며 작업은 QR 코드로 인증됩니다.";
+"mobile.mirror.tls.warning" = "페어링 전에 휴대폰에 인증서 경고가 표시됩니다.";
 "mobile.mirror.transport.sshOptional" = "연결된 SSH 프로필 사용";
 "mobile.mirror.transport.sshLabel" = "보안 SSH 연결";
 "mobile.mirror.transport.sshDetail" = "SSH는 선택 사항이며 페어링 엔드포인트는 선택한 연결을 통해서만 공개됩니다.";

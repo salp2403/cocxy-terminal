@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "連接 SSH 設定檔，或使用本機轉送。";
 "mobile.mirror.transport.detail.unavailable" = "所選 SSH 設定檔無法使用。請使用其他已連接的設定檔或本機轉送。";
 "mobile.mirror.transport.localDetail" = "TLS 會加密此私人網路轉送。終端機伺服器仍繫結至迴路介面；不使用任何雲端服務。";
-"mobile.mirror.tls.fingerprint" = "憑證 SHA-256 釘選值";
-"mobile.mirror.tls.verify" = "繼續之前，請將此釘選值與工作階段憑證進行比較。";
+"mobile.mirror.security.title" = "端對端保護";
+"mobile.mirror.security.detail" = "終端輸出會加密，操作則透過 QR Code 驗證。";
+"mobile.mirror.tls.warning" = "配對前，手機會顯示憑證警告。";
 "mobile.mirror.transport.sshOptional" = "使用已連接的 SSH 設定檔";
 "mobile.mirror.transport.sshLabel" = "安全 SSH 連線";
 "mobile.mirror.transport.sshDetail" = "SSH 為選用方式，且只會透過所選連線發佈配對端點。";

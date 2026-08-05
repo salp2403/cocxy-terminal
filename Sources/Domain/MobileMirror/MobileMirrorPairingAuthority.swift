@@ -16,6 +16,7 @@ struct MobileMirrorClientIdentity: Equatable, Sendable {
 struct MobileMirrorPairingOffer: Equatable, Sendable, Identifiable {
     let id: UUID
     let token: String
+    let pairingSecret: String
     let expiresAt: Date
 }
 
@@ -35,7 +36,7 @@ struct MobileMirrorActivePairing: Equatable, Sendable {
 
 struct MobileMirrorSessionCredentials: Equatable, Sendable {
     let channelID: UUID
-    let actionSecret: String
+    let terminalEncryptionKey: Data
     let selectedSessionID: String?
     let selectedSurfaceID: String?
 }
@@ -60,11 +61,13 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
         let id: UUID
         let channelID: UUID
         let tokenDigest: String
+        let pairingSecret: Data
         let expiresAt: Date
     }
 
     private struct Pending {
         let value: MobileMirrorPendingPairing
+        let pairingSecret: Data
         var decision: Bool?
         var cookieDeliveryToken: String?
     }
@@ -74,6 +77,7 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
         let identity: MobileMirrorClientIdentity
         let cookieDigest: String
         let actionToken: RelayToken
+        let terminalEncryptionKey: Data
         let pairedAt: Date
         let expiresAt: Date
         var selectedSessionID: String?
@@ -94,18 +98,25 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
     func makeOffer(ttl: TimeInterval = pairingTTL) -> MobileMirrorPairingOffer {
         let now = clock()
         let token = Self.randomToken()
+        let pairingSecret = RelayToken.generate().secret
         let id = UUID()
         let value = Offer(
             id: id,
             channelID: id,
             tokenDigest: Self.digest(Data(token.utf8)),
+            pairingSecret: pairingSecret,
             expiresAt: now.addingTimeInterval(max(1, ttl))
         )
         lock.withLock {
             offer = value
             pending = nil
         }
-        return MobileMirrorPairingOffer(id: id, token: token, expiresAt: value.expiresAt)
+        return MobileMirrorPairingOffer(
+            id: id,
+            token: token,
+            pairingSecret: Self.base64URL(pairingSecret),
+            expiresAt: value.expiresAt
+        )
     }
 
     func consumeOffer(
@@ -133,7 +144,12 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
                 identity: identity,
                 expiresAt: current.expiresAt
             )
-            pending = Pending(value: value, decision: nil, cookieDeliveryToken: nil)
+            pending = Pending(
+                value: value,
+                pairingSecret: current.pairingSecret,
+                decision: nil,
+                cookieDeliveryToken: nil
+            )
             return value
         }
     }
@@ -158,11 +174,16 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
             let cookie = Self.randomToken()
             let pairedAt = now
             let expiresAt = now.addingTimeInterval(Self.sessionTTL)
+            let keys = MobileMirrorSessionKeys.derive(
+                pairingSecret: current.pairingSecret,
+                channelID: current.value.channelID
+            )
             session = Session(
                 channelID: current.value.channelID,
                 identity: current.value.identity,
                 cookieDigest: Self.digest(Data(cookie.utf8)),
-                actionToken: .generate(),
+                actionToken: keys.actionToken,
+                terminalEncryptionKey: keys.terminalEncryptionKey,
                 pairedAt: pairedAt,
                 expiresAt: expiresAt,
                 selectedSessionID: nil,
@@ -219,7 +240,7 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
             }
             return MobileMirrorSessionCredentials(
                 channelID: current.channelID,
-                actionSecret: Self.base64URL(current.actionToken.secret),
+                terminalEncryptionKey: current.terminalEncryptionKey,
                 selectedSessionID: current.selectedSessionID,
                 selectedSurfaceID: current.selectedSurfaceID
             )
@@ -294,6 +315,8 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
 
     func validateAction(
         cookie: String,
+        method: String,
+        path: String,
         timestamp: String,
         nonce: String,
         signature: String,
@@ -309,7 +332,13 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
             guard var current = validSession(cookie: cookie, now: now) else {
                 throw MobileMirrorError.sessionExpired
             }
-            let canonical = Data("\(timestamp)\n\(nonce)\n".utf8) + body
+            let canonical = MobileMirrorSessionKeys.canonicalActionPayload(
+                method: method,
+                path: path,
+                body: body,
+                timestamp: timestamp,
+                nonce: nonce
+            )
             guard current.actionToken.validate(
                 payload: canonical,
                 signature: receivedSignature

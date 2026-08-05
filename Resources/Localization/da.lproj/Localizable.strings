@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "Tilslut en SSH-profil, eller brug det lokale relæ.";
 "mobile.mirror.transport.detail.unavailable" = "Den valgte SSH-profil er ikke tilgængelig. Brug en anden tilsluttet profil eller det lokale relæ.";
 "mobile.mirror.transport.localDetail" = "TLS krypterer dette relæ på det private netværk. Terminalservere forbliver på loopback; ingen skytjeneste anvendes.";
-"mobile.mirror.tls.fingerprint" = "SHA-256-certifikatpin";
-"mobile.mirror.tls.verify" = "Sammenlign denne pin med sessionscertifikatet, før du fortsætter.";
+"mobile.mirror.security.title" = "End-to-end-beskyttet";
+"mobile.mirror.security.detail" = "Terminaloutput krypteres, og handlinger godkendes med QR-koden.";
+"mobile.mirror.tls.warning" = "Din telefon viser en certifikatadvarsel før parring.";
 "mobile.mirror.transport.sshOptional" = "Brug en tilsluttet SSH-profil";
 "mobile.mirror.transport.sshLabel" = "Sikker SSH-forbindelse";
 "mobile.mirror.transport.sshDetail" = "SSH er valgfrit og gør kun parringsslutpunktet tilgængeligt via den valgte forbindelse.";

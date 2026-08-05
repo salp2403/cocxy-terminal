@@ -153,14 +153,14 @@ struct MobileMirrorSnapshot: Codable, Equatable, Sendable {
 
 struct MobileMirrorBootstrap: Codable, Equatable, Sendable {
     let snapshot: MobileMirrorSnapshot
-    let actionSecret: String
+    let channelID: String
     let locale: String
     let direction: String
     let catalog: [String: String]
 
     private enum CodingKeys: String, CodingKey {
         case snapshot
-        case actionSecret
+        case channelID
         case locale
         case direction
         case catalog
@@ -168,13 +168,13 @@ struct MobileMirrorBootstrap: Codable, Equatable, Sendable {
 
     init(
         snapshot: MobileMirrorSnapshot,
-        actionSecret: String,
+        channelID: String,
         locale: String = "en",
         direction: String = "ltr",
         catalog: [String: String] = [:]
     ) {
         self.snapshot = snapshot
-        self.actionSecret = actionSecret
+        self.channelID = channelID
         self.locale = locale
         self.direction = direction == "rtl" ? "rtl" : "ltr"
         self.catalog = catalog
@@ -183,7 +183,7 @@ struct MobileMirrorBootstrap: Codable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         snapshot = try container.decode(MobileMirrorSnapshot.self, forKey: .snapshot)
-        actionSecret = try container.decode(String.self, forKey: .actionSecret)
+        channelID = try container.decodeIfPresent(String.self, forKey: .channelID) ?? ""
         locale = try container.decodeIfPresent(String.self, forKey: .locale) ?? "en"
         let decodedDirection = try container.decodeIfPresent(String.self, forKey: .direction)
         direction = decodedDirection == "rtl" ? "rtl" : "ltr"

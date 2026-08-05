@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "Kết nối hồ sơ SSH hoặc dùng bộ chuyển tiếp cục bộ.";
 "mobile.mirror.transport.detail.unavailable" = "Hồ sơ SSH đã chọn không khả dụng. Hãy dùng hồ sơ khác đã kết nối hoặc bộ chuyển tiếp cục bộ.";
 "mobile.mirror.transport.localDetail" = "TLS mã hóa bộ chuyển tiếp trên mạng riêng này. Máy chủ trình dòng lệnh vẫn dùng giao diện loopback; không sử dụng dịch vụ đám mây.";
-"mobile.mirror.tls.fingerprint" = "Mã ghim SHA-256 của chứng chỉ";
-"mobile.mirror.tls.verify" = "So sánh mã ghim này với chứng chỉ phiên trước khi tiếp tục.";
+"mobile.mirror.security.title" = "Bảo vệ đầu cuối";
+"mobile.mirror.security.detail" = "Đầu ra thiết bị đầu cuối được mã hóa và các thao tác được xác thực bằng mã QR.";
+"mobile.mirror.tls.warning" = "Điện thoại sẽ hiển thị cảnh báo chứng chỉ trước khi ghép nối.";
 "mobile.mirror.transport.sshOptional" = "Dùng hồ sơ SSH đã kết nối";
 "mobile.mirror.transport.sshLabel" = "Kết nối SSH bảo mật";
 "mobile.mirror.transport.sshDetail" = "SSH là tùy chọn và chỉ công bố điểm cuối ghép đôi qua kết nối đã chọn.";

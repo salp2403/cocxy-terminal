@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "Koble til en SSH-profil, eller bruk det lokale reléet.";
 "mobile.mirror.transport.detail.unavailable" = "Den valgte SSH-profilen er utilgjengelig. Bruk en annen tilkoblet profil eller det lokale reléet.";
 "mobile.mirror.transport.localDetail" = "TLS krypterer dette reléet på det private nettverket. Terminalservere forblir på loopback; ingen skytjeneste brukes.";
-"mobile.mirror.tls.fingerprint" = "SHA-256-sertifikatpin";
-"mobile.mirror.tls.verify" = "Sammenlign denne pinnen med øktsertifikatet før du fortsetter.";
+"mobile.mirror.security.title" = "Ende-til-ende-beskyttet";
+"mobile.mirror.security.detail" = "Terminalutdata krypteres, og handlinger autentiseres med QR-koden.";
+"mobile.mirror.tls.warning" = "Telefonen viser en sertifikatadvarsel før sammenkobling.";
 "mobile.mirror.transport.sshOptional" = "Bruk en tilkoblet SSH-profil";
 "mobile.mirror.transport.sshLabel" = "Sikker SSH-forbindelse";
 "mobile.mirror.transport.sshDetail" = "SSH er valgfritt og gjør sammenkoblingsendepunktet tilgjengelig bare gjennom den valgte forbindelsen.";

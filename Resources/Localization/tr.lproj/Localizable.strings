@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "Bir SSH profili bağlayın veya yerel aktarıcıyı kullanın.";
 "mobile.mirror.transport.detail.unavailable" = "Seçilen SSH profili kullanılamıyor. Bağlı başka bir profil veya yerel aktarıcı kullanın.";
 "mobile.mirror.transport.localDetail" = "TLS, bu özel ağ aktarıcısını şifreler. Terminal sunucuları geri döngüde kalır; bulut hizmeti kullanılmaz.";
-"mobile.mirror.tls.fingerprint" = "SHA-256 sertifika sabitleme kodu";
-"mobile.mirror.tls.verify" = "Devam etmeden önce bu kodu oturum sertifikasıyla karşılaştırın.";
+"mobile.mirror.security.title" = "Uçtan uca koruma";
+"mobile.mirror.security.detail" = "Terminal çıktısı şifrelenir ve işlemler QR koduyla doğrulanır.";
+"mobile.mirror.tls.warning" = "Telefonunuz eşleştirmeden önce bir sertifika uyarısı gösterecektir.";
 "mobile.mirror.transport.sshOptional" = "Bağlı bir SSH profili kullan";
 "mobile.mirror.transport.sshLabel" = "Güvenli SSH Bağlantısı";
 "mobile.mirror.transport.sshDetail" = "SSH isteğe bağlıdır ve eşleştirme uç noktasını yalnızca seçilen bağlantı üzerinden yayınlar.";

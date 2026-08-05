@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "Подключите профиль SSH или используйте локальный ретранслятор.";
 "mobile.mirror.transport.detail.unavailable" = "Выбранный профиль SSH недоступен. Используйте другой подключённый профиль или локальный ретранслятор.";
 "mobile.mirror.transport.localDetail" = "TLS шифрует этот ретранслятор в частной сети. Серверы терминалов остаются на интерфейсе loopback; облачные службы не используются.";
-"mobile.mirror.tls.fingerprint" = "Пин SHA-256 сертификата";
-"mobile.mirror.tls.verify" = "Перед продолжением сравните этот пин с сертификатом сеанса.";
+"mobile.mirror.security.title" = "Сквозная защита";
+"mobile.mirror.security.detail" = "Вывод терминала зашифрован, а действия подтверждаются с помощью QR-кода.";
+"mobile.mirror.tls.warning" = "Перед сопряжением телефон покажет предупреждение о сертификате.";
 "mobile.mirror.transport.sshOptional" = "Использовать подключённый профиль SSH";
 "mobile.mirror.transport.sshLabel" = "Защищённое SSH-соединение";
 "mobile.mirror.transport.sshDetail" = "SSH необязателен и публикует конечную точку сопряжения только через выбранное подключение.";

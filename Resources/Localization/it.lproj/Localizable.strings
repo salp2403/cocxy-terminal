@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "Collega un profilo SSH oppure usa il servizio di inoltro locale.";
 "mobile.mirror.transport.detail.unavailable" = "Il profilo SSH selezionato non è disponibile. Usa un altro profilo connesso o il servizio di inoltro locale.";
 "mobile.mirror.transport.localDetail" = "TLS cifra questo relay sulla rete privata. I server terminale restano sull’interfaccia di loopback; non viene usato alcun servizio cloud.";
-"mobile.mirror.tls.fingerprint" = "Pin SHA-256 del certificato";
-"mobile.mirror.tls.verify" = "Confronta questo pin con il certificato della sessione prima di continuare.";
+"mobile.mirror.security.title" = "Protezione end-to-end";
+"mobile.mirror.security.detail" = "L'output del terminale è cifrato e le azioni sono autenticate con il codice QR.";
+"mobile.mirror.tls.warning" = "Il telefono mostrerà un avviso relativo al certificato prima dell'abbinamento.";
 "mobile.mirror.transport.sshOptional" = "Usa un profilo SSH connesso";
 "mobile.mirror.transport.sshLabel" = "Connessione SSH sicura";
 "mobile.mirror.transport.sshDetail" = "SSH è facoltativo e pubblica l’endpoint di abbinamento solo tramite la connessione selezionata.";

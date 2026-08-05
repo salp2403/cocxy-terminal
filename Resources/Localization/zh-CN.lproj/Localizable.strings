@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "连接 SSH 配置，或使用本地中继。";
 "mobile.mirror.transport.detail.unavailable" = "所选 SSH 配置不可用。请使用其他已连接的配置或本地中继。";
 "mobile.mirror.transport.localDetail" = "TLS 会加密此专用网络中继。终端服务器仍绑定到环回接口；不使用任何云服务。";
-"mobile.mirror.tls.fingerprint" = "证书 SHA-256 固定值";
-"mobile.mirror.tls.verify" = "继续之前，请将此固定值与会话证书进行比较。";
+"mobile.mirror.security.title" = "端到端保护";
+"mobile.mirror.security.detail" = "终端输出会加密，操作通过二维码进行身份验证。";
+"mobile.mirror.tls.warning" = "配对前，手机会显示证书警告。";
 "mobile.mirror.transport.sshOptional" = "使用已连接的 SSH 配置";
 "mobile.mirror.transport.sshLabel" = "安全 SSH 连接";
 "mobile.mirror.transport.sshDetail" = "SSH 为可选方式，且仅通过所选连接发布配对端点。";

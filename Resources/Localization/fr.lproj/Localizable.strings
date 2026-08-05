@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "Connectez un profil SSH ou utilisez le relais local.";
 "mobile.mirror.transport.detail.unavailable" = "Le profil SSH sélectionné est indisponible. Utilisez un autre profil connecté ou le relais local.";
 "mobile.mirror.transport.localDetail" = "TLS chiffre ce relais de réseau privé. Les serveurs de terminal restent sur l’interface de bouclage ; aucun service infonuagique n’est utilisé.";
-"mobile.mirror.tls.fingerprint" = "Empreinte SHA-256 du certificat";
-"mobile.mirror.tls.verify" = "Comparez cette empreinte au certificat de la session avant de continuer.";
+"mobile.mirror.security.title" = "Protection de bout en bout";
+"mobile.mirror.security.detail" = "La sortie du terminal est chiffrée et les actions sont authentifiées avec le code QR.";
+"mobile.mirror.tls.warning" = "Votre téléphone affichera un avertissement de certificat avant l’appairage.";
 "mobile.mirror.transport.sshOptional" = "Utiliser un profil SSH connecté";
 "mobile.mirror.transport.sshLabel" = "Connexion SSH sécurisée";
 "mobile.mirror.transport.sshDetail" = "SSH est facultatif et ne publie le point de terminaison du jumelage que via la connexion sélectionnée.";

@@ -50,10 +50,6 @@ final class MobileMirrorCoordinator: ObservableObject {
     var projectCreationRootHandle: ProjectDirectoryRoot?
     var projectCreationIsQueued = false
 
-    var localPairingCertificateFingerprint: String? {
-        usesSSHTunnel ? nil : localRelayLease?.certificateFingerprint
-    }
-
     init(
         appDelegate: AppDelegate,
         projectRegistry: ProjectRegistry,
@@ -166,8 +162,11 @@ final class MobileMirrorCoordinator: ObservableObject {
             }
             router.updatePublicPort(lease.remotePort)
             let offer = authority.makeOffer()
-            guard let url = URL(
-                string: "http://\(publicAddress):\(lease.remotePort)/pair?token=\(offer.token)"
+            guard let url = MobileMirrorPairingURL.sshTunnel(
+                address: publicAddress,
+                port: lease.remotePort,
+                token: offer.token,
+                pairingSecret: offer.pairingSecret
             ) else {
                 gateway.stop()
                 await closeUnpublishedTunnelLease(lease)
@@ -245,7 +244,7 @@ final class MobileMirrorCoordinator: ObservableObject {
                 address: lease.address,
                 port: lease.port,
                 token: offer.token,
-                certificateFingerprint: lease.certificateFingerprint
+                pairingSecret: offer.pairingSecret
             ) else {
                 throw MobileMirrorError.unavailable
             }

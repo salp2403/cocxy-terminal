@@ -200,13 +200,15 @@ struct MobileMirrorGatewaySwiftTestingTests {
     func proxyRewritesSecurityHeaders() async throws {
         let upstream = try MobileMirrorCaptureServer()
         defer { upstream.stop() }
+        let encryptionKey = Data((0..<32).map(UInt8.init))
         let gateway = MobileMirrorGateway(
             requestedPort: 0
         ) { _, _ in
             .proxy(MobileMirrorProxyTarget(
                 port: upstream.port,
                 bearerToken: "engine-secret",
-                rewrittenPath: "/ws"
+                rewrittenPath: "/ws",
+                terminalEncryptionKey: encryptionKey
             ))
         }
         let port = try gateway.start()
@@ -217,6 +219,7 @@ struct MobileMirrorGatewaySwiftTestingTests {
         )
         request.setValue("mobile-secret", forHTTPHeaderField: "Cookie")
         request.setValue("signed-action", forHTTPHeaderField: "X-Cocxy-Signature")
+        request.setValue("attacker-key", forHTTPHeaderField: "X-Cocxy-Terminal-Key")
         let (data, response) = try await URLSession.shared.data(for: request)
         #expect((response as? HTTPURLResponse)?.statusCode == 200)
         #expect(String(decoding: data, as: UTF8.self) == "pong")
@@ -225,8 +228,12 @@ struct MobileMirrorGatewaySwiftTestingTests {
         #expect(received.hasPrefix("GET /ws HTTP/1.1\r\n"))
         #expect(received.contains("Authorization: Bearer engine-secret\r\n"))
         #expect(received.contains("Origin: http://127.0.0.1:\(upstream.port)\r\n"))
+        #expect(received.contains(
+            "X-Cocxy-Terminal-Key: \(MobileMirrorPairingAuthority.base64URL(encryptionKey))\r\n"
+        ))
         #expect(received.localizedCaseInsensitiveContains("mobile-secret") == false)
         #expect(received.localizedCaseInsensitiveContains("signed-action") == false)
+        #expect(received.localizedCaseInsensitiveContains("attacker-key") == false)
     }
 
     @Test("forwarded peers receive independent gateway connection budgets")

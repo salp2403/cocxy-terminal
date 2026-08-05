@@ -65,7 +65,7 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
         }
     }
 
-    @Test("ephemeral TLS identity is pinned to its private address and removed")
+    @Test("ephemeral TLS identity is scoped to its private address and removed")
     func ephemeralTLSIdentityLifecycle() throws {
         let verificationDate = Date(timeIntervalSince1970: 1_786_000_000)
         let tlsIdentity = try MobileMirrorEphemeralTLSIdentity.generate(
@@ -111,18 +111,26 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
         #expect(keyLookupStatus == errSecItemNotFound)
     }
 
-    @Test("local pairing URL carries an HTTPS certificate pin")
+    @Test("local pairing URL carries a one-use application key")
     func localPairingURLContract() throws {
         let url = try #require(MobileMirrorPairingURL.local(
             address: "192.168.1.8",
             port: 4_242,
             token: "one-use-token",
-            certificateFingerprint: "AbC_123-xyz"
+            pairingSecret: "pairing-secret"
         ))
 
-        #expect(url.absoluteString == "https://192.168.1.8:4242/pair?token=one-use-token#tls-sha256=AbC_123-xyz")
-        #expect(MobileMirrorPairingURL.certificateFingerprint(from: url) == "AbC_123-xyz")
-        #expect(MobileMirrorPairingURL.displayFingerprint("123456789") == "1234 5678 9")
+        #expect(url.absoluteString == "https://192.168.1.8:4242/pair?token=one-use-token#pairing-key=pairing-secret")
+        #expect(MobileMirrorPairingURL.pairingSecret(from: url) == "pairing-secret")
+
+        let tunneled = try #require(MobileMirrorPairingURL.sshTunnel(
+            address: "127.0.0.1",
+            port: 4_243,
+            token: "tunnel-token",
+            pairingSecret: "tunnel-secret"
+        ))
+        #expect(tunneled.absoluteString == "http://127.0.0.1:4243/pair?token=tunnel-token#pairing-key=tunnel-secret")
+        #expect(MobileMirrorPairingURL.pairingSecret(from: tunneled) == "tunnel-secret")
     }
 
     @Test("private relay reaches the loopback gateway and preserves client identity")
@@ -157,11 +165,6 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
         let text = String(decoding: response, as: UTF8.self)
         #expect(text == "{\"status\":\"ok\"}")
 
-        #expect(await Self.rejectsMismatchedPin(
-            address: lease.address,
-            port: lease.port,
-            path: "/health"
-        ))
     }
 
     @Test("production relay binds its exact RFC 1918 interface")
@@ -311,27 +314,6 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
         )
     }
 
-    private static func rejectsMismatchedPin(
-        address: String,
-        port: UInt16,
-        path: String
-    ) async -> Bool {
-        let delegate = MobileMirrorPinnedTLSDelegate(
-            expectedFingerprint: "invalid-fingerprint"
-        )
-        do {
-            _ = try await request(
-                address: address,
-                port: port,
-                path: path,
-                delegate: delegate
-            )
-            return false
-        } catch {
-            return delegate.didRejectFingerprintMismatch
-        }
-    }
-
     private static func request(
         address: String,
         port: UInt16,
@@ -421,14 +403,6 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
 private final class MobileMirrorPinnedTLSDelegate: NSObject, URLSessionDelegate,
     @unchecked Sendable {
     private let expectedFingerprint: String
-    private let lock = NSLock()
-    private var rejectedFingerprintMismatch = false
-
-    var didRejectFingerprintMismatch: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return rejectedFingerprintMismatch
-    }
 
     init(expectedFingerprint: String) {
         self.expectedFingerprint = expectedFingerprint
@@ -451,9 +425,6 @@ private final class MobileMirrorPinnedTLSDelegate: NSObject, URLSessionDelegate,
             SecCertificateCopyData(certificate) as Data
         )
         guard fingerprint == expectedFingerprint else {
-            lock.lock()
-            rejectedFingerprintMismatch = true
-            lock.unlock()
             completionHandler(.cancelAuthenticationChallenge, nil)
             return
         }

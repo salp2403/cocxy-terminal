@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "เชื่อมต่อโปรไฟล์ SSH หรือใช้รีเลย์ภายในเครื่อง";
 "mobile.mirror.transport.detail.unavailable" = "โปรไฟล์ SSH ที่เลือกไม่พร้อมใช้งาน โปรดใช้โปรไฟล์อื่นที่เชื่อมต่อแล้วหรือรีเลย์ภายในเครื่อง";
 "mobile.mirror.transport.localDetail" = "TLS เข้ารหัสรีเลย์บนเครือข่ายส่วนตัวนี้ เซิร์ฟเวอร์เทอร์มินัลยังคงอยู่บนลูปแบ็ก และไม่มีการใช้บริการคลาวด์";
-"mobile.mirror.tls.fingerprint" = "พินใบรับรอง SHA-256";
-"mobile.mirror.tls.verify" = "เปรียบเทียบพินนี้กับใบรับรองของเซสชันก่อนดำเนินการต่อ";
+"mobile.mirror.security.title" = "ปกป้องแบบต้นทางถึงปลายทาง";
+"mobile.mirror.security.detail" = "เอาต์พุตเทอร์มินัลได้รับการเข้ารหัสและการดำเนินการได้รับการยืนยันด้วยคิวอาร์โค้ด";
+"mobile.mirror.tls.warning" = "โทรศัพท์ของคุณจะแสดงคำเตือนใบรับรองก่อนจับคู่";
 "mobile.mirror.transport.sshOptional" = "ใช้โปรไฟล์ SSH ที่เชื่อมต่อแล้ว";
 "mobile.mirror.transport.sshLabel" = "การเชื่อมต่อ SSH ที่ปลอดภัย";
 "mobile.mirror.transport.sshDetail" = "SSH เป็นตัวเลือก และจะเผยแพร่จุดเชื่อมต่อสำหรับการจับคู่ผ่านการเชื่อมต่อที่เลือกเท่านั้น";

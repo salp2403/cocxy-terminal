@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "SSH プロファイルを接続するか、ローカルリレーを使用してください。";
 "mobile.mirror.transport.detail.unavailable" = "選択した SSH プロファイルは利用できません。接続済みの別のプロファイルまたはローカルリレーを使用してください。";
 "mobile.mirror.transport.localDetail" = "TLS がこのプライベートネットワークのリレーを暗号化します。ターミナルサーバーはループバック上に留まり、クラウドサービスは使用されません。";
-"mobile.mirror.tls.fingerprint" = "証明書の SHA-256 ピン";
-"mobile.mirror.tls.verify" = "続行する前に、このピンをセッション証明書と照合してください。";
+"mobile.mirror.security.title" = "エンドツーエンドで保護";
+"mobile.mirror.security.detail" = "ターミナル出力は暗号化され、操作はQRコードで認証されます。";
+"mobile.mirror.tls.warning" = "ペアリング前に、スマートフォンに証明書の警告が表示されます。";
 "mobile.mirror.transport.sshOptional" = "接続済みの SSH プロファイルを使用";
 "mobile.mirror.transport.sshLabel" = "安全な SSH 接続";
 "mobile.mirror.transport.sshDetail" = "SSH は任意であり、ペアリングエンドポイントは選択した接続を通じてのみ公開されます。";

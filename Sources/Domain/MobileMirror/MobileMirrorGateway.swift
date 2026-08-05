@@ -463,7 +463,8 @@ final class MobileMirrorGateway: @unchecked Sendable {
     ) -> Data {
         let excluded = Set([
             "authorization", "cookie", "host", "origin", "x-cocxy-timestamp",
-            "x-cocxy-nonce", "x-cocxy-signature", "content-length",
+            "x-cocxy-nonce", "x-cocxy-signature", "x-cocxy-terminal-key",
+            "content-length",
         ])
         var value = "\(request.method) \(target.rewrittenPath) \(request.version)\r\n"
         for key in request.headers.keys.sorted() where !excluded.contains(key) {
@@ -472,6 +473,9 @@ final class MobileMirrorGateway: @unchecked Sendable {
         value += "Host: 127.0.0.1:\(target.port)\r\n"
         value += "Origin: http://127.0.0.1:\(target.port)\r\n"
         value += "Authorization: Bearer \(target.bearerToken)\r\n"
+        if let key = target.terminalEncryptionKey {
+            value += "X-Cocxy-Terminal-Key: \(MobileMirrorPairingAuthority.base64URL(key))\r\n"
+        }
         if !request.body.isEmpty {
             value += "Content-Length: \(request.body.count)\r\n"
         }

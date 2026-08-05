@@ -1,12 +1,43 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
-import CryptoKit
 import Foundation
 import Testing
 @testable import CocxyTerminal
 
 @Suite("Mobile mirror security")
 struct MobileMirrorSecuritySwiftTestingTests {
+    @Test("session keys match fixed WebCrypto vectors")
+    func sessionKeysMatchFixedVectors() throws {
+        let channelID = try #require(UUID(uuidString: "00112233-4455-6677-8899-aabbccddeeff"))
+        let keys = MobileMirrorSessionKeys.derive(
+            pairingSecret: Data((0..<32).map(UInt8.init)),
+            channelID: channelID
+        )
+        let expectedActionKey = try data(
+            hex: "85c0044305e1a7fd5b4a223a4ccd79da0570de68830f8a83056e15fcf9f67d8d"
+        )
+        let expectedTerminalKey = try data(
+            hex: "06999873580e00273a89c9990aca2d0269d1396bae9244c9a40ba7cfa832ad8a"
+        )
+        #expect(keys.actionToken.secret == expectedActionKey)
+        #expect(keys.terminalEncryptionKey == expectedTerminalKey)
+
+        let body = Data(
+            "{\"kind\":\"select-session\",\"sessionID\":\"s\",\"surfaceID\":\"u\"}".utf8
+        )
+        let payload = MobileMirrorSessionKeys.canonicalActionPayload(
+            method: "POST",
+            path: "/mobile/api/action",
+            body: body,
+            timestamp: "1720000000",
+            nonce: "11111111-2222-4333-8444-555555555555"
+        )
+        let expectedSignature = try data(
+            hex: "3793bf1bf1cf4446b73ace8ced341fbebe64cf7236e75ef70f9dfc4b4626bd45"
+        )
+        #expect(keys.actionToken.sign(payload) == expectedSignature)
+    }
+
     @Test("pairing token is consumed once and requires desktop approval")
     func pairingTokenIsOneUse() throws {
         let clock = MobileMirrorTestClock(Date(timeIntervalSince1970: 2_000_000_000))
@@ -34,7 +65,8 @@ struct MobileMirrorSecuritySwiftTestingTests {
         }
         let credentials = try authority.credentials(cookie: cookie)
         #expect(credentials.channelID == active.channelID)
-        #expect(credentials.actionSecret.isEmpty == false)
+        #expect(credentials.terminalEncryptionKey.count == 32)
+        #expect(offer.pairingSecret.utf8.count >= 43)
         #expect(authority.activePairing(cookie: "wrong") == nil)
         #expect(authority.activePairing(cookie: cookie)?.identity == identity)
     }
@@ -69,18 +101,46 @@ struct MobileMirrorSecuritySwiftTestingTests {
             return
         }
         let credentials = try authority.credentials(cookie: cookie)
+        let pairingSecret = try #require(
+            MobileMirrorPairingAuthority.decodeBase64URL(offer.pairingSecret)
+        )
+        let sessionKeys = MobileMirrorSessionKeys.derive(
+            pairingSecret: pairingSecret,
+            channelID: offer.id
+        )
+        #expect(credentials.terminalEncryptionKey == sessionKeys.terminalEncryptionKey)
         let body = Data("{\"kind\":\"select-session\"}".utf8)
         let timestamp = String(UInt64(Date().timeIntervalSince1970))
         let nonce = UUID().uuidString
-        let signature = try sign(
+        let signature = sign(
             timestamp: timestamp,
             nonce: nonce,
             body: body,
-            secret: credentials.actionSecret
+            actionToken: sessionKeys.actionToken
         )
+
+        let wrongSignature = sign(
+            timestamp: timestamp,
+            nonce: nonce,
+            body: body,
+            actionToken: RelayToken(secret: Data(repeating: 0xA5, count: 32))
+        )
+        #expect(throws: MobileMirrorError.invalidSignature) {
+            try authority.validateAction(
+                cookie: cookie,
+                method: "POST",
+                path: "/mobile/api/action",
+                timestamp: timestamp,
+                nonce: nonce,
+                signature: wrongSignature,
+                body: body
+            )
+        }
 
         #expect(try authority.validateAction(
             cookie: cookie,
+            method: "POST",
+            path: "/mobile/api/action",
             timestamp: timestamp,
             nonce: nonce,
             signature: signature,
@@ -89,6 +149,8 @@ struct MobileMirrorSecuritySwiftTestingTests {
         #expect(throws: MobileMirrorError.replayDetected) {
             try authority.validateAction(
                 cookie: cookie,
+                method: "POST",
+                path: "/mobile/api/action",
                 timestamp: timestamp,
                 nonce: nonce,
                 signature: signature,
@@ -100,6 +162,8 @@ struct MobileMirrorSecuritySwiftTestingTests {
         #expect(throws: MobileMirrorError.invalidSignature) {
             try authority.validateAction(
                 cookie: cookie,
+                method: "POST",
+                path: "/mobile/api/action",
                 timestamp: timestamp,
                 nonce: UUID().uuidString,
                 signature: signature,
@@ -305,14 +369,37 @@ struct MobileMirrorSecuritySwiftTestingTests {
         timestamp: String,
         nonce: String,
         body: Data,
-        secret: String
-    ) throws -> String {
-        let secretData = try #require(MobileMirrorPairingAuthority.decodeBase64URL(secret))
-        let key = SymmetricKey(data: secretData)
-        let payload = Data("\(timestamp)\n\(nonce)\n".utf8) + body
-        let signature = Data(HMAC<SHA256>.authenticationCode(for: payload, using: key))
-        return MobileMirrorPairingAuthority.base64URL(signature)
+        actionToken: RelayToken
+    ) -> String {
+        let payload = MobileMirrorSessionKeys.canonicalActionPayload(
+            method: "POST",
+            path: "/mobile/api/action",
+            body: body,
+            timestamp: timestamp,
+            nonce: nonce
+        )
+        return MobileMirrorPairingAuthority.base64URL(actionToken.sign(payload))
     }
+
+    private func data(hex: String) throws -> Data {
+        guard hex.count.isMultiple(of: 2) else { throw MobileMirrorTestDataError.invalidHex }
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(hex.count / 2)
+        var index = hex.startIndex
+        while index < hex.endIndex {
+            let end = hex.index(index, offsetBy: 2)
+            guard let byte = UInt8(hex[index..<end], radix: 16) else {
+                throw MobileMirrorTestDataError.invalidHex
+            }
+            bytes.append(byte)
+            index = end
+        }
+        return Data(bytes)
+    }
+}
+
+private enum MobileMirrorTestDataError: Error {
+    case invalidHex
 }
 
 private final class MobileMirrorTestClock: @unchecked Sendable {

@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "ភ្ជាប់ប្រវត្តិរូប SSH ឬប្រើរ៉ឺឡេមូលដ្ឋាន។";
 "mobile.mirror.transport.detail.unavailable" = "ប្រវត្តិរូប SSH ដែលបានជ្រើសមិនអាចប្រើបានទេ។ ប្រើប្រវត្តិរូបផ្សេងដែលបានភ្ជាប់ ឬរ៉ឺឡេមូលដ្ឋាន។";
 "mobile.mirror.transport.localDetail" = "TLS អ៊ិនគ្រីបរ៉ឺឡេនៅលើបណ្ដាញឯកជននេះ។ ម៉ាស៊ីនមេស្ថានីយនៅតែប្រើ loopback ហើយមិនប្រើសេវាពពកទេ។";
-"mobile.mirror.tls.fingerprint" = "PIN វិញ្ញាបនបត្រ SHA-256";
-"mobile.mirror.tls.verify" = "ប្រៀបធៀប PIN នេះជាមួយវិញ្ញាបនបត្រសម័យ មុនពេលបន្ត។";
+"mobile.mirror.security.title" = "ការពារពីចុងដល់ចុង";
+"mobile.mirror.security.detail" = "លទ្ធផលស្ថានីយត្រូវបានអ៊ិនគ្រីប ហើយសកម្មភាពត្រូវបានផ្ទៀងផ្ទាត់ដោយកូដ QR។";
+"mobile.mirror.tls.warning" = "ទូរសព្ទរបស់អ្នកនឹងបង្ហាញការព្រមានអំពីវិញ្ញាបនបត្រមុនពេលផ្គូផ្គង។";
 "mobile.mirror.transport.sshOptional" = "ប្រើប្រវត្តិរូប SSH ដែលបានភ្ជាប់";
 "mobile.mirror.transport.sshLabel" = "ការតភ្ជាប់ SSH ដែលមានសុវត្ថិភាព";
 "mobile.mirror.transport.sshDetail" = "SSH ជាជម្រើស ហើយបង្ហាញចំណុចបញ្ចប់សម្រាប់ការផ្គូផ្គងតែតាមការតភ្ជាប់ដែលបានជ្រើសប៉ុណ្ណោះ។";

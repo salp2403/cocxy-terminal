@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
-import CryptoKit
 import Foundation
 import Testing
 @testable import CocxyTerminal
@@ -40,6 +39,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             userAgent: "Mobile Browser"
         )
         let offer = authority.makeOffer()
+        let sessionKeys = try sessionKeys(for: offer)
 
         let pairResult = await router.route(
             request: request(
@@ -121,7 +121,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             MobileMirrorBootstrap.self,
             from: try response(from: localizedBootstrapResult).body
         )
-        #expect(localizedBootstrap.actionSecret == bootstrap.actionSecret)
+        #expect(localizedBootstrap.channelID == bootstrap.channelID)
         #expect(localizedBootstrap.locale == "ar")
         #expect(localizedBootstrap.direction == "rtl")
 
@@ -149,11 +149,11 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let body = try JSONEncoder().encode(action)
         let timestamp = String(UInt64(Date().timeIntervalSince1970))
         let nonce = UUID().uuidString
-        let signedActionSignature = try signature(
+        let signedActionSignature = signature(
             body: body,
             timestamp: timestamp,
             nonce: nonce,
-            secret: bootstrap.actionSecret
+            actionToken: sessionKeys.actionToken
         )
         let signedRequest = request(
             method: "POST",
@@ -205,11 +205,11 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
                 "content-type": "application/json",
                 "x-cocxy-timestamp": malformedTimestamp,
                 "x-cocxy-nonce": malformedNonce,
-                "x-cocxy-signature": try signature(
+                "x-cocxy-signature": signature(
                     body: malformedBody,
                     timestamp: malformedTimestamp,
                     nonce: malformedNonce,
-                    secret: bootstrap.actionSecret
+                    actionToken: sessionKeys.actionToken
                 ),
             ],
             body: malformedBody
@@ -243,11 +243,11 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
                     "content-type": "application/json",
                     "x-cocxy-timestamp": terminalTimestamp,
                     "x-cocxy-nonce": terminalNonce,
-                    "x-cocxy-signature": try self.signature(
+                    "x-cocxy-signature": self.signature(
                         body: terminalBody,
                         timestamp: terminalTimestamp,
                         nonce: terminalNonce,
-                        secret: bootstrap.actionSecret
+                        actionToken: sessionKeys.actionToken
                     ),
                 ],
                 body: terminalBody
@@ -323,11 +323,11 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
                         "content-type": "application/json",
                         "x-cocxy-timestamp": sustainedTimestamp,
                         "x-cocxy-nonce": sustainedNonce,
-                        "x-cocxy-signature": try self.signature(
+                        "x-cocxy-signature": self.signature(
                             body: sustainedBody,
                             timestamp: sustainedTimestamp,
                             nonce: sustainedNonce,
-                            secret: bootstrap.actionSecret
+                            actionToken: sessionKeys.actionToken
                         ),
                     ],
                     body: sustainedBody
@@ -374,6 +374,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(legacy.locale == "en")
         #expect(legacy.direction == "ltr")
         #expect(legacy.catalog.isEmpty)
+        #expect(legacy.channelID.isEmpty)
     }
 
     @Test("audit persistence failure blocks an unaudited action rejection")
@@ -524,14 +525,25 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         body: Data,
         timestamp: String,
         nonce: String,
-        secret: String
-    ) throws -> String {
-        let secretData = try #require(MobileMirrorPairingAuthority.decodeBase64URL(secret))
-        let key = SymmetricKey(data: secretData)
-        let payload = Data("\(timestamp)\n\(nonce)\n".utf8) + body
-        return MobileMirrorPairingAuthority.base64URL(
-            Data(HMAC<SHA256>.authenticationCode(for: payload, using: key))
+        actionToken: RelayToken
+    ) -> String {
+        let payload = MobileMirrorSessionKeys.canonicalActionPayload(
+            method: "POST",
+            path: "/mobile/api/action",
+            body: body,
+            timestamp: timestamp,
+            nonce: nonce
         )
+        return MobileMirrorPairingAuthority.base64URL(
+            actionToken.sign(payload)
+        )
+    }
+
+    private func sessionKeys(for offer: MobileMirrorPairingOffer) throws -> MobileMirrorSessionKeys {
+        let secret = try #require(
+            MobileMirrorPairingAuthority.decodeBase64URL(offer.pairingSecret)
+        )
+        return MobileMirrorSessionKeys.derive(pairingSecret: secret, channelID: offer.id)
     }
 
     private func webLocalization(_ language: AppLanguage) throws -> MobileMirrorWebLocalization {

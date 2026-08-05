@@ -327,12 +327,26 @@ struct AllLocaleParitySwiftTestingTests {
                 .map { try #require(strings[$0]) }
                 .joined(separator: " ")
             let localDetail = try #require(strings["mobile.mirror.transport.localDetail"])
-            let certificatePin = try #require(strings["mobile.mirror.tls.fingerprint"])
+            let securityTitle = try #require(strings["mobile.mirror.security.title"])
+            let securityDetail = try #require(strings["mobile.mirror.security.detail"])
+            let tlsWarning = try #require(strings["mobile.mirror.tls.warning"])
             #expect(!help.localizedCaseInsensitiveContains(obsoletePair))
             #expect(!localTransportSummary.localizedCaseInsensitiveContains("SSH"))
             #expect(localTransportSummary.localizedCaseInsensitiveContains("TLS"))
             #expect(localDetail.localizedCaseInsensitiveContains("TLS"))
-            #expect(certificatePin.localizedCaseInsensitiveContains("SHA-256"))
+            #expect(strings["mobile.mirror.tls.fingerprint"] == nil)
+            #expect(strings["mobile.mirror.tls.verify"] == nil)
+            if locale != "en" {
+                #expect(securityTitle != "End-to-end protected")
+                #expect(
+                    securityDetail
+                        != "Terminal output is encrypted and actions are authenticated with the QR code."
+                )
+                #expect(
+                    tlsWarning
+                        != "Your phone will show a certificate warning before pairing."
+                )
+            }
             for key in [
                 "mobile.mirror.transport.unavailable",
                 "mobile.mirror.transport.detail.unavailable",
@@ -359,7 +373,15 @@ struct AllLocaleParitySwiftTestingTests {
             english["mobile.mirror.transport.localDetail"]
                 == "TLS encrypts this private-network relay. Terminal servers stay on loopback; no cloud service is used."
         )
-        #expect(english["mobile.mirror.tls.fingerprint"] == "SHA-256 certificate pin")
+        #expect(english["mobile.mirror.security.title"] == "End-to-end protected")
+        #expect(
+            english["mobile.mirror.security.detail"]
+                == "Terminal output is encrypted and actions are authenticated with the QR code."
+        )
+        #expect(
+            english["mobile.mirror.tls.warning"]
+                == "Your phone will show a certificate warning before pairing."
+        )
         #expect(english["mobile.mirror.transport.sshOptional"] == "Use a connected SSH profile")
         #expect(
             english["mobile.mirror.transport.sshDetail"]

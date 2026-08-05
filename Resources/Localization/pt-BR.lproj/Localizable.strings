@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "Conecte um perfil SSH ou use o retransmissor local.";
 "mobile.mirror.transport.detail.unavailable" = "O perfil SSH selecionado não está disponível. Use outro perfil conectado ou o retransmissor local.";
 "mobile.mirror.transport.localDetail" = "O TLS criptografa este retransmissor de rede privada. Os servidores de terminal permanecem em loopback; nenhum serviço de nuvem é usado.";
-"mobile.mirror.tls.fingerprint" = "Pin SHA-256 do certificado";
-"mobile.mirror.tls.verify" = "Compare este pin com o certificado da sessão antes de continuar.";
+"mobile.mirror.security.title" = "Proteção de ponta a ponta";
+"mobile.mirror.security.detail" = "A saída do terminal é criptografada e as ações são autenticadas com o código QR.";
+"mobile.mirror.tls.warning" = "Seu telefone exibirá um aviso de certificado antes do pareamento.";
 "mobile.mirror.transport.sshOptional" = "Usar um perfil SSH conectado";
 "mobile.mirror.transport.sshLabel" = "Conexão SSH segura";
 "mobile.mirror.transport.sshDetail" = "O SSH é opcional e publica o endpoint de emparelhamento apenas pela conexão selecionada.";

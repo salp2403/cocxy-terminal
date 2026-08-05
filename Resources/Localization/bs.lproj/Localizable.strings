@@ -3566,8 +3566,9 @@
 "mobile.mirror.transport.unavailable" = "Povežite SSH profil ili koristite lokalni relej.";
 "mobile.mirror.transport.detail.unavailable" = "Odabrani SSH profil nije dostupan. Koristite drugi povezani profil ili lokalni relej.";
 "mobile.mirror.transport.localDetail" = "TLS šifrira ovaj relej na privatnoj mreži. Terminalski serveri ostaju na loopback interfejsu; ne koristi se nijedna usluga u oblaku.";
-"mobile.mirror.tls.fingerprint" = "SHA-256 pin certifikata";
-"mobile.mirror.tls.verify" = "Uporedite ovaj pin s certifikatom sesije prije nego što nastavite.";
+"mobile.mirror.security.title" = "Zaštićeno s kraja na kraj";
+"mobile.mirror.security.detail" = "Izlaz terminala je šifriran, a radnje se potvrđuju QR kodom.";
+"mobile.mirror.tls.warning" = "Telefon će prikazati upozorenje o certifikatu prije uparivanja.";
 "mobile.mirror.transport.sshOptional" = "Koristi povezani SSH profil";
 "mobile.mirror.transport.sshLabel" = "Sigurna SSH veza";
 "mobile.mirror.transport.sshDetail" = "SSH je opcionalan i objavljuje krajnju tačku za uparivanje samo putem odabrane veze.";

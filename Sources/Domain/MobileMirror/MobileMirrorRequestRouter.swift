@@ -150,7 +150,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                 let localization = currentLocalization()
                 return .response(.json(MobileMirrorBootstrap(
                     snapshot: snapshot,
-                    actionSecret: credentials.actionSecret,
+                    channelID: credentials.channelID.uuidString.lowercased(),
                     locale: localization.locale,
                     direction: localization.direction,
                     catalog: localization.catalog
@@ -264,6 +264,8 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         do {
             channelID = try authority.validateAction(
                 cookie: cookie,
+                method: request.method,
+                path: request.path,
                 timestamp: timestamp,
                 nonce: nonce,
                 signature: signature,
@@ -360,13 +362,15 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
 
         if let surfaceID = Self.terminalSessionID(from: request.path) {
             guard UUID(uuidString: surfaceID) != nil,
-                  let route = routeRegistry.route(forSurfaceID: surfaceID) else {
+                  let route = routeRegistry.route(forSurfaceID: surfaceID),
+                  let credentials = try? authority.credentials(cookie: cookie) else {
                 return .response(.error("Terminal stream is unavailable.", status: 404))
             }
             return .proxy(MobileMirrorProxyTarget(
                 port: route.port,
                 bearerToken: route.bearerToken,
-                rewrittenPath: "/ws"
+                rewrittenPath: "/ws",
+                terminalEncryptionKey: credentials.terminalEncryptionKey
             ))
         }
 
@@ -387,11 +391,15 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         guard let route else {
             return .response(.error("No local terminal stream is available.", status: 503))
         }
+        guard let credentials = try? authority.credentials(cookie: cookie) else {
+            return .response(.error(MobileMirrorError.sessionExpired.localizedDescription, status: 401))
+        }
         let rewrittenPath = request.path == "/ws" ? "/ws" : request.target
         return .proxy(MobileMirrorProxyTarget(
             port: route.port,
             bearerToken: route.bearerToken,
-            rewrittenPath: rewrittenPath
+            rewrittenPath: rewrittenPath,
+            terminalEncryptionKey: credentials.terminalEncryptionKey
         ))
     }
 
@@ -424,7 +432,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
           <p id="status" role="status">\(waiting)</p>
         </main><script nonce="\(nonce)">
           const status=document.getElementById('status');
-          const poll=async()=>{try{const r=await fetch('/mobile/api/pair-status?id=\(pendingID.uuidString)',{cache:'no-store'});const v=await r.json();if(v.status==='confirmed'){location.replace(v.redirect||'/');return}if(v.status==='denied'){status.textContent=\(denied);return}}catch{}setTimeout(poll,900)};poll();
+          const poll=async()=>{try{const r=await fetch('/mobile/api/pair-status?id=\(pendingID.uuidString)',{cache:'no-store'});const v=await r.json();if(v.status==='confirmed'){location.replace((v.redirect||'/')+location.hash);return}if(v.status==='denied'){status.textContent=\(denied);return}}catch{}setTimeout(poll,900)};poll();
         </script></body></html>
         """
         return MobileMirrorHTTPResponse(
