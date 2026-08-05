@@ -29,6 +29,10 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
         var approvedRequest: TabConfigStartupAuthorizationRequest?
         fixture.controller.tabConfigStartupAuthorizationPresenter = { request in
             approvedRequest = request
+            guard let surfaceID = fixture.controller.tabSurfaceMap[request.destinationTabID] else {
+                return false
+            }
+            fixture.controller.surfaceWorkingDirectories[surfaceID] = fixture.apiDirectory
             return true
         }
 
@@ -41,7 +45,8 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
 
         #expect(result != nil)
         #expect(approvedRequest?.launchOrigin == .userInterface)
-        #expect(approvedRequest?.workingDirectory == fixture.apiDirectory.path)
+        #expect(fixture.apiDirectory.path != fixture.canonicalAPIDirectory.path)
+        #expect(approvedRequest?.workingDirectory == fixture.canonicalAPIDirectory.path)
         #expect(fixture.engine.sentTexts.map(\.text) == ["MODE='test' npm run dev\r"])
     }
 
@@ -75,11 +80,11 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
 
         #expect(result != nil)
         #expect(requests.map { $0.workingDirectory?.path } == [
-            fixture.apiDirectory.path,
-            fixture.workerDirectory.path,
+            fixture.canonicalAPIDirectory.path,
+            fixture.canonicalWorkerDirectory.path,
         ])
         #expect(fixture.controller.tabManager.tab(for: tabID)?.workingDirectory.path
-            == fixture.workspace.path)
+            == fixture.canonicalWorkspace.path)
         #expect(fixture.controller.collectLeafViews().count == 3)
 
         guard case .split(_, .horizontal, let first, let second, let rootRatio) = splitManager.rootNode,
@@ -119,7 +124,7 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
         let captured = try fixture.store.load(named: "captured")
 
         #expect(saved != nil)
-        #expect(captured.workingDirectory == fixture.workspace.path)
+        #expect(captured.workingDirectory == fixture.canonicalWorkspace.path)
         #expect(captured.layout == fixture.layout)
     }
 
@@ -143,7 +148,7 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
 
         #expect(saved?.warning != nil)
         #expect(config.layout == nil)
-        #expect(config.workingDirectory == fixture.workspace.path)
+        #expect(config.workingDirectory == fixture.canonicalWorkspace.path)
     }
 
     @Test("save omits a layout containing a remote browser URL")
@@ -168,7 +173,7 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
 
         #expect(saved?.warning != nil)
         #expect(config.layout == nil)
-        #expect(config.workingDirectory == fixture.workspace.path)
+        #expect(config.workingDirectory == fixture.canonicalWorkspace.path)
     }
 
     @Test("save omits a layout containing a live subagent pane")
@@ -193,7 +198,7 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
 
         #expect(saved?.warning != nil)
         #expect(config.layout == nil)
-        #expect(config.workingDirectory == fixture.workspace.path)
+        #expect(config.workingDirectory == fixture.canonicalWorkspace.path)
     }
 
     @Test("open fails without creating resources when the project directory is missing")
@@ -273,13 +278,13 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
         let tabID = try #require(fixture.controller.tabManager.activeTabID)
 
         #expect(fixture.controller.tabConfigProjectContextStore.projectRoot(for: tabID)?.path
-            == fixture.workspace.path)
+            == fixture.canonicalWorkspace.path)
         fixture.controller.performCloseTab(tabID)
         #expect(fixture.controller.tabConfigProjectContextStore.projectRoot(for: tabID) == nil)
     }
 
     private func makeFixture() throws -> Fixture {
-        let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
+        let root = URL(fileURLWithPath: "/tmp", isDirectory: true)
             .appendingPathComponent("cocxy-tab-config-launch-tests")
             .appendingPathComponent(UUID().uuidString)
         let workspace = root.appendingPathComponent("workspace")
@@ -370,6 +375,18 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
         let engine: MockTerminalEngine
         let controller: MainWindowController
         let delegate: AppDelegate
+
+        var canonicalWorkspace: URL {
+            ProjectPathCanonicalizer.canonicalURL(workspace)
+        }
+
+        var canonicalAPIDirectory: URL {
+            ProjectPathCanonicalizer.canonicalURL(apiDirectory)
+        }
+
+        var canonicalWorkerDirectory: URL {
+            ProjectPathCanonicalizer.canonicalURL(workerDirectory)
+        }
 
         @MainActor
         func cleanup() {
