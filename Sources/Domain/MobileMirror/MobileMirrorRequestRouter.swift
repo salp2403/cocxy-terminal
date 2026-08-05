@@ -143,7 +143,11 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         case "/mobile/api/state":
             guard request.method == "GET" else { return methodNotAllowed() }
             do {
-                return .response(.json(try await snapshotProvider(cookie)))
+                let snapshot = try await snapshotProvider(cookie)
+                return .response(.json(MobileMirrorStatePayload(
+                    snapshot: snapshot,
+                    localization: currentLocalization()
+                )))
             } catch {
                 return errorResponse(error)
             }

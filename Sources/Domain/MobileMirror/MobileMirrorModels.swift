@@ -191,6 +191,36 @@ struct MobileMirrorBootstrap: Codable, Equatable, Sendable {
     }
 }
 
+struct MobileMirrorStatePayload: Codable, Equatable, Sendable {
+    let snapshot: MobileMirrorSnapshot
+    let locale: String
+    let direction: String
+    let catalog: [String: String]
+
+    private enum CodingKeys: String, CodingKey {
+        case snapshot
+        case locale
+        case direction
+        case catalog
+    }
+
+    init(snapshot: MobileMirrorSnapshot, localization: MobileMirrorWebLocalization) {
+        self.snapshot = snapshot
+        locale = localization.locale
+        direction = localization.direction
+        catalog = localization.catalog
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        snapshot = try container.decode(MobileMirrorSnapshot.self, forKey: .snapshot)
+        locale = try container.decodeIfPresent(String.self, forKey: .locale) ?? "en"
+        let decodedDirection = try container.decodeIfPresent(String.self, forKey: .direction)
+        direction = decodedDirection == "rtl" ? "rtl" : "ltr"
+        catalog = try container.decodeIfPresent([String: String].self, forKey: .catalog) ?? [:]
+    }
+}
+
 struct MobileMirrorActionResponse: Codable, Equatable, Sendable {
     let ok: Bool
     let error: String?

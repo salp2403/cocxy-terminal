@@ -124,6 +124,22 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(localizedBootstrap.locale == "ar")
         #expect(localizedBootstrap.direction == "rtl")
 
+        let stateResult = await router.route(
+            request: request(
+                path: "/mobile/api/state",
+                headers: ["cookie": "cocxy_mobile=\(cookie)"]
+            ),
+            identity: identity
+        )
+        let state = try JSONDecoder().decode(
+            MobileMirrorStatePayload.self,
+            from: try response(from: stateResult).body
+        )
+        #expect(state.snapshot == snapshot)
+        #expect(state.locale == "ar")
+        #expect(state.direction == "rtl")
+        #expect(state.catalog["mobile.web.projects.title"] == "المشاريع")
+
         let action = MobileMirrorAction(
             kind: .selectSession,
             sessionID: UUID().uuidString,
