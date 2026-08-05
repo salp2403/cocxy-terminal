@@ -498,7 +498,7 @@ final class TabSurfaceMappingTests: XCTestCase {
                 hostingView.frame.maxX,
                 overlayContainer.bounds.width,
                 accuracy: 0.5,
-                "Resizing the review panel must keep it docked to the right edge"
+                "Resizing the review panel must keep it docked to the trailing edge"
             )
         }
     }
@@ -622,7 +622,7 @@ final class TabSurfaceMappingTests: XCTestCase {
         }
     }
 
-    func testRightDockedAgentReviewAndGitHubPanelsStayInsideOverlay() {
+    func testTrailingAgentReviewAndGitHubPanelsStayInsideOverlay() {
         withIsolatedCodeReviewPanelWidthPreference {
             withIsolatedGitHubPanePanelWidthPreference {
                 let controller = MainWindowController(bridge: MockTerminalEngine())
@@ -643,13 +643,13 @@ final class TabSurfaceMappingTests: XCTestCase {
                 controller.showAgentModePanel()
                 controller.showCodeReviewPanel()
                 controller.showGitHubPanePanel()
-                controller.layoutRightDockedAgentPanels()
+                controller.layoutTrailingDockedPanels()
 
                 guard let overlayContainer = controller.overlayContainerView,
                       let agentPanel = controller.agentModeHostingView,
                       let codeReviewPanel = controller.codeReviewHostingView,
                       let gitHubPanel = controller.gitHubPaneHostingView else {
-                    XCTFail("Expected all right-docked panels to be visible")
+                    XCTFail("Expected all trailing-edge panels to be visible")
                     return
                 }
 
@@ -686,7 +686,7 @@ final class TabSurfaceMappingTests: XCTestCase {
             controller.windowDidResize(Notification(name: NSWindow.didResizeNotification))
 
             controller.showGitHubPanePanel()
-            controller.layoutRightDockedAgentPanels()
+            controller.layoutTrailingDockedPanels()
 
             guard let panel = controller.gitHubPaneHostingView else {
                 XCTFail("Expected the GitHub pane to be visible")
@@ -707,7 +707,7 @@ final class TabSurfaceMappingTests: XCTestCase {
         }
     }
 
-    func testRightDockedAgentPanelReservesTerminalWidth() {
+    func testTrailingAgentPanelReservesTerminalWidth() {
         let controller = MainWindowController(bridge: MockTerminalEngine())
         controller.injectedAgentPromptRunner = LayoutTestAgentPromptRunner()
         controller.showWindow(nil)
@@ -720,25 +720,25 @@ final class TabSurfaceMappingTests: XCTestCase {
         }
 
         controller.showAgentModePanel()
-        controller.layoutRightDockedAgentPanels()
+        controller.layoutTrailingDockedPanels()
 
         XCTAssertEqual(
             controller.terminalSurfaceView?.frame.width ?? -1,
             container.bounds.width - AgentPanelView.panelWidth,
             accuracy: 0.5,
-            "Right-docked agent panels must reserve width so terminal columns do not render underneath them"
+            "Trailing-edge agent panels must reserve width so terminal columns do not render underneath them"
         )
 
         controller.agentModeHostingView?.removeFromSuperview()
         controller.agentModeHostingView = nil
         controller.isAgentModeVisible = false
-        controller.layoutRightDockedAgentPanels()
+        controller.layoutTrailingDockedPanels()
 
         XCTAssertEqual(
             controller.terminalSurfaceView?.frame.width ?? -1,
             container.bounds.width,
             accuracy: 0.5,
-            "Terminal width should restore when no right-docked panel is visible"
+            "Terminal width should restore when no trailing-edge panel is visible"
         )
     }
 

@@ -229,6 +229,8 @@ final class AuroraChromeController: ObservableObject {
 
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
+        let hosts: [NSView?] = [sidebarHost, statusBarHost, paletteHost, sidebarTooltipHost]
+        hosts.compactMap { $0 }.forEach(applyCurrentLayoutDirection)
     }
 
     func updateSidebarDisplayMode(_ mode: AuroraSidebarDisplayMode) {
@@ -540,6 +542,7 @@ final class AuroraChromeController: ObservableObject {
     func makeSidebarHost() -> AuroraHostingView<AuroraSidebarHost> {
         if let cached = sidebarHost { return cached }
         let host = AuroraHostingView(rootView: AuroraSidebarHost(controller: self))
+        applyCurrentLayoutDirection(to: host)
         host.translatesAutoresizingMaskIntoConstraints = true
         sidebarHost = host
         return host
@@ -549,6 +552,7 @@ final class AuroraChromeController: ObservableObject {
     func makeStatusBarHost() -> AuroraHostingView<AuroraStatusBarHost> {
         if let cached = statusBarHost { return cached }
         let host = AuroraHostingView(rootView: AuroraStatusBarHost(controller: self))
+        applyCurrentLayoutDirection(to: host)
         host.translatesAutoresizingMaskIntoConstraints = true
         statusBarHost = host
         return host
@@ -561,6 +565,7 @@ final class AuroraChromeController: ObservableObject {
     func makePaletteHost() -> AuroraHostingView<AuroraPaletteHost> {
         if let cached = paletteHost { return cached }
         let host = AuroraHostingView(rootView: AuroraPaletteHost(controller: self))
+        applyCurrentLayoutDirection(to: host)
         host.translatesAutoresizingMaskIntoConstraints = true
         paletteHost = host
         return host
@@ -572,9 +577,17 @@ final class AuroraChromeController: ObservableObject {
     func makeSidebarTooltipHost() -> AuroraPassthroughHostingView<AuroraSidebarTooltipHost> {
         if let cached = sidebarTooltipHost { return cached }
         let host = AuroraPassthroughHostingView(rootView: AuroraSidebarTooltipHost(controller: self))
+        applyCurrentLayoutDirection(to: host)
         host.translatesAutoresizingMaskIntoConstraints = true
         sidebarTooltipHost = host
         return host
+    }
+
+    private func applyCurrentLayoutDirection(to view: NSView) {
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: view
+        )
     }
 
     func updateSidebarTooltipSidebarFrameInOverlay(_ frame: CGRect) {

@@ -82,6 +82,7 @@ extension MainWindowController {
         var swiftUIView = CommandPaletteView(viewModel: viewModel)
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = FocusableHostingView(rootView: swiftUIView)
+        applyShellLayoutDirection(to: hostingView)
         hostingView.onCancelOperation = { [weak self] in
             self?.dismissCommandPalette()
         }
@@ -1201,25 +1202,28 @@ extension MainWindowController {
             localizer: appLocalizer()
         )
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let panelWidth: CGFloat = DashboardPanelView.panelWidth
         let containerBounds = overlayContainer.bounds
 
         // Position at target directly to avoid animation issues.
-        let targetX = containerBounds.width - panelWidth
+        let targetX = trailingPanelOrigin(
+            containerWidth: containerBounds.width,
+            panelWidth: panelWidth
+        )
         hostingView.frame = NSRect(
             x: targetX,
             y: 0,
             width: panelWidth,
             height: containerBounds.height
         )
-        hostingView.autoresizingMask = [.height, .minXMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
         self.dashboardHostingView = hostingView
 
         overlayContainer.addSubview(hostingView)
         isDashboardVisible = true
-        layoutRightDockedAgentPanels()
+        layoutTrailingDockedPanels()
     }
 
     func dismissDashboard() {
@@ -1233,8 +1237,11 @@ extension MainWindowController {
 
         isDashboardVisible = false
 
-        // Animate slide-out to the right, then remove.
-        let targetX = overlayContainer.bounds.width
+        // Animate through the trailing edge, then remove.
+        let targetX = trailingPanelExitOrigin(
+            containerWidth: overlayContainer.bounds.width,
+            panelWidth: hostingView.frame.width
+        )
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -1246,7 +1253,7 @@ extension MainWindowController {
             }
         })
 
-        layoutRightDockedAgentPanels()
+        layoutTrailingDockedPanels()
     }
 
     // MARK: - Code Review Panel (Cmd+Option+R)
@@ -1278,22 +1285,25 @@ extension MainWindowController {
         codeReviewPanelWidth = panelWidth
         var swiftUIView = makeCodeReviewPanelView(viewModel: viewModel, panelWidth: panelWidth)
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let panelY = statusBarHostingView?.frame.height ?? 24
         hostingView.frame = NSRect(
-            x: overlayContainer.bounds.width - panelWidth,
+            x: trailingPanelOrigin(
+                containerWidth: overlayContainer.bounds.width,
+                panelWidth: panelWidth
+            ),
             y: panelY,
             width: panelWidth,
             height: max(0, overlayContainer.bounds.height - panelY)
         )
-        hostingView.autoresizingMask = [.height, .minXMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
 
         codeReviewHostingView = hostingView
         overlayContainer.addSubview(hostingView)
         isCodeReviewVisible = true
         viewModel.isVisible = true
-        layoutRightDockedAgentPanels()
+        layoutTrailingDockedPanels()
     }
 
     func startCodeReviewAutomationIfNeeded() {
@@ -1317,18 +1327,23 @@ extension MainWindowController {
                 self?.dismissCodeReviewSuggestion()
             }
         )
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let width: CGFloat = 390
         let height: CGFloat = 90
         let bottomInset = (statusBarHostingView?.frame.height ?? 24) + 14
         hostingView.frame = NSRect(
-            x: max(12, overlayContainer.bounds.width - width - 18),
+            x: DirectionalPanelGeometry.trailingOrigin(
+                containerWidth: overlayContainer.bounds.width,
+                panelWidth: width,
+                occupiedWidth: 18,
+                direction: shellLayoutDirection
+            ),
             y: bottomInset,
             width: width,
             height: height
         )
-        hostingView.autoresizingMask = [.minXMargin, .maxYMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .maxYMargin)
         codeReviewSuggestionHostingView = hostingView
         overlayContainer.addSubview(hostingView)
     }
@@ -1351,7 +1366,10 @@ extension MainWindowController {
         isCodeReviewVisible = false
         codeReviewViewModel?.isVisible = false
 
-        let targetX = overlayContainer.bounds.width
+        let targetX = trailingPanelExitOrigin(
+            containerWidth: overlayContainer.bounds.width,
+            panelWidth: hostingView.frame.width
+        )
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -1360,7 +1378,7 @@ extension MainWindowController {
             Task { @MainActor [weak self] in
                 self?.codeReviewHostingView?.removeFromSuperview()
                 self?.codeReviewHostingView = nil
-                self?.layoutRightDockedAgentPanels()
+                self?.layoutTrailingDockedPanels()
                 self?.focusActiveTerminalSurface()
             }
         })
@@ -1373,7 +1391,7 @@ extension MainWindowController {
     func setCodeReviewPanelWidth(_ proposedWidth: CGFloat) {
         updatePreferredCodeReviewPanelWidth(proposedWidth)
         if isCodeReviewVisible {
-            layoutRightDockedAgentPanels()
+            layoutTrailingDockedPanels()
         } else {
             codeReviewPanelWidth = preferredCodeReviewPanelWidth
         }
@@ -1751,7 +1769,7 @@ extension MainWindowController {
             )
         }
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.frame = NSRect(x: 0, y: container.bounds.height - 40,
                                    width: container.bounds.width, height: 40)
         hostingView.autoresizingMask = [.width, .minYMargin]
@@ -1899,18 +1917,17 @@ extension MainWindowController {
         )
         swiftUIView.navigationDispatcher = timelineDispatcher
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let panelWidth: CGFloat = DashboardPanelView.panelWidth
         let containerBounds = overlayContainer.bounds
 
-        // If the dashboard is visible, place the timeline to its left.
-        let targetX: CGFloat
-        if isDashboardVisible {
-            targetX = containerBounds.width - panelWidth * 2
-        } else {
-            targetX = containerBounds.width - panelWidth
-        }
+        let targetX = DirectionalPanelGeometry.trailingOrigin(
+            containerWidth: containerBounds.width,
+            panelWidth: panelWidth,
+            occupiedWidth: isDashboardVisible ? panelWidth : 0,
+            direction: shellLayoutDirection
+        )
 
         // Position at target directly.
         hostingView.frame = NSRect(
@@ -1919,12 +1936,12 @@ extension MainWindowController {
             width: panelWidth,
             height: containerBounds.height
         )
-        hostingView.autoresizingMask = [.height, .minXMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
         self.timelineHostingView = hostingView
 
         overlayContainer.addSubview(hostingView)
         isTimelineVisible = true
-        layoutRightDockedAgentPanels()
+        layoutTrailingDockedPanels()
     }
 
     func dismissTimeline() {
@@ -1939,8 +1956,11 @@ extension MainWindowController {
 
         isTimelineVisible = false
 
-        // Animate slide-out to the right, then remove.
-        let targetX = overlayContainer.bounds.width
+        // Animate through the trailing edge, then remove.
+        let targetX = trailingPanelExitOrigin(
+            containerWidth: overlayContainer.bounds.width,
+            panelWidth: hostingView.frame.width
+        )
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -1950,12 +1970,12 @@ extension MainWindowController {
                 self?.timelineHostingView?.removeFromSuperview()
                 self?.timelineHostingView = nil
                 self?.timelineViewModel = nil
-                self?.layoutRightDockedAgentPanels()
+                self?.layoutTrailingDockedPanels()
             }
         })
     }
 
-    func layoutRightDockedAgentPanels() {
+    func layoutTrailingDockedPanels() {
         guard let overlayContainer = overlayContainerView else { return }
 
         struct DockedPanel {
@@ -2056,22 +2076,31 @@ extension MainWindowController {
             ) : nil
         ].compactMap { $0 }
 
-        var currentX = overlayContainer.bounds.width
+        var occupiedWidth: CGFloat = 0
         for panel in visiblePanels.reversed() {
-            let fittedWidth = min(panel.width, max(0, currentX))
+            let fittedWidth = min(
+                panel.width,
+                max(0, overlayContainer.bounds.width - occupiedWidth)
+            )
             panel.applyFittedWidth?(fittedWidth)
-            currentX -= fittedWidth
             let panelY = panel.avoidsStatusBar ? statusBarHostingView?.frame.height ?? 24 : 0
             panel.view.frame = NSRect(
-                x: currentX,
+                x: DirectionalPanelGeometry.trailingOrigin(
+                    containerWidth: overlayContainer.bounds.width,
+                    panelWidth: fittedWidth,
+                    occupiedWidth: occupiedWidth,
+                    direction: shellLayoutDirection
+                ),
                 y: panelY,
                 width: fittedWidth,
                 height: max(0, overlayContainer.bounds.height - panelY)
             )
+            panel.view.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
+            occupiedWidth += fittedWidth
         }
 
-        applyTerminalReservationForRightDockedPanels(
-            dockedPanelsMinX: currentX,
+        applyTerminalReservationForTrailingDockedPanels(
+            dockedWidth: occupiedWidth,
             overlayContainer: overlayContainer
         )
 
@@ -2080,7 +2109,12 @@ extension MainWindowController {
             let height = suggestionView.frame.height
             let bottomInset = (statusBarHostingView?.frame.height ?? 24) + 14
             suggestionView.frame = NSRect(
-                x: max(12, overlayContainer.bounds.width - width - 18),
+                x: DirectionalPanelGeometry.trailingOrigin(
+                    containerWidth: overlayContainer.bounds.width,
+                    panelWidth: width,
+                    occupiedWidth: 18,
+                    direction: shellLayoutDirection
+                ),
                 y: bottomInset,
                 width: width,
                 height: height
@@ -2088,8 +2122,8 @@ extension MainWindowController {
         }
     }
 
-    private func applyTerminalReservationForRightDockedPanels(
-        dockedPanelsMinX: CGFloat,
+    private func applyTerminalReservationForTrailingDockedPanels(
+        dockedWidth: CGFloat,
         overlayContainer: NSView
     ) {
         guard let terminalContainerView else { return }
@@ -2098,15 +2132,12 @@ extension MainWindowController {
             terminalContainerView.bounds,
             to: overlayContainer
         )
-        let overlapStart = max(terminalFrameInOverlay.minX, dockedPanelsMinX)
-        let overlappedWidth = max(0, terminalFrameInOverlay.maxX - overlapStart)
-        let reservedWidth = min(terminalContainerView.bounds.width, overlappedWidth)
-        let visibleWidth = max(0, terminalContainerView.bounds.width - reservedWidth)
-        let visibleFrame = NSRect(
-            x: 0,
-            y: 0,
-            width: visibleWidth,
-            height: terminalContainerView.bounds.height
+        let visibleFrame = DirectionalPanelGeometry.terminalVisibleFrame(
+            terminalBounds: terminalContainerView.bounds,
+            terminalFrameInOverlay: terminalFrameInOverlay,
+            overlayWidth: overlayContainer.bounds.width,
+            dockedWidth: dockedWidth,
+            direction: shellLayoutDirection
         )
 
         if let activeSplitView {
@@ -2278,25 +2309,28 @@ extension MainWindowController {
             localizer: appLocalizer()
         )
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let panelWidth: CGFloat = NotificationPanelView.panelWidth
         let containerBounds = overlayContainer.bounds
 
         // Position at target directly.
-        let targetX = containerBounds.width - panelWidth
+        let targetX = trailingPanelOrigin(
+            containerWidth: containerBounds.width,
+            panelWidth: panelWidth
+        )
         hostingView.frame = NSRect(
             x: targetX,
             y: 0,
             width: panelWidth,
             height: containerBounds.height
         )
-        hostingView.autoresizingMask = [.height, .minXMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
         self.notificationPanelHostingView = hostingView
 
         overlayContainer.addSubview(hostingView)
         isNotificationPanelVisible = true
-        layoutRightDockedAgentPanels()
+        layoutTrailingDockedPanels()
     }
 
     func dismissNotificationPanel() {
@@ -2310,8 +2344,11 @@ extension MainWindowController {
 
         isNotificationPanelVisible = false
 
-        // Animate slide-out to the right, then remove.
-        let targetX = overlayContainer.bounds.width
+        // Animate through the trailing edge, then remove.
+        let targetX = trailingPanelExitOrigin(
+            containerWidth: overlayContainer.bounds.width,
+            panelWidth: hostingView.frame.width
+        )
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -2320,7 +2357,7 @@ extension MainWindowController {
             Task { @MainActor [weak self] in
                 self?.notificationPanelHostingView?.removeFromSuperview()
                 self?.notificationPanelHostingView = nil
-                self?.layoutRightDockedAgentPanels()
+                self?.layoutTrailingDockedPanels()
             }
         })
 
@@ -2368,20 +2405,23 @@ extension MainWindowController {
             localizer: appLocalizer()
         )
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let panelWidth: CGFloat = BrowserPanelView.panelWidth
         let containerBounds = overlayContainer.bounds
 
         // Position at target directly.
-        let targetX = containerBounds.width - panelWidth
+        let targetX = trailingPanelOrigin(
+            containerWidth: containerBounds.width,
+            panelWidth: panelWidth
+        )
         hostingView.frame = NSRect(
             x: targetX,
             y: 0,
             width: panelWidth,
             height: containerBounds.height
         )
-        hostingView.autoresizingMask = [.height, .minXMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
         self.browserHostingView = hostingView
 
         overlayContainer.addSubview(hostingView)
@@ -2412,8 +2452,11 @@ extension MainWindowController {
 
         isBrowserVisible = false
 
-        // Animate slide-out to the right, then remove.
-        let targetX = overlayContainer.bounds.width
+        // Animate through the trailing edge, then remove.
+        let targetX = trailingPanelExitOrigin(
+            containerWidth: overlayContainer.bounds.width,
+            panelWidth: hostingView.frame.width
+        )
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -2461,8 +2504,9 @@ extension MainWindowController {
             viewModel: viewModel,
             initialSection: section ?? .general
         )
-        let hostingController = NSHostingController(rootView: prefsView)
+        let hostingController = makeShellHostingController(rootView: prefsView)
         let prefsWindow = NSWindow(contentViewController: hostingController)
+        markAsApplicationManaged(prefsWindow)
         prefsWindow.title = appLocalizer(for: config).string(
             "preferences.window.title",
             fallback: "Cocxy Terminal Settings"
@@ -2545,7 +2589,7 @@ extension MainWindowController {
             onDismiss: { [weak self] in self?.dismissWelcome() },
             localizer: appLocalizer()
         )
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.frame = overlayContainer.bounds
         hostingView.autoresizingMask = [.width, .height]
         self.welcomeHostingView = hostingView
@@ -2595,7 +2639,7 @@ extension MainWindowController {
             },
             localizer: appLocalizer()
         )
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.frame = overlayContainer.bounds
         hostingView.autoresizingMask = [.width, .height]
         onboardingHostingView = hostingView
@@ -2682,7 +2726,7 @@ extension MainWindowController {
 
         // Reuse or create the hosting view.
         agentProgressHostingView?.removeFromSuperview()
-        let hosting = NSHostingView(rootView: overlay)
+        let hosting = makeShellHostingView(rootView: overlay)
         hosting.translatesAutoresizingMaskIntoConstraints = false
 
         // Allow clicks to pass through to the terminal.

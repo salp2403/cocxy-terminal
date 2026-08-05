@@ -4,18 +4,30 @@
 import AppKit
 
 @MainActor
+protocol ApplicationLayoutDirectionManagedWindowController: AnyObject {}
+
+@MainActor
 final class ApplicationLayoutDirectionCoordinator: NSObject {
+    static let managedWindowIdentifier = NSUserInterfaceItemIdentifier(
+        "dev.cocxy.terminal.application-window"
+    )
+
     private let notificationCenter: NotificationCenter
     private let windowProvider: @MainActor () -> [NSWindow]
+    private let isManagedWindow: @MainActor (NSWindow) -> Bool
     private var isObservingWindows = false
+    private var hasAppliedDirection = false
     private(set) var direction: NSUserInterfaceLayoutDirection = .leftToRight
 
     init(
         notificationCenter: NotificationCenter = .default,
-        windowProvider: @escaping @MainActor () -> [NSWindow] = { NSApp.windows }
+        windowProvider: @escaping @MainActor () -> [NSWindow] = { NSApp.windows },
+        isManagedWindow: @escaping @MainActor (NSWindow) -> Bool =
+            ApplicationLayoutDirectionCoordinator.isApplicationManagedWindow
     ) {
         self.notificationCenter = notificationCenter
         self.windowProvider = windowProvider
+        self.isManagedWindow = isManagedWindow
         super.init()
     }
 
@@ -32,13 +44,21 @@ final class ApplicationLayoutDirectionCoordinator: NSObject {
     }
 
     func update(localizer: AppLocalizer) {
-        direction = Self.resolvedDirection(for: localizer)
-        windowProvider().forEach(apply)
+        let resolvedDirection = Self.resolvedDirection(for: localizer)
+        guard !hasAppliedDirection || resolvedDirection != direction else { return }
+        direction = resolvedDirection
+        hasAppliedDirection = true
+        windowProvider().filter(isManagedWindow).forEach(apply)
     }
 
     func apply(to window: NSWindow) {
+        guard isManagedWindow(window) else { return }
         guard let contentView = window.contentView else { return }
-        apply(direction, to: contentView)
+        applyCurrentDirection(to: contentView)
+    }
+
+    func applyCurrentDirection(to view: NSView) {
+        Self.apply(direction, to: view)
     }
 
     func stop() {
@@ -55,7 +75,17 @@ final class ApplicationLayoutDirectionCoordinator: NSObject {
         localizer.isRightToLeft ? .rightToLeft : .leftToRight
     }
 
-    private func apply(_ direction: NSUserInterfaceLayoutDirection, to view: NSView) {
+    static func markAsApplicationManaged(_ window: NSWindow) {
+        window.identifier = managedWindowIdentifier
+    }
+
+    static func isApplicationManagedWindow(_ window: NSWindow) -> Bool {
+        window.identifier == managedWindowIdentifier
+            || window.windowController is any ApplicationLayoutDirectionManagedWindowController
+    }
+
+    static func apply(_ direction: NSUserInterfaceLayoutDirection, to view: NSView) {
+        // Terminal cells retain their logical column order inside the mirrored app shell.
         guard !(view is any TerminalHostingView) else {
             view.userInterfaceLayoutDirection = .leftToRight
             return
@@ -67,5 +97,65 @@ final class ApplicationLayoutDirectionCoordinator: NSObject {
     @objc private func windowDidBecomeKey(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         apply(to: window)
+    }
+}
+
+extension MainWindowController: ApplicationLayoutDirectionManagedWindowController {}
+extension MobileMirrorWindowController: ApplicationLayoutDirectionManagedWindowController {}
+extension CrashRecoveryOfferWindowController: ApplicationLayoutDirectionManagedWindowController {}
+
+enum DirectionalPanelGeometry {
+    static func trailingOrigin(
+        containerWidth: CGFloat,
+        panelWidth: CGFloat,
+        occupiedWidth: CGFloat = 0,
+        direction: NSUserInterfaceLayoutDirection
+    ) -> CGFloat {
+        switch direction {
+        case .rightToLeft:
+            return occupiedWidth
+        default:
+            return containerWidth - occupiedWidth - panelWidth
+        }
+    }
+
+    static func trailingExitOrigin(
+        containerWidth: CGFloat,
+        panelWidth: CGFloat,
+        direction: NSUserInterfaceLayoutDirection
+    ) -> CGFloat {
+        direction == .rightToLeft ? -panelWidth : containerWidth
+    }
+
+    static func terminalVisibleFrame(
+        terminalBounds: NSRect,
+        terminalFrameInOverlay: NSRect,
+        overlayWidth: CGFloat,
+        dockedWidth: CGFloat,
+        direction: NSUserInterfaceLayoutDirection
+    ) -> NSRect {
+        let dockedFrame: NSRect
+        if direction == .rightToLeft {
+            dockedFrame = NSRect(x: 0, y: 0, width: dockedWidth, height: 1)
+        } else {
+            dockedFrame = NSRect(
+                x: overlayWidth - dockedWidth,
+                y: 0,
+                width: dockedWidth,
+                height: 1
+            )
+        }
+        let overlap = max(
+            0,
+            min(terminalFrameInOverlay.maxX, dockedFrame.maxX)
+                - max(terminalFrameInOverlay.minX, dockedFrame.minX)
+        )
+        let reservedWidth = min(terminalBounds.width, overlap)
+        return NSRect(
+            x: direction == .rightToLeft ? reservedWidth : 0,
+            y: 0,
+            width: max(0, terminalBounds.width - reservedWidth),
+            height: terminalBounds.height
+        )
     }
 }

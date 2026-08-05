@@ -72,9 +72,11 @@ extension MainWindowController {
 
         // Apply notification toggle changes to tab bar.
         let localizer = appLocalizer(for: config)
-        if let window {
-            window.contentView?.userInterfaceLayoutDirection =
-                ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer)
+        if let contentView = window?.contentView {
+            ApplicationLayoutDirectionCoordinator.apply(
+                ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+                to: contentView
+            )
         }
         tabBarView?.updateLocalizer(localizer)
         (horizontalTabStripView as? HorizontalTabStripView)?.updateLocalizer(localizer)

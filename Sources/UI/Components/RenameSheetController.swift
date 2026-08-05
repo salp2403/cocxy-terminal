@@ -73,6 +73,11 @@ final class RenameSheetController {
         effectView.alphaValue = 0.96
 
         panel.contentView = effectView
+        ApplicationLayoutDirectionCoordinator.markAsApplicationManaged(panel)
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: effectView
+        )
 
         // Icon + title row.
         let iconView = NSImageView()

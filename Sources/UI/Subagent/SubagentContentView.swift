@@ -49,6 +49,9 @@ final class SubagentContentView: NSView {
         super.init(frame: .zero)
 
         let hosting = NSHostingView(rootView: makePanelView(viewModel: viewModel))
+        let direction = ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer)
+        ApplicationLayoutDirectionCoordinator.apply(direction, to: self)
+        ApplicationLayoutDirectionCoordinator.apply(direction, to: hosting)
         hosting.translatesAutoresizingMaskIntoConstraints = false
         addSubview(hosting)
         NSLayoutConstraint.activate([
@@ -81,6 +84,10 @@ final class SubagentContentView: NSView {
 
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: self
+        )
         rebuildRootView()
     }
 

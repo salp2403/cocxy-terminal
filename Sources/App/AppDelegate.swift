@@ -1708,6 +1708,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ])
 
         window.contentView = errorView
+        ApplicationLayoutDirectionCoordinator.markAsApplicationManaged(window)
+        applicationLayoutDirectionCoordinator.apply(to: window)
         window.makeKeyAndOrderFront(nil)
     }
 

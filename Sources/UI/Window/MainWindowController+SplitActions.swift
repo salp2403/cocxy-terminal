@@ -216,7 +216,7 @@ extension MainWindowController {
                 layout: .splitPane
             )
             browserView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
-            let hostingView = NSHostingView(rootView: browserView)
+            let hostingView = makeShellHostingView(rootView: browserView)
             hostingView.wantsLayer = true
             return hostingView
         case .markdown:
@@ -254,7 +254,7 @@ extension MainWindowController {
             let view = NotebookPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
         case .workflow:
             let workspaceDir = workspaceDirectory(for: tabID)
                 ?? panel.filePath?.deletingLastPathComponent()
@@ -267,7 +267,7 @@ extension MainWindowController {
             let view = WorkflowPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
         case .sessionReplay:
             let config = configService?.current.sessionReplay ?? .defaults
             let viewModel = SessionReplayPanelViewModel(
@@ -282,7 +282,7 @@ extension MainWindowController {
             let view = SessionReplayPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
         case .aiEditHistory:
             let workspaceDir = panel.filePath ?? workspaceDirectory(for: tabID) ?? workspaceDirectoryForCurrentTab()
             let repoRoot = (try? AIEditRepositoryIdentifier.repositoryRoot(for: workspaceDir)) ?? workspaceDir
@@ -297,7 +297,7 @@ extension MainWindowController {
             let view = AIEditHistoryPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
         case .templates:
             let workspaceDir = panel.filePath ?? workspaceDirectory(for: tabID) ?? workspaceDirectoryForCurrentTab()
             let viewModel = ProjectTemplatePanelViewModel(
@@ -308,7 +308,7 @@ extension MainWindowController {
             let view = ProjectTemplatePanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
         case .macros:
             let targetSurfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
             let viewModel = MacroSnippetPanelViewModel(
@@ -330,13 +330,13 @@ extension MainWindowController {
             let view = MacroSnippetPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
         case .dbCloud:
             let viewModel = DBCloudHelperPanelViewModel(localizer: appLocalizer())
             let view = DBCloudHelperPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
         case .projectHome:
             return makeProjectHomePanelView(panel: panel, tabID: tabID)
         case .subagent:

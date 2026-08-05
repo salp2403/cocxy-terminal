@@ -94,7 +94,7 @@ extension MainWindowController {
         }
 
         voiceConsentErrorMessage = nil
-        let hostingView = NSHostingView(rootView: makeVoiceConsentBanner())
+        let hostingView = makeShellHostingView(rootView: makeVoiceConsentBanner())
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = NSColor.clear.cgColor
         hostingView.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin]
@@ -165,7 +165,7 @@ extension MainWindowController {
         guard let overlayContainer = overlayContainerView else { return }
 
         if voiceIndicatorHostingView == nil {
-            let hostingView = NSHostingView(rootView: VoiceIndicator(handler: handler, localizer: appLocalizer()))
+            let hostingView = makeShellHostingView(rootView: VoiceIndicator(handler: handler, localizer: appLocalizer()))
             hostingView.wantsLayer = true
             hostingView.layer?.backgroundColor = NSColor.clear.cgColor
             hostingView.autoresizingMask = [.minXMargin, .maxXMargin, .maxYMargin]

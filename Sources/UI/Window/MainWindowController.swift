@@ -865,8 +865,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         let rootView = buildRootView(
             contentFrame: contentFrame, splitView: splitView
         )
-        rootView.userInterfaceLayoutDirection = ApplicationLayoutDirectionCoordinator.resolvedDirection(
-            for: appLocalizer(for: configService?.current)
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(
+                for: appLocalizer(for: configService?.current)
+            ),
+            to: rootView
         )
 
         window.contentView = rootView
@@ -1273,7 +1276,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         statusBar.vibrancyAppearanceOverride = isTransparent
             ? appearance?.transparencyChromeTheme.vibrancyAppearance
             : nil
-        let statusBarHost = NSHostingView(rootView: statusBar)
+        let statusBarHost = makeShellHostingView(rootView: statusBar)
         statusBarHost.frame = NSRect(x: 0, y: 0, width: contentFrame.width, height: Self.statusBarHeight)
         statusBarHost.wantsLayer = true
         statusBarHost.layer?.backgroundColor = isTransparent
@@ -2037,7 +2040,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         }
 
         if isTimelineVisible || isDashboardVisible || isActivityDashboardVisible || isAgentModeVisible || isCodeReviewVisible || isGitHubPaneVisible || isVaultSidebarVisible || isNotesVisible {
-            layoutRightDockedAgentPanels()
+            layoutTrailingDockedPanels()
         }
     }
 
@@ -2056,7 +2059,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     /// Updates the persisted GitHub pane panel width. Mirrors
-    /// `updatePreferredCodeReviewPanelWidth` so the two right-docked
+    /// `updatePreferredCodeReviewPanelWidth` so the two trailing-edge
     /// panels share the same persistence idiom.
     func updatePreferredGitHubPanePanelWidth(_ width: CGFloat) {
         let clampedWidth = MainWindowController.clampStoredGitHubPanePanelWidth(width)

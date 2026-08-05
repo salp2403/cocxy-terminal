@@ -30,21 +30,24 @@ extension MainWindowController {
             onDismiss: { [weak self] in self?.dismissAgentMode() },
             localizer: appLocalizer()
         )
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let panelY = statusBarHostingView?.frame.height ?? 24
         hostingView.frame = NSRect(
-            x: overlayContainer.bounds.width - AgentPanelView.panelWidth,
+            x: trailingPanelOrigin(
+                containerWidth: overlayContainer.bounds.width,
+                panelWidth: AgentPanelView.panelWidth
+            ),
             y: panelY,
             width: AgentPanelView.panelWidth,
             height: max(0, overlayContainer.bounds.height - panelY)
         )
-        hostingView.autoresizingMask = [.height, .minXMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
 
         agentModeHostingView = hostingView
         overlayContainer.addSubview(hostingView)
         isAgentModeVisible = true
-        layoutRightDockedAgentPanels()
+        layoutTrailingDockedPanels()
     }
 
     func refreshVisibleAgentModeLocalizer() {
@@ -68,7 +71,10 @@ extension MainWindowController {
 
         isAgentModeVisible = false
 
-        let targetX = overlayContainer.bounds.width
+        let targetX = trailingPanelExitOrigin(
+            containerWidth: overlayContainer.bounds.width,
+            panelWidth: hostingView.frame.width
+        )
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -77,7 +83,7 @@ extension MainWindowController {
             Task { @MainActor [weak self] in
                 self?.agentModeHostingView?.removeFromSuperview()
                 self?.agentModeHostingView = nil
-                self?.layoutRightDockedAgentPanels()
+                self?.layoutTrailingDockedPanels()
                 self?.focusActiveTerminalSurface()
             }
         })

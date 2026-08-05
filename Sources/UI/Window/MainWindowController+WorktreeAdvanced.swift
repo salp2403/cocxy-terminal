@@ -60,7 +60,8 @@ extension MainWindowController {
                 }
             }
         )
-        sheet = NSWindow(contentViewController: NSHostingController(rootView: view))
+        sheet = NSWindow(contentViewController: makeShellHostingController(rootView: view))
+        markAsApplicationManaged(sheet)
         sheet.title = WorktreeAdvancedModal.localizedTitle(using: localizer)
         sheet.styleMask = [.titled]
         sheet.isReleasedWhenClosed = false
@@ -151,7 +152,8 @@ extension MainWindowController {
                 }
             }
         )
-        sheet = NSWindow(contentViewController: NSHostingController(rootView: view))
+        sheet = NSWindow(contentViewController: makeShellHostingController(rootView: view))
+        markAsApplicationManaged(sheet)
         sheet.title = WorktreeBatchCleanupSheet.localizedTitle(using: localizer)
         sheet.styleMask = [.titled]
         sheet.isReleasedWhenClosed = false

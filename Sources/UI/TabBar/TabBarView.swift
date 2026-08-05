@@ -254,6 +254,10 @@ final class TabBarView: NSView {
 
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: self
+        )
         viewModel.updateLocalizer(localizer)
         setupAccessibility()
         applyLocalizedChrome()
@@ -284,6 +288,10 @@ final class TabBarView: NSView {
         super.init(frame: .zero)
         setupAccessibility()
         setupLayout()
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: self
+        )
         setupActions()
         applyLocalizedChrome()
         subscribeToChanges()

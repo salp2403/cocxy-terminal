@@ -119,7 +119,7 @@ final class TabItemView: NSView {
         let label = NSTextField(labelWithString: "")
         label.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
         label.textColor = CocxyColors.overlay1
-        label.alignment = .right
+        label.alignment = .natural
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
@@ -226,6 +226,10 @@ final class TabItemView: NSView {
         self.localizer = localizer
         super.init(frame: .zero)
         setupSubviews()
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: self
+        )
         applyLocalizedChrome()
         configure(with: displayItem)
     }
@@ -337,6 +341,10 @@ final class TabItemView: NSView {
 
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: self
+        )
         applyLocalizedChrome()
         configure(with: displayItem)
     }

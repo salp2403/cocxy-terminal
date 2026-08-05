@@ -860,7 +860,7 @@ extension MainWindowController {
     /// Keeps the window-level tooltip overlay aligned with the sidebar's
     /// AppKit frame. The SwiftUI row frames are local to the sidebar; the
     /// overlay host needs the sidebar's frame in overlay coordinates so
-    /// it can render the card to the right of the list instead of inside
+    /// it can render the card beyond the sidebar's logical inner edge instead of inside
     /// the navigable row area.
     private func refreshAuroraSidebarTooltipAnchor() {
         guard let controller = auroraChromeController,

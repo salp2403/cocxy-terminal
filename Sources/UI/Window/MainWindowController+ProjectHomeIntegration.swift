@@ -19,17 +19,17 @@ extension MainWindowController {
         let localizer = appLocalizer()
         guard let store = injectedTaskInboxStore,
               let fanOutCoordinator = injectedProjectFanOutCoordinator else {
-            return NSHostingView(rootView: ProjectHomeUnavailablePanelView(localizer: localizer))
+            return makeShellHostingView(rootView: ProjectHomeUnavailablePanelView(localizer: localizer))
         }
         let fallbackRoot = tabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
             ?? tabManager.activeTab?.workingDirectory
         guard let requestedRoot = panel.filePath ?? fallbackRoot else {
-            return NSHostingView(rootView: ProjectHomeUnavailablePanelView(localizer: localizer))
+            return makeShellHostingView(rootView: ProjectHomeUnavailablePanelView(localizer: localizer))
         }
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: requestedRoot.path, isDirectory: &isDirectory),
               isDirectory.boolValue else {
-            return NSHostingView(rootView: ProjectHomeUnavailablePanelView(
+            return makeShellHostingView(rootView: ProjectHomeUnavailablePanelView(
                 localizer: localizer,
                 messageKey: "projectHome.unavailable.folder",
                 messageFallback: "The project folder is no longer available."
@@ -129,7 +129,7 @@ extension MainWindowController {
             record: record,
             worktreeConfig: worktreeConfig
         )
-        return NSHostingView(rootView: ProjectHomePanelView(
+        return makeShellHostingView(rootView: ProjectHomePanelView(
             viewModel: viewModel,
             fanOutViewModel: fanOutViewModel,
             inboxStore: store,

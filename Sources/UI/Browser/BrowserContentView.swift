@@ -274,6 +274,7 @@ final class BrowserContentView: NSView {
                 localizer: localizer
             )
             let profileHost = NSHostingView(rootView: selector)
+            profileHost.userInterfaceLayoutDirection = userInterfaceLayoutDirection
             profileHost.translatesAutoresizingMaskIntoConstraints = false
             rightStack.addArrangedSubview(profileHost)
             profileHost.widthAnchor.constraint(greaterThanOrEqualToConstant: 88).isActive = true
@@ -690,6 +691,7 @@ final class BrowserContentView: NSView {
             localizer: localizer
         )
         let hosting = NSHostingView(rootView: findBarView)
+        hosting.userInterfaceLayoutDirection = userInterfaceLayoutDirection
         hosting.translatesAutoresizingMaskIntoConstraints = false
         addSubview(hosting)
 
@@ -743,6 +745,7 @@ final class BrowserContentView: NSView {
             localizer: localizer
         )
         let hosting = NSHostingView(rootView: devToolsView)
+        hosting.userInterfaceLayoutDirection = userInterfaceLayoutDirection
         hosting.translatesAutoresizingMaskIntoConstraints = false
         addSubview(hosting)
 

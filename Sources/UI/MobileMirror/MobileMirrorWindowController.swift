@@ -12,6 +12,10 @@ final class MobileMirrorWindowController: NSWindowController, NSWindowDelegate {
     init(coordinator: MobileMirrorCoordinator, localizer: AppLocalizer) {
         let view = MobileMirrorView(coordinator: coordinator, localizer: localizer)
         let hostingController = NSHostingController(rootView: view)
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: hostingController.view
+        )
         self.coordinator = coordinator
         self.hostingController = hostingController
         let window = NSWindow(contentViewController: hostingController)
@@ -30,6 +34,10 @@ final class MobileMirrorWindowController: NSWindowController, NSWindowDelegate {
         hostingController.rootView = MobileMirrorView(
             coordinator: coordinator,
             localizer: localizer
+        )
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: hostingController.view
         )
         window?.title = localizer.string("mobile.mirror.title", fallback: "Pair Phone")
     }

@@ -46,6 +46,11 @@ final class RichInputPanel: NSPanel, NSWindowDelegate {
         hostedView.frame = NSRect(origin: .zero, size: frame.size)
         hostedView.autoresizingMask = [.width, .height]
         contentView = hostedView
+        ApplicationLayoutDirectionCoordinator.markAsApplicationManaged(self)
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: hostedView
+        )
         delegate = self
     }
 

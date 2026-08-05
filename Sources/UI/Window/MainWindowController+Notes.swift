@@ -33,17 +33,20 @@ extension MainWindowController {
 
         let panelWidth = clampedNotesPanelWidth(containerWidth: overlayContainer.bounds.width)
         let swiftUIView = makeNotesOverlayView(viewModel: viewModel, panelWidth: panelWidth)
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.appearance = Design.appearance(for: swiftUIView.themeIdentity)
         hostingView.wantsLayer = true
         let panelY = statusBarHostingView?.frame.height ?? 24
         hostingView.frame = NSRect(
-            x: overlayContainer.bounds.width - panelWidth,
+            x: trailingPanelOrigin(
+                containerWidth: overlayContainer.bounds.width,
+                panelWidth: panelWidth
+            ),
             y: panelY,
             width: panelWidth,
             height: max(0, overlayContainer.bounds.height - panelY)
         )
-        hostingView.autoresizingMask = [.height, .minXMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
 
         notesHostingView = hostingView
         overlayContainer.addSubview(hostingView)
@@ -54,7 +57,7 @@ extension MainWindowController {
             await self.loadNotesForVisibleTab(using: viewModel)
         }
 
-        layoutRightDockedAgentPanels()
+        layoutTrailingDockedPanels()
     }
 
     func dismissNotes() {
@@ -67,7 +70,10 @@ extension MainWindowController {
         }
 
         isNotesVisible = false
-        let targetX = overlayContainer.bounds.width
+        let targetX = trailingPanelExitOrigin(
+            containerWidth: overlayContainer.bounds.width,
+            panelWidth: hostingView.frame.width
+        )
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -76,7 +82,7 @@ extension MainWindowController {
             Task { @MainActor [weak self] in
                 self?.notesHostingView?.removeFromSuperview()
                 self?.notesHostingView = nil
-                self?.layoutRightDockedAgentPanels()
+                self?.layoutTrailingDockedPanels()
                 self?.focusActiveTerminalSurface()
             }
         })
@@ -219,7 +225,7 @@ extension MainWindowController {
         if rebuildHostForAppearanceChange,
            hostingView.appearance?.name != appearance?.name,
            let parent = hostingView.superview {
-            let replacement = NSHostingView(rootView: swiftUIView)
+            let replacement = makeShellHostingView(rootView: swiftUIView)
             replacement.appearance = appearance
             replacement.wantsLayer = hostingView.wantsLayer
             replacement.frame = hostingView.frame

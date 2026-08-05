@@ -717,7 +717,7 @@ final class EditorView: NSView, NSTextViewDelegate {
 
         statusLabel.font = .systemFont(ofSize: 11, weight: .regular)
         statusLabel.textColor = CocxyColors.overlay1
-        statusLabel.alignment = .right
+        statusLabel.alignment = .natural
 
         configureIconButton(
             lspPrimaryActionButton,

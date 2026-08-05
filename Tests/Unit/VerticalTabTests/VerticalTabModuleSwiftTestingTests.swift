@@ -3,6 +3,7 @@
 
 import CoreGraphics
 import Foundation
+import SwiftUI
 import Testing
 @testable import CocxyTerminal
 
@@ -155,7 +156,8 @@ struct VerticalTabModuleSwiftTestingTests {
         let placement = Design.VerticalTabHoverSidecarPlacement.placement(
             for: tooltip,
             sidebarFrame: CGRect(x: 0, y: 0, width: 240, height: 620),
-            containerSize: CGSize(width: 920, height: 620)
+            containerSize: CGSize(width: 920, height: 620),
+            layoutDirection: .leftToRight
         )
 
         #expect(placement.width >= 260)
@@ -164,6 +166,16 @@ struct VerticalTabModuleSwiftTestingTests {
         #expect(placement.x + placement.width * 0.5 <= 908)
         #expect(placement.y >= 170)
         #expect(placement.y <= 450)
+
+        let rtlPlacement = Design.VerticalTabHoverSidecarPlacement.placement(
+            for: tooltip,
+            sidebarFrame: CGRect(x: 680, y: 0, width: 240, height: 620),
+            containerSize: CGSize(width: 920, height: 620),
+            layoutDirection: .rightToLeft
+        )
+        #expect(rtlPlacement.width == placement.width)
+        #expect(rtlPlacement.x == 482)
+        #expect(rtlPlacement.x + rtlPlacement.width * 0.5 < 680)
     }
 
     private func localizationBundle() throws -> Bundle {

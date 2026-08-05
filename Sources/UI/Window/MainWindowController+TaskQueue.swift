@@ -88,7 +88,8 @@ extension MainWindowController {
                 window?.endSheet(sheet)
             }
         )
-        sheet = NSWindow(contentViewController: NSHostingController(rootView: view))
+        sheet = NSWindow(contentViewController: makeShellHostingController(rootView: view))
+        markAsApplicationManaged(sheet)
         sheet.title = localizer.string("taskQueue.title", fallback: "Task Queue")
         sheet.styleMask = [.titled, .resizable]
         sheet.contentMinSize = NSSize(width: 900, height: 620)
