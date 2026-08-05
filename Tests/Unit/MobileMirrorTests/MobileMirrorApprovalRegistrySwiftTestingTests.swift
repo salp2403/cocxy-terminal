@@ -268,6 +268,71 @@ struct MobileMirrorBackgroundActionQueueSwiftTestingTests {
         }
         #expect(capture.finished)
     }
+
+    @Test("transport shutdown cancels request-independent mobile work")
+    func transportShutdownCancelsBackgroundWork() async {
+        let context = makeCoordinator()
+        let capture = CancellableBackgroundAction()
+        context.coordinator.projectCreationIsQueued = true
+        context.coordinator.backgroundActionQueue.enqueue { [coordinator = context.coordinator] in
+            defer { coordinator.projectCreationIsQueued = false }
+            await capture.run()
+        }
+        await capture.waitUntilStarted()
+
+        context.coordinator.shutdown()
+        for _ in 0..<100 where !capture.cancelled {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        let wasCancelled = capture.cancelled
+        let activeCount = context.coordinator.backgroundActionQueue.activeCount
+        let wasQueued = context.coordinator.projectCreationIsQueued
+        context.coordinator.backgroundActionQueue.cancelAll()
+        context.relayManager.stopExpirationTimer()
+
+        #expect(wasCancelled)
+        #expect(activeCount == 0)
+        #expect(!wasQueued)
+        #expect(!capture.effectCompleted)
+    }
+
+    private func makeCoordinator() -> (
+        coordinator: MobileMirrorCoordinator,
+        relayManager: RelayManagerImpl
+    ) {
+        let appDelegate = AppDelegate()
+        let profileStore = MockRemoteProfileStore()
+        let tunnelManager = SSHTunnelManager()
+        let connectionManager = RemoteConnectionManager(
+            multiplexer: MockSSHMultiplexerDelegate(),
+            profileStore: profileStore,
+            tunnelManager: tunnelManager,
+            executor: MockProcessExecutor()
+        )
+        let relayManager = RelayManagerImpl(
+            tunnelManager: tunnelManager,
+            forwarder: MockPortForwarder()
+        )
+        let tunnelController = MobileMirrorSSHTunnelController(
+            connectionManager: connectionManager,
+            profileStore: profileStore,
+            tunnelManager: tunnelManager
+        )
+        return (
+            MobileMirrorCoordinator(
+                appDelegate: appDelegate,
+                projectRegistry: appDelegate.projectRegistry,
+                projectResolver: appDelegate.projectResolver,
+                titleStore: appDelegate.auroraWorkspaceTitleStore,
+                sessionRegistry: SessionRegistryImpl(),
+                approvalRegistry: appDelegate.mobileMirrorApprovalRegistry,
+                auditLog: appDelegate.relayAuditLog,
+                relayManager: relayManager,
+                tunnelController: tunnelController
+            ),
+            relayManager
+        )
+    }
 }
 
 @MainActor
@@ -329,6 +394,33 @@ private final class SuspendedBackgroundAction {
     func release() {
         completion?.resume()
         completion = nil
+    }
+}
+
+@MainActor
+private final class CancellableBackgroundAction {
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private(set) var started = false
+    private(set) var cancelled = false
+    private(set) var effectCompleted = false
+
+    func run() async {
+        started = true
+        startWaiters.forEach { $0.resume() }
+        startWaiters.removeAll()
+        do {
+            try await Task.sleep(nanoseconds: 60_000_000_000)
+            effectCompleted = true
+        } catch is CancellationError {
+            cancelled = true
+        } catch {
+            Issue.record("Unexpected background action error: \(error)")
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard !started else { return }
+        await withCheckedContinuation { startWaiters.append($0) }
     }
 }
 

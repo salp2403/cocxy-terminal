@@ -18,6 +18,7 @@ extension MobileMirrorCoordinator {
             } catch {
                 outcome = .rejected
             }
+            guard !Task.isCancelled else { return }
 
             do {
                 try auditLog.log(MobileMirrorActionAudit.event(

@@ -332,6 +332,7 @@ extension MobileMirrorCoordinator {
         transportGeneration &+= 1
         pairingTask?.cancel()
         pairingTask = nil
+        backgroundActionQueue.cancelAll()
         expiryTask?.cancel()
         expiryTask = nil
         refreshTimer?.invalidate()
