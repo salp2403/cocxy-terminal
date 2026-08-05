@@ -205,8 +205,9 @@ extension MainWindowController {
         guard let currentWorkingDirectory = tabConfigAuthorizationWorkingDirectory(
             for: request.destinationTabID
         ) else { return false }
+        let requestedWorkingDirectory = URL(fileURLWithPath: request.workingDirectory)
         return ProjectPathCanonicalizer.canonicalURL(currentWorkingDirectory).path
-            == request.workingDirectory
+            == ProjectPathCanonicalizer.canonicalURL(requestedWorkingDirectory).path
     }
 
     @MainActor
