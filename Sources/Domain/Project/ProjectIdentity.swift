@@ -151,6 +151,7 @@ final class CachedProjectResolver: ProjectResolving {
     }
 
     private let rootResolver: any AuroraWorkspaceRootResolver
+    private let knownProjectRoots: () -> [URL]
     private let cacheTTL: TimeInterval
     private let maximumEntryCount: Int
     private let clock: () -> Date
@@ -159,6 +160,7 @@ final class CachedProjectResolver: ProjectResolving {
 
     init(
         rootResolver: any AuroraWorkspaceRootResolver = GitAncestorWorkspaceRootResolver(),
+        knownProjectRoots: @escaping () -> [URL] = { [] },
         cacheTTL: TimeInterval = 2,
         maximumEntryCount: Int = 256,
         clock: @escaping () -> Date = Date.init
@@ -166,6 +168,7 @@ final class CachedProjectResolver: ProjectResolving {
         precondition(cacheTTL >= 0)
         precondition(maximumEntryCount > 0)
         self.rootResolver = rootResolver
+        self.knownProjectRoots = knownProjectRoots
         self.cacheTTL = cacheTTL
         self.maximumEntryCount = maximumEntryCount
         self.clock = clock
@@ -215,8 +218,11 @@ final class CachedProjectResolver: ProjectResolving {
     }
 
     private func makeDescriptor(for directory: URL) -> ProjectDescriptor {
+        let resolvedRoot = rootResolver.workspaceRoot(for: directory)
+            ?? deepestKnownProjectRoot(containing: directory)
+            ?? directory
         let root = ProjectPathCanonicalizer.canonicalURL(
-            rootResolver.workspaceRoot(for: directory) ?? directory
+            resolvedRoot
         )
         let id = ProjectID(rootURL: root)
         let automaticName = ProjectDescriptor.automaticName(for: root)
@@ -227,6 +233,17 @@ final class CachedProjectResolver: ProjectResolving {
             displayName: automaticName,
             parent: linkedWorktreeParent(for: root)
         )
+    }
+
+    private func deepestKnownProjectRoot(containing directory: URL) -> URL? {
+        knownProjectRoots()
+            .map(ProjectPathCanonicalizer.canonicalURL)
+            .filter {
+                Self.path(directory.path, isEqualToOrDescendantOf: $0.path)
+            }
+            .max { lhs, rhs in
+                lhs.pathComponents.count < rhs.pathComponents.count
+            }
     }
 
     private func linkedWorktreeParent(for root: URL) -> ProjectID? {

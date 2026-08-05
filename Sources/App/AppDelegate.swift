@@ -42,8 +42,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private(set) var quickTerminalController: QuickTerminalController?
     private(set) var themeEngine: ThemeEngineImpl?
     let gitInfoProvider = GitInfoProviderImpl()
-    let projectResolver = CachedProjectResolver()
     let projectRegistry = ProjectRegistry()
+    lazy var projectResolver = CachedProjectResolver(knownProjectRoots: { [weak self] in
+        self?.projectRegistry.records.map {
+            URL(fileURLWithPath: $0.id.rawValue, isDirectory: true)
+        } ?? []
+    })
     let projectConfigWatcherRegistry = ProjectConfigWatcherRegistry()
     let tabConfigProjectContextStore = TabConfigProjectContextStore()
     let terminalBlockStore = TerminalBlockStore()

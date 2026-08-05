@@ -215,6 +215,14 @@ struct TaskCollisionDetectorSwiftTestingTests {
         ) == ["Sources/A.swift"])
     }
 
+    @Test("tilde-prefixed relative paths remain project scoped")
+    func normalizationPreservesTildePrefixedRelativePaths() {
+        #expect(TaskCollisionDetector.normalize(
+            ["~generated/Sources/App.swift"],
+            projectRoot: root
+        ) == ["~generated/Sources/App.swift"])
+    }
+
     @Test("normalization resolves symlink aliases before enforcing project boundaries")
     func normalizationResolvesSymlinks() throws {
         let temporaryRoot = FileManager.default.temporaryDirectory

@@ -90,6 +90,25 @@ struct ProjectIdentitySwiftTestingTests {
         #expect(descriptor.parent == nil)
     }
 
+    @Test("registered non-repository root survives a current-directory change")
+    func registeredRootSurvivesCurrentDirectoryChange() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjectRegisteredRootTests-\(UUID().uuidString)", isDirectory: true)
+        let child = root.appendingPathComponent("Sources/Feature", isDirectory: true)
+        try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let resolver = CachedProjectResolver(
+            rootResolver: CountingRootResolver(),
+            knownProjectRoots: { [root] }
+        )
+
+        let descriptor = resolver.resolveProject(for: child)
+        let expectedRoot = ProjectPathCanonicalizer.canonicalURL(root)
+
+        #expect(descriptor.id == ProjectID(rootURL: expectedRoot))
+        #expect(descriptor.rootURL == expectedRoot)
+    }
+
     @Test("descriptor-bound standalone projects preserve canonical root identity")
     func verifiedStandaloneCanonicalizesTrustedRootAliases() throws {
         let directory = FileManager.default.temporaryDirectory

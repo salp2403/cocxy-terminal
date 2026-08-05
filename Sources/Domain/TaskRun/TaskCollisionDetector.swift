@@ -166,8 +166,13 @@ enum TaskCollisionDetector {
         return Set(paths.compactMap { rawPath in
             let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, !trimmed.contains("\0") else { return nil }
+            let expandedPath = (trimmed as NSString).expandingTildeInPath
             let absolute: URL
-            if NSString(string: trimmed).isAbsolutePath {
+            if expandedPath != trimmed {
+                absolute = ProjectPathCanonicalizer.canonicalURL(
+                    URL(fileURLWithPath: expandedPath)
+                )
+            } else if !trimmed.hasPrefix("~"), NSString(string: trimmed).isAbsolutePath {
                 absolute = ProjectPathCanonicalizer.canonicalURL(
                     URL(fileURLWithPath: trimmed)
                 )
