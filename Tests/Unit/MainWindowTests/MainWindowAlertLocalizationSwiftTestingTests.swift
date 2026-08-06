@@ -133,6 +133,44 @@ struct MainWindowAlertLocalizationSwiftTestingTests {
         #expect(!message.contains("/Users/private"))
     }
 
+    @Test("task run comparison routes production failures through safe localized copy")
+    func taskRunComparisonFailureUsesSafeLocalizedCopy() throws {
+        let configService = ConfigService(fileProvider: AlertLocalizationConfigProvider(content: """
+        [appearance]
+        app-language = "es"
+        """))
+        try configService.reload()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            deferContentSetup: true
+        )
+        controller.appLocalizationBundle = try #require(localizationBundle())
+        let delegate = AppDelegate()
+        let previousDelegate = NSApp.delegate
+        NSApp.delegate = delegate
+        defer { NSApp.delegate = previousDelegate }
+
+        var run = TaskRun(
+            id: "private-project-run",
+            request: try TaskRunRequest.make(
+                prompt: "Compare implementations",
+                agents: "codex,gemini"
+            ),
+            originRepoPath: URL(fileURLWithPath: "/Users/private/project", isDirectory: true),
+            baseCommit: String(repeating: "a", count: 40)
+        )
+        run.markRunning()
+        delegate.activeTaskRuns[run.id] = run
+        var presentedMessage: String?
+        controller.projectActionAlertPresenter = { presentedMessage = $0 }
+
+        controller.showTaskRunComparisonSheet(runID: run.id)
+
+        #expect(presentedMessage == "No se pudo completar la acción del proyecto.")
+        #expect(presentedMessage?.contains("/Users/private") == false)
+    }
+
     @Test("GitHub socket approval copy identifies the exact Spanish target")
     func githubSocketApprovalCopyIdentifiesExactSpanishTarget() throws {
         let localizer = AppLocalizer(
@@ -257,5 +295,19 @@ struct MainWindowAlertLocalizationSwiftTestingTests {
     private func localizationBundle() -> Bundle? {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+    }
+}
+
+private final class AlertLocalizationConfigProvider: ConfigFileProviding, @unchecked Sendable {
+    private var content: String
+
+    init(content: String) {
+        self.content = content
+    }
+
+    func readConfigFile() -> String? { content }
+
+    func writeConfigFile(_ content: String) throws {
+        self.content = content
     }
 }

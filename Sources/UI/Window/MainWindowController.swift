@@ -679,6 +679,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var isGitHubSocketMutationAuthorizationPresented = false
     var consumedGitHubSocketMutationAuthorizationIDs: [UUID: Date] = [:]
 
+    /// Optional test seam for project workflow failure alerts.
+    var projectActionAlertPresenter: ((String) -> Void)?
+
     /// Inline image renderers keyed by surface view identity.
     /// Lazily created per surface view in +SurfaceLifecycle.
     var inlineImageRenderers: [ObjectIdentifier: InlineImageRenderer] = [:]

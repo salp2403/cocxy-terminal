@@ -3,9 +3,15 @@
 
 import AppKit
 import Foundation
+import os.log
 
 @MainActor
 extension MainWindowController {
+    private static let taskHandoffPresentationLogger = Logger(
+        subsystem: "dev.cocxy.terminal",
+        category: "TaskHandoffPresentation"
+    )
+
     func commandPaletteTaskHandoffAction() -> CommandAction {
         CommandAction(
             id: "handoff.passTask",
@@ -162,7 +168,15 @@ extension MainWindowController {
                     sourceTabID: sourceTabID
                 )
             } catch {
-                self.presentTaskHandoffAlert(message: String(describing: error))
+                Self.taskHandoffPresentationLogger.error(
+                    "Task handoff failed: \(String(describing: error), privacy: .private)"
+                )
+                self.presentTaskHandoffAlert(
+                    message: self.localizedTaskHandoffString(
+                        "handoff.error.unavailable",
+                        fallback: "Task handoff is unavailable in the current app context."
+                    )
+                )
             }
         }
     }
@@ -175,6 +189,10 @@ extension MainWindowController {
     }
 
     private func presentTaskHandoffAlert(message: String) {
+        if let projectActionAlertPresenter {
+            projectActionAlertPresenter(message)
+            return
+        }
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = localizedTaskHandoffString(

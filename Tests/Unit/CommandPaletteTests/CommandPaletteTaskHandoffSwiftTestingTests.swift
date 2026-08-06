@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
+import AppKit
 import Foundation
 import Testing
 @testable import CocxyTerminal
@@ -83,6 +84,48 @@ struct CommandPaletteTaskHandoffSwiftTestingTests {
         #expect(available == [.claudeCode, .codex, .gemini])
     }
 
+    @Test("handoff launch failures use safe localized copy through the destination action")
+    func handoffLaunchFailureUsesSafeLocalizedCopy() async throws {
+        let configService = ConfigService(fileProvider: HandoffLocalizationConfigProvider(content: """
+        [appearance]
+        app-language = "es"
+        """))
+        try configService.reload()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            deferContentSetup: true
+        )
+        let localizationRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Resources/Localization", isDirectory: true)
+        controller.appLocalizationBundle = try #require(Bundle(url: localizationRoot))
+        let delegate = AppDelegate()
+        delegate.agentTeamProviderAdapterRegistry = AgentTeamProviderAdapterRegistry(
+            executableResolver: { _ in nil },
+            launchExecutableResolver: { _ in nil }
+        )
+        let previousDelegate = NSApp.delegate
+        NSApp.delegate = delegate
+        defer { NSApp.delegate = previousDelegate }
+        let sourceTabID = try #require(controller.tabManager.activeTabID)
+        let action = try #require(controller.taskHandoffProviderActions(
+            sourceTabID: sourceTabID,
+            currentProvider: nil,
+            availableProviders: [.codex]
+        ).first)
+
+        let message = await withCheckedContinuation { continuation in
+            controller.projectActionAlertPresenter = { message in
+                continuation.resume(returning: message)
+            }
+            action.handler()
+        }
+
+        #expect(message == "El traspaso de tareas no está disponible en el contexto actual de la app.")
+        #expect(!message.contains("codex"))
+        #expect(!message.contains("/Users/"))
+    }
+
     @Test("global palette toggle dismisses the handoff picker before routing to Aurora")
     func globalToggleDismissesTransientPickerWithAuroraActive() throws {
         let controller = MainWindowController(bridge: MockTerminalEngine())
@@ -118,5 +161,19 @@ struct CommandPaletteTaskHandoffSwiftTestingTests {
         #expect(controller.commandPaletteHostingView == nil)
         #expect(transientHost.superview == nil)
         #expect(auroraController.isPaletteVisible == false)
+    }
+}
+
+private final class HandoffLocalizationConfigProvider: ConfigFileProviding, @unchecked Sendable {
+    private var content: String
+
+    init(content: String) {
+        self.content = content
+    }
+
+    func readConfigFile() -> String? { content }
+
+    func writeConfigFile(_ content: String) throws {
+        self.content = content
     }
 }

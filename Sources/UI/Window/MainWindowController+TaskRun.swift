@@ -135,6 +135,10 @@ extension MainWindowController {
     }
 
     private func presentTaskRunAlert(message: String) {
+        if let projectActionAlertPresenter {
+            projectActionAlertPresenter(message)
+            return
+        }
         let localizer = appLocalizer()
         let alert = NSAlert()
         alert.alertStyle = .warning

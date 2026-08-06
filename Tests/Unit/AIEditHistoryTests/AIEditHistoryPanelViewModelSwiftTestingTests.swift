@@ -112,6 +112,37 @@ struct AIEditHistoryPanelViewModelSwiftTestingTests {
         #expect(viewModel.records.first?.detail == "1 file - local-agent")
     }
 
+    @Test("action failures keep private paths out of localized panel copy")
+    func actionFailuresUseSafeLocalizedCopy() throws {
+        let storeRoot = try makeTemporaryDirectory(named: "ai-edit-history-panel-error-store")
+        let workspace = try makeTemporaryDirectory(named: "ai-edit-history-panel-error-workspace")
+        defer {
+            try? FileManager.default.removeItem(at: storeRoot)
+            try? FileManager.default.removeItem(at: workspace)
+        }
+
+        let bundle = try #require(localizationBundle())
+        let viewModel = AIEditHistoryPanelViewModel(
+            repoID: "repo",
+            sessionID: "session",
+            workingDirectory: workspace,
+            store: AIEditStore(rootDirectory: storeRoot),
+            localizer: AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        )
+
+        viewModel.perform {
+            throw AIEditRevertError.unsafePath("/Users/private/secret.swift")
+        }
+
+        #expect(viewModel.errorText == "No se pudo completar la acción del proyecto.")
+        #expect(viewModel.errorText?.contains("/Users/private") == false)
+
+        viewModel.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+
+        #expect(viewModel.errorText == "The project action could not be completed.")
+        #expect(viewModel.errorText?.contains("secret.swift") == false)
+    }
+
     private func edit(
         id: UUID = UUID(),
         createdAt: Date = Date(timeIntervalSince1970: 1),
