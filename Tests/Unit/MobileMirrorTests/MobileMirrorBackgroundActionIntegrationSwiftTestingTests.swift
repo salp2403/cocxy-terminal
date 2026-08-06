@@ -34,6 +34,11 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
             try await task.value
         }
         #expect(context.projectRegistry.records.isEmpty)
+        #expect(FileManager.default.fileExists(
+            atPath: sandbox
+                .appendingPathComponent("projects/Revoked Pairing", isDirectory: true)
+                .path
+        ) == false)
     }
 
     @Test("project publication observes cancellation before activation")

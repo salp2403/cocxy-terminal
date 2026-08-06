@@ -28,6 +28,25 @@ struct MobileMirrorProjectServiceSwiftTestingTests {
         #expect(stagedDirectories.isEmpty)
     }
 
+    @Test("a verified publication can be rolled back without touching siblings")
+    func publishedProjectRollbackIsDescriptorBound() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sibling = root.appendingPathComponent("Keep", isDirectory: true)
+        try FileManager.default.createDirectory(at: sibling, withIntermediateDirectories: false)
+        let publication = try await MobileMirrorProjectService().createProject(
+            named: "Rollback",
+            in: root
+        )
+
+        try publication.rollback()
+
+        #expect(FileManager.default.fileExists(
+            atPath: root.appendingPathComponent("Rollback", isDirectory: true).path
+        ) == false)
+        #expect(FileManager.default.fileExists(atPath: sibling.path))
+    }
+
     @Test("rejects traversal hidden names and existing destinations")
     func rejectsUnsafeNamesAndCollisions() async throws {
         let root = try temporaryDirectory()

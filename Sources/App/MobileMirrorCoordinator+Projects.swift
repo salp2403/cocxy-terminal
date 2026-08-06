@@ -74,36 +74,42 @@ extension MobileMirrorCoordinator {
         }
         try Task.checkCancellation()
         let publication = try await projectService.createProject(named: name, in: root)
-        try requireActivePairing(cookie: cookie, channelID: channelID, identity: identity)
-        try Task.checkCancellation()
-        guard let appDelegate else {
-            throw MobileMirrorError.projectCreationUnavailable
-        }
-        let verifiedDirectory = try publication.openVerifiedDirectory()
-        let destination = try publication.verifiedURL(for: verifiedDirectory)
-        projectResolver.invalidate(directory: destination)
-        let descriptor = try ProjectDescriptor.verifiedStandalone(verifiedDirectory)
-        guard try publication.verifiedURL(for: verifiedDirectory) == destination else {
-            throw MobileMirrorError.projectCreationFailed(
-                "the destination changed before registration"
-            )
-        }
-        let tabID = try appDelegate.activateProject(
-            descriptor.groupingID,
-            verifiedDirectory: verifiedDirectory
-        )
+        var activatedTab: (delegate: AppDelegate, id: TabID)?
         do {
+            try requireActivePairing(cookie: cookie, channelID: channelID, identity: identity)
+            try Task.checkCancellation()
+            guard let appDelegate else {
+                throw MobileMirrorError.projectCreationUnavailable
+            }
+            let verifiedDirectory = try publication.openVerifiedDirectory()
+            let destination = try publication.verifiedURL(for: verifiedDirectory)
+            projectResolver.invalidate(directory: destination)
+            let descriptor = try ProjectDescriptor.verifiedStandalone(verifiedDirectory)
+            guard try publication.verifiedURL(for: verifiedDirectory) == destination else {
+                throw MobileMirrorError.projectCreationFailed(
+                    "the destination changed before registration"
+                )
+            }
+            let tabID = try appDelegate.activateProject(
+                descriptor.groupingID,
+                verifiedDirectory: verifiedDirectory
+            )
+            activatedTab = (appDelegate, tabID)
             guard try publication.verifiedURL(for: verifiedDirectory) == destination else {
                 throw MobileMirrorError.projectCreationFailed(
                     "the destination changed during activation"
                 )
             }
             try projectRegistry.recordOpen(descriptor, incrementOpenCount: false)
+            appDelegate.windowEventBus?.broadcast(.custom(name: "project.changed", payload: [:]))
         } catch {
-            appDelegate.controllerContainingTab(tabID)?.performCloseTab(tabID)
+            if let activatedTab {
+                activatedTab.delegate.controllerContainingTab(activatedTab.id)?
+                    .performCloseTab(activatedTab.id)
+            }
+            try publication.rollback()
             throw error
         }
-        appDelegate.windowEventBus?.broadcast(.custom(name: "project.changed", payload: [:]))
     }
 
     private func requireActivePairing(

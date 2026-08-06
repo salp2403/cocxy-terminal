@@ -73,6 +73,30 @@ struct ProjectDirectoryPublication: Sendable {
         }
         return try root.verifiedChildURL(named: destinationName, identity: identity)
     }
+
+    func rollback() throws {
+        let directory = try root.openVerifiedChild(named: destinationName, identity: identity)
+        try ProjectDirectoryTransaction.removeContents(of: directory.descriptor)
+        guard try root.childIdentity(named: destinationName) == identity else {
+            throw ProjectDirectoryError.cleanupUnverified(
+                try root.displayPath(for: destinationName)
+            )
+        }
+        let result = destinationName.withCString {
+            Darwin.unlinkat(root.descriptor, $0, AT_REMOVEDIR)
+        }
+        guard result == 0 else {
+            throw ProjectDirectoryError.cleanupUnverified(
+                try root.displayPath(for: destinationName)
+            )
+        }
+        try root.synchronize()
+        guard try root.childIdentity(named: destinationName) == nil else {
+            throw ProjectDirectoryError.cleanupUnverified(
+                try root.displayPath(for: destinationName)
+            )
+        }
+    }
 }
 
 final class ProjectDirectoryTransaction {
@@ -320,7 +344,7 @@ final class ProjectDirectoryTransaction {
         }
     }
 
-    private static func removeContents(of descriptor: Int32) throws {
+    fileprivate static func removeContents(of descriptor: Int32) throws {
         let duplicate = Darwin.dup(descriptor)
         guard duplicate >= 0 else {
             throw ProjectDirectoryError.systemCallFailed(
