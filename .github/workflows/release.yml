@@ -368,7 +368,7 @@ jobs:
             **Homebrew:** `brew tap salp2403/tap && brew install --cask cocxy`
 
             ### System Requirements
-            - macOS 14.0 (Sonoma) or later
+            - macOS 15.0 (Sequoia) or later
             - Apple Silicon or Intel Mac
           generate_release_notes: true
 
@@ -717,7 +717,7 @@ jobs:
                   "@type": "SoftwareApplication",
                   "name": f"Cocxy Terminal {tag}",
                   "applicationCategory": "DeveloperApplication",
-                  "operatingSystem": "macOS 14.0+",
+                  "operatingSystem": "macOS 15.0+",
                   "softwareVersion": version,
                   "url": gh,
                   "downloadUrl": dmg,
@@ -765,7 +765,7 @@ jobs:
                       "@type": "SoftwareApplication",
                       "name": "Cocxy Terminal",
                       "applicationCategory": "DeveloperApplication",
-                      "operatingSystem": "macOS 14.0+",
+                      "operatingSystem": "macOS 15.0+",
                       "softwareVersion": version,
                       "url": "https://cocxy.dev",
                       "downloadUrl": "https://github.com/salp2403/cocxy-terminal/releases/latest",

@@ -23,6 +23,9 @@ if [[ -f web/scripts/build-site.mjs ]]; then
 
   echo "Generating public website test fixtures..."
   "$NODE_BIN" web/scripts/build-site.mjs
+
+  echo "Verifying public website fixtures..."
+  "$NODE_BIN" web/scripts/verify-site.mjs
 fi
 
 echo "Running XCTest suite..."

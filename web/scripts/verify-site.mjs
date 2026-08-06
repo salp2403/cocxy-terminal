@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyMacOSFloor } from './verify-macos-floor.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(__dirname, '..');
@@ -107,8 +108,22 @@ function fail(message) {
   failures.push(message);
 }
 
+function readUTF8(filePath, label) {
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      fail(`Missing required file: ${label}`);
+    } else {
+      const detail = error instanceof Error ? error.message : String(error);
+      fail(`Unable to read ${label}: ${detail}`);
+    }
+    return '';
+  }
+}
+
 function read(relative) {
-  return fs.readFileSync(path.join(publicRoot, relative), 'utf8');
+  return readUTF8(path.join(publicRoot, relative), `web/public/${relative}`);
 }
 
 function exists(relative) {
@@ -232,7 +247,14 @@ const spanishHome = read('es/index.html');
 for (const section of ['hero', 'features', 'demo', 'comparison', 'faq', 'download', 'opensource']) {
   if (!spanishHome.includes(`id="${section}"`)) fail(`Spanish homepage missing #${section}`);
 }
-verifyPublishedMacOSFloor(home, spanishHome);
+for (const failure of verifyMacOSFloor({
+  repoRoot,
+  webRoot,
+  homeContent: home,
+  spanishHomeContent: spanishHome,
+})) {
+  fail(failure);
+}
 
 const featuresHub = read('features.html');
 for (const anchor of [
@@ -346,7 +368,7 @@ for (const needle of [
 }
 
 for (const workflow of ['.github/workflows/deploy-website.yml', '.github/workflows/release.yml']) {
-  const content = fs.readFileSync(path.join(repoRoot, workflow), 'utf8');
+  const content = readUTF8(path.join(repoRoot, workflow), workflow);
   for (const needle of ['web/public/feed.xml', 'web/public/releases.xml', 'web/public/service-worker.js']) {
     if (!content.includes(needle)) fail(`${workflow} missing deploy copy for ${needle}`);
   }
@@ -451,34 +473,6 @@ function verifyServiceWorker() {
     if (!content.includes(needle)) fail(`service-worker.js missing ${needle}`);
   }
   if (/https?:\/\//i.test(content)) fail('service-worker.js must not hard-code external URLs');
-}
-
-function verifyPublishedMacOSFloor(homeContent, spanishHomeContent) {
-  const packageManifest = fs.readFileSync(path.join(repoRoot, 'Package.swift'), 'utf8');
-  const platformMatch = packageManifest.match(/\.macOS\("(\d+)\.(\d+)"\)/);
-  if (!platformMatch) {
-    fail('Package.swift does not declare a parseable macOS deployment target');
-    return;
-  }
-
-  const minimumVersion = `${platformMatch[1]}.${platformMatch[2]}`;
-  const minimumMajor = platformMatch[1];
-  const expectedVersionBadge = `macOS ${minimumVersion}+`;
-  const expectedStat = `<strong>${minimumMajor}+</strong><span>macOS</span>`;
-  const targets = [
-    ['index.html', homeContent, true],
-    ['es/index.html', spanishHomeContent, true],
-    ['preview/components.html', fs.readFileSync(path.join(webRoot, 'preview/components.html'), 'utf8'), false],
-  ];
-
-  for (const [relative, content, requiresVersionBadge] of targets) {
-    if (!content.includes(expectedStat)) {
-      fail(`${relative} does not match the macOS ${minimumVersion} deployment floor`);
-    }
-    if (requiresVersionBadge && !content.includes(expectedVersionBadge)) {
-      fail(`${relative} lacks the macOS ${minimumVersion} version badge`);
-    }
-  }
 }
 
 function verifyCSSCustomProperties(files) {
