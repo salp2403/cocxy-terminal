@@ -39,6 +39,39 @@ final class MobileMirrorPinnedTLSDelegate: NSObject, URLSessionDelegate,
     }
 }
 
+final class TemporaryMobileMirrorKeychain {
+    let reference: SecKeychain
+
+    private let fileURL: URL
+
+    init() throws {
+        let temporaryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-mobile-tests-\(UUID().uuidString).keychain-db")
+        let password = UUID().uuidString
+        var created: SecKeychain?
+        let status = password.withCString { pointer in
+            SecKeychainCreate(
+                temporaryURL.path,
+                UInt32(password.utf8.count),
+                pointer,
+                false,
+                nil,
+                &created
+            )
+        }
+        guard status == errSecSuccess, let created else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        fileURL = temporaryURL
+        reference = created
+    }
+
+    deinit {
+        SecKeychainDelete(reference)
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+}
+
 final class LoopbackConnectionProbe: @unchecked Sendable {
     let port: UInt16
 
