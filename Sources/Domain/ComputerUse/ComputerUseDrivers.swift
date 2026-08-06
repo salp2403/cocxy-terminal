@@ -79,10 +79,38 @@ struct CoreGraphicsComputerUseKeyboardController: ComputerUseKeyboardControlling
 }
 
 struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCapturing {
+    struct DisplayGeometrySample: Sendable, Equatable {
+        let modePixelWidth: Int?
+        let modePixelHeight: Int?
+        let fallbackPixelWidth: Int
+        let fallbackPixelHeight: Int
+        let pointWidth: Double
+    }
+
+    struct CapturePlan: Sendable, Equatable {
+        let pixelWidth: Int
+        let pixelHeight: Int
+        let pointWidth: Double
+    }
+
+    typealias DisplayGeometryProvider = @Sendable (CGDirectDisplayID) -> DisplayGeometrySample
+
     let directory: URL
+    private let displayGeometryProvider: DisplayGeometryProvider
 
     init(directory: URL = ScreenCaptureKitComputerUseScreenshotCapture.defaultDirectory()) {
         self.directory = directory
+        self.displayGeometryProvider = { displayID in
+            ScreenCaptureKitComputerUseScreenshotCapture.liveDisplayGeometry(for: displayID)
+        }
+    }
+
+    init(
+        directory: URL,
+        displayGeometryProvider: @escaping DisplayGeometryProvider
+    ) {
+        self.directory = directory
+        self.displayGeometryProvider = displayGeometryProvider
     }
 
     func capture(_ request: ComputerUseScreenshotRequest) async throws -> ComputerUseScreenshot {
@@ -104,9 +132,9 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
 
             let filter = SCContentFilter(display: display, excludingWindows: [])
             let configuration = SCStreamConfiguration()
-            let geometry = Self.pixelGeometry(for: display.displayID)
-            configuration.width = geometry.width
-            configuration.height = geometry.height
+            let plan = capturePlan(for: display.displayID)
+            configuration.width = plan.pixelWidth
+            configuration.height = plan.pixelHeight
             configuration.showsCursor = true
 
             let image: CGImage
@@ -118,26 +146,25 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
             } catch {
                 throw ComputerUseError.screenshotCaptureFailed
             }
-            return try write(
-                image,
-                pointWidth: Self.displayPointWidth(for: display.displayID)
-            )
+            return try write(image, plan: plan)
         }
     }
 
-    static func pixelGeometry(
-        for displayID: CGDirectDisplayID
-    ) -> (width: Int, height: Int) {
-        let mode = CGDisplayCopyDisplayMode(displayID)
-        return (
-            width: physicalPixelDimension(
-                preferred: mode?.pixelWidth,
-                fallback: CGDisplayPixelsWide(displayID)
+    func capturePlan(for displayID: CGDirectDisplayID) -> CapturePlan {
+        Self.capturePlan(from: displayGeometryProvider(displayID))
+    }
+
+    static func capturePlan(from sample: DisplayGeometrySample) -> CapturePlan {
+        CapturePlan(
+            pixelWidth: physicalPixelDimension(
+                preferred: sample.modePixelWidth,
+                fallback: sample.fallbackPixelWidth
             ),
-            height: physicalPixelDimension(
-                preferred: mode?.pixelHeight,
-                fallback: CGDisplayPixelsHigh(displayID)
-            )
+            pixelHeight: physicalPixelDimension(
+                preferred: sample.modePixelHeight,
+                fallback: sample.fallbackPixelHeight
+            ),
+            pointWidth: validPointWidth(sample.pointWidth)
         )
     }
 
@@ -153,7 +180,7 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
         return max(1, value)
     }
 
-    func write(_ image: CGImage, pointWidth: Double) throws -> ComputerUseScreenshot {
+    func write(_ image: CGImage, plan: CapturePlan) throws -> ComputerUseScreenshot {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let fileURL = directory.appendingPathComponent("screenshot-\(Self.fileTimestamp())-\(UUID().uuidString).png")
         guard let destination = CGImageDestinationCreateWithURL(
@@ -174,7 +201,7 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
             height: image.height,
             scaleFactor: Self.scale(
                 pixelWidth: image.width,
-                pointWidth: pointWidth
+                pointWidth: plan.pointWidth
             )
         )
     }
@@ -184,8 +211,20 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
             .appendingPathComponent(".config/cocxy/agent/computer-use-screenshots", isDirectory: true)
     }
 
-    private static func displayPointWidth(for displayID: CGDirectDisplayID) -> Double {
-        max(1, Double(CGDisplayBounds(displayID).width))
+    private static func liveDisplayGeometry(for displayID: CGDirectDisplayID) -> DisplayGeometrySample {
+        let mode = CGDisplayCopyDisplayMode(displayID)
+        return DisplayGeometrySample(
+            modePixelWidth: mode?.pixelWidth,
+            modePixelHeight: mode?.pixelHeight,
+            fallbackPixelWidth: CGDisplayPixelsWide(displayID),
+            fallbackPixelHeight: CGDisplayPixelsHigh(displayID),
+            pointWidth: Double(CGDisplayBounds(displayID).width)
+        )
+    }
+
+    private static func validPointWidth(_ pointWidth: Double) -> Double {
+        guard pointWidth.isFinite, pointWidth > 0 else { return 1 }
+        return pointWidth
     }
 
     private static func fileTimestamp() -> String {

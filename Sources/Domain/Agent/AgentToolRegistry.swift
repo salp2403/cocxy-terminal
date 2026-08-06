@@ -261,8 +261,8 @@ enum AgentBuiltInTools {
             capability: .computerUse,
             inputSchema: AgentToolInputSchema(
                 properties: [
-                    "x": AgentToolInputProperty(.number, description: "Global display X coordinate in points. For screenshot pixels, multiply this value by the screenshot scaleFactor."),
-                    "y": AgentToolInputProperty(.number, description: "Global display Y coordinate in points. For screenshot pixels, multiply this value by the screenshot scaleFactor."),
+                    "x": AgentToolInputProperty(.number, description: "Global display X coordinate in points. Divide the screenshot pixel X coordinate by scaleFactor to obtain this value."),
+                    "y": AgentToolInputProperty(.number, description: "Global display Y coordinate in points. Divide the screenshot pixel Y coordinate by scaleFactor to obtain this value."),
                 ],
                 required: ["x", "y"]
             )
@@ -274,8 +274,8 @@ enum AgentBuiltInTools {
             capability: .computerUse,
             inputSchema: AgentToolInputSchema(
                 properties: [
-                    "x": AgentToolInputProperty(.number, description: "Global display X coordinate in points. For screenshot pixels, multiply this value by the screenshot scaleFactor."),
-                    "y": AgentToolInputProperty(.number, description: "Global display Y coordinate in points. For screenshot pixels, multiply this value by the screenshot scaleFactor."),
+                    "x": AgentToolInputProperty(.number, description: "Global display X coordinate in points. Divide the screenshot pixel X coordinate by scaleFactor to obtain this value."),
+                    "y": AgentToolInputProperty(.number, description: "Global display Y coordinate in points. Divide the screenshot pixel Y coordinate by scaleFactor to obtain this value."),
                     "button": AgentToolInputProperty(.string, description: "Mouse button: left, right, or middle."),
                     "clickCount": AgentToolInputProperty(.number, description: "Click count, clamped to at least 1."),
                 ],
@@ -285,7 +285,7 @@ enum AgentBuiltInTools {
         AgentToolDescriptor(
             id: "computer_screenshot",
             displayName: "Capture Screenshot",
-            description: "Capture the main display to a local PNG. The returned width and height are physical pixels; scaleFactor converts global point coordinates to image pixels.",
+            description: "Capture the main display to a local PNG and return metadata only; the image is not sent to the model. The returned width and height are physical pixels. Divide screenshot pixel coordinates by scaleFactor to obtain global display points.",
             capability: .computerUse
         ),
         AgentToolDescriptor(
