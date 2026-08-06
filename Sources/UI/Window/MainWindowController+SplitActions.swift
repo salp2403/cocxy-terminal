@@ -959,7 +959,6 @@ extension MainWindowController {
         )
         firstChild.frame = childFrames.first
         secondChild.frame = childFrames.second
-
         splitView.addSubview(firstChild)
         splitView.addSubview(secondChild)
         applyShellLayoutDirection(to: splitView)

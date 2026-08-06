@@ -94,17 +94,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var menuKeybindingsCancellable: AnyCancellable?
     /// Services-provider bridge for Finder contextual actions.
     var finderServiceProvider: FinderServiceProvider?
-
-    override init() {
-        projectIdentityServices = ProjectIdentityServices()
-        super.init()
-    }
-
-    init(projectIdentityServices: ProjectIdentityServices) {
+    init(projectIdentityServices: ProjectIdentityServices = ProjectIdentityServices()) {
         self.projectIdentityServices = projectIdentityServices
         super.init()
     }
-
     /// The quick terminal view model for state management.
     /// Internal setter: extensions (+SessionManagement) assign during init.
     var quickTerminalViewModel: QuickTerminalViewModel?
