@@ -1836,6 +1836,7 @@ extension MainWindowController {
             }
         )
         let hostingView = FocusableHostingView(rootView: overlayView)
+        applyShellLayoutDirection(to: hostingView)
         hostingView.onCancelOperation = { [weak self] in
             self?.dismissSmartRouting()
         }

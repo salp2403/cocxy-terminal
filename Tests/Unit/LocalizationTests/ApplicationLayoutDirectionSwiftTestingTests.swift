@@ -84,6 +84,8 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
     func defaultWindowPolicyUsesApplicationOwnership() {
         let controller = MainWindowController(bridge: MockTerminalEngine())
         let ownedSheet = makeWindow()
+        let originalIdentifier = NSUserInterfaceItemIdentifier("owned-sheet")
+        ownedSheet.identifier = originalIdentifier
         ApplicationLayoutDirectionCoordinator.markAsApplicationManaged(ownedSheet)
         let external = makeWindow()
         let coordinator = ApplicationLayoutDirectionCoordinator(
@@ -96,6 +98,8 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
 
         #expect(controller.window?.contentView?.userInterfaceLayoutDirection == .rightToLeft)
         #expect(ownedSheet.contentView?.userInterfaceLayoutDirection == .rightToLeft)
+        #expect(ownedSheet.identifier == originalIdentifier)
+        #expect(ApplicationLayoutDirectionCoordinator.isApplicationManagedWindow(ownedSheet))
         #expect(external.contentView?.userInterfaceLayoutDirection == .leftToRight)
         coordinator.stop()
         controller.close()
@@ -184,13 +188,103 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
         )
 
         #expect(tabItem.userInterfaceLayoutDirection == .rightToLeft)
-        #expect(richInputPanel.identifier == ApplicationLayoutDirectionCoordinator.managedWindowIdentifier)
+        #expect(ApplicationLayoutDirectionCoordinator.isApplicationManagedWindow(richInputPanel))
         #expect(richInputHost.userInterfaceLayoutDirection == .rightToLeft)
-        #expect(renamePanel.identifier == ApplicationLayoutDirectionCoordinator.managedWindowIdentifier)
+        #expect(ApplicationLayoutDirectionCoordinator.isApplicationManagedWindow(renamePanel))
         #expect(renamePanel.contentView?.userInterfaceLayoutDirection == .rightToLeft)
         richInputPanel.close()
         renamePanel.close()
         parentWindow.close()
+    }
+
+    @Test("late-created shell surface trees follow Arabic and LTR changes")
+    func lateCreatedShellSurfaceTreesFollowCurrentDirection() throws {
+        let provider = LayoutDirectionConfigProvider(language: .english)
+        let service = ConfigService(fileProvider: provider)
+        try service.reload()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: service
+        )
+        controller.showWindow(nil)
+        let coordinator = ApplicationLayoutDirectionCoordinator(
+            windowProvider: { [weak controller] in controller?.window.map { [$0] } ?? [] },
+            isManagedWindow: { _ in true }
+        )
+        coordinator.start(localizer: AppLocalizer(languagePreference: .english))
+        defer {
+            coordinator.stop()
+            controller.close()
+        }
+
+        try applyLanguage(
+            .arabic,
+            provider: provider,
+            service: service,
+            controller: controller,
+            coordinator: coordinator
+        )
+        try expectLateCreatedSurfaceTrees(
+            direction: .rightToLeft,
+            controller: controller
+        )
+
+        try applyLanguage(
+            .english,
+            provider: provider,
+            service: service,
+            controller: controller,
+            coordinator: coordinator
+        )
+        controller.dismissCommandPalette()
+        controller.dismissSmartRouting()
+        try expectLateCreatedSurfaceTrees(
+            direction: .leftToRight,
+            controller: controller
+        )
+    }
+
+    @Test("tab item restamps dynamic children after every update")
+    func tabItemRestampsRebuiltChildren() {
+        var initialItem = makeActiveTabDisplayItem(title: "Initial")
+        initialItem.agentToolCount = 1
+        initialItem.perSurfaceAgents = [
+            SurfaceAgentSnapshot(
+                surfaceID: SurfaceID(),
+                state: SurfaceAgentState(agentState: .working)
+            ),
+        ]
+        let tabItem = TabItemView(
+            displayItem: initialItem,
+            localizer: AppLocalizer(languagePreference: .arabic)
+        )
+        expectDirection(.rightToLeft, in: tabItem, label: "initial Arabic tab item")
+        let initialViewIDs = Set(viewTree(rootedAt: tabItem).map(ObjectIdentifier.init))
+
+        var updatedItem = makeActiveTabDisplayItem(title: "Updated")
+        updatedItem.agentToolCount = 2
+        updatedItem.agentErrorCount = 1
+        updatedItem.agentDurationText = "2m"
+        updatedItem.perSurfaceAgents = [
+            SurfaceAgentSnapshot(
+                surfaceID: SurfaceID(),
+                state: SurfaceAgentState(agentState: .waitingInput),
+                isFocused: true
+            ),
+            SurfaceAgentSnapshot(
+                surfaceID: SurfaceID(),
+                state: SurfaceAgentState(agentState: .working)
+            ),
+        ]
+        tabItem.update(with: updatedItem)
+
+        let updatedTree = viewTree(rootedAt: tabItem)
+        #expect(!Set(updatedTree.map(ObjectIdentifier.init)).subtracting(initialViewIDs).isEmpty)
+        expectDirection(.rightToLeft, in: tabItem, label: "updated Arabic tab item")
+
+        tabItem.updateLocalizer(AppLocalizer(languagePreference: .english))
+        tabItem.update(with: initialItem)
+        expectDirection(.leftToRight, in: tabItem, label: "updated LTR tab item")
     }
 
     @Test("directional panel geometry uses fixed logical-edge coordinates")
@@ -260,6 +354,92 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
         root.addSubview(NSHostingView(rootView: Text("Direction")))
         window.contentView = root
         return window
+    }
+
+    private func applyLanguage(
+        _ language: AppLanguage,
+        provider: LayoutDirectionConfigProvider,
+        service: ConfigService,
+        controller: MainWindowController,
+        coordinator: ApplicationLayoutDirectionCoordinator
+    ) throws {
+        provider.language = language
+        try service.reload()
+        let localizer = AppLocalizer(languagePreference: language)
+        coordinator.update(localizer: localizer)
+        controller.applyConfig(service.current)
+    }
+
+    private func expectLateCreatedSurfaceTrees(
+        direction: NSUserInterfaceLayoutDirection,
+        controller: MainWindowController
+    ) throws {
+        controller.showTransientCommandPaletteOverlay(
+            engine: StaticCommandPaletteEngine(actions: [])
+        )
+        let palette = try #require(controller.commandPaletteHostingView)
+        expectDirection(direction, in: palette, label: "unified quick switch")
+
+        controller.showSmartRouting()
+        let smartRouting = try #require(controller.smartRoutingHostingView)
+        expectDirection(direction, in: smartRouting, label: "smart routing")
+
+        controller.refreshShortcutHintsOverlay(
+            config: UXPolishConfig(
+                alwaysShowShortcutHints: true,
+                shortcutHintDebugOverlay: true,
+                shortcutHintOffsetX: 0,
+                shortcutHintOffsetY: 0,
+                shortcutHintScale: 1
+            ),
+            keybindings: .defaults
+        )
+        #expect(!controller.shortcutHintOverlayHosts.isEmpty)
+        for (placement, host) in controller.shortcutHintOverlayHosts {
+            expectDirection(direction, in: host, label: "shortcut hint \(placement)")
+        }
+
+        let firstPane = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 240))
+        firstPane.addSubview(NSView(frame: NSRect(x: 0, y: 0, width: 40, height: 40)))
+        let secondPane = NSView(frame: NSRect(x: 200, y: 0, width: 200, height: 240))
+        secondPane.addSubview(NSView(frame: NSRect(x: 0, y: 0, width: 40, height: 40)))
+        let splitView = controller.createSplitView(
+            isVertical: true,
+            frame: NSRect(x: 0, y: 0, width: 400, height: 240),
+            first: firstPane,
+            second: secondPane
+        )
+        expectDirection(direction, in: splitView, label: "split view")
+    }
+
+    private func expectDirection(
+        _ expected: NSUserInterfaceLayoutDirection,
+        in root: NSView,
+        label: String
+    ) {
+        for view in viewTree(rootedAt: root) {
+            #expect(
+                view.userInterfaceLayoutDirection == expected,
+                "\(label) contains a child with the wrong layout direction"
+            )
+        }
+    }
+
+    private func viewTree(rootedAt root: NSView) -> [NSView] {
+        [root] + root.subviews.flatMap(viewTree(rootedAt:))
+    }
+
+    private func makeActiveTabDisplayItem(title: String) -> TabDisplayItem {
+        TabDisplayItem(
+            id: TabID(),
+            displayTitle: title,
+            subtitle: nil,
+            statusColorName: "blue",
+            badgeText: nil,
+            isActive: true,
+            hasUnreadNotification: false,
+            agentState: .working
+        )
     }
 }
 

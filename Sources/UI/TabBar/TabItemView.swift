@@ -226,10 +226,6 @@ final class TabItemView: NSView {
         self.localizer = localizer
         super.init(frame: .zero)
         setupSubviews()
-        ApplicationLayoutDirectionCoordinator.apply(
-            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
-            to: self
-        )
         applyLocalizedChrome()
         configure(with: displayItem)
     }
@@ -341,10 +337,6 @@ final class TabItemView: NSView {
 
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
-        ApplicationLayoutDirectionCoordinator.apply(
-            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
-            to: self
-        )
         applyLocalizedChrome()
         configure(with: displayItem)
     }
@@ -475,6 +467,10 @@ final class TabItemView: NSView {
         setAccessibilityLabel(item.displayTitle)
         setAccessibilityValue(Self.localizedAgentAccessibilityValue(item.agentState, using: localizer))
         setAccessibilityHelp(localizer.string("tabbar.tab.activate.help", fallback: "Activate this tab"))
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: self
+        )
     }
 
     // MARK: - Stats Chips

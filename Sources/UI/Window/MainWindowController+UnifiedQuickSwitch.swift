@@ -86,6 +86,7 @@ extension MainWindowController {
         var swiftUIView = CommandPaletteView(viewModel: viewModel)
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = FocusableHostingView(rootView: swiftUIView)
+        applyShellLayoutDirection(to: hostingView)
         hostingView.onCancelOperation = { [weak self] in
             self?.dismissCommandPalette()
         }

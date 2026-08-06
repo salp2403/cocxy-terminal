@@ -48,10 +48,12 @@ extension MainWindowController {
                 }
             )
 
-            if let host = shortcutHintOverlayHosts[placement] {
+            let host: ShortcutHintPassthroughHostingView<ShortcutHintsOverlayView>
+            if let existingHost = shortcutHintOverlayHosts[placement] {
+                host = existingHost
                 host.rootView = rootView
             } else {
-                let host = ShortcutHintPassthroughHostingView(rootView: rootView)
+                host = ShortcutHintPassthroughHostingView(rootView: rootView)
                 host.translatesAutoresizingMaskIntoConstraints = true
                 host.autoresizingMask = []
                 host.wantsLayer = true
@@ -59,6 +61,7 @@ extension MainWindowController {
                 overlayContainer.addSubview(host)
                 shortcutHintOverlayHosts[placement] = host
             }
+            applyShellLayoutDirection(to: host)
         }
 
         layoutShortcutHintOverlays()

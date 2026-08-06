@@ -962,6 +962,7 @@ extension MainWindowController {
 
         splitView.addSubview(firstChild)
         splitView.addSubview(secondChild)
+        applyShellLayoutDirection(to: splitView)
         splitView.setHoldingPriority(.defaultLow, forSubviewAt: 0)
         splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
         splitView.adjustSubviews()

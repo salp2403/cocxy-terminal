@@ -2,15 +2,14 @@
 // ApplicationLayoutDirectionCoordinator.swift - App-wide shell direction.
 
 import AppKit
+import ObjectiveC
 
 @MainActor
 protocol ApplicationLayoutDirectionManagedWindowController: AnyObject {}
 
 @MainActor
 final class ApplicationLayoutDirectionCoordinator: NSObject {
-    static let managedWindowIdentifier = NSUserInterfaceItemIdentifier(
-        "dev.cocxy.terminal.application-window"
-    )
+    private static var managedWindowAssociationKey: UInt8 = 0
 
     private let notificationCenter: NotificationCenter
     private let windowProvider: @MainActor () -> [NSWindow]
@@ -76,11 +75,16 @@ final class ApplicationLayoutDirectionCoordinator: NSObject {
     }
 
     static func markAsApplicationManaged(_ window: NSWindow) {
-        window.identifier = managedWindowIdentifier
+        objc_setAssociatedObject(
+            window,
+            &managedWindowAssociationKey,
+            true,
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
     }
 
     static func isApplicationManagedWindow(_ window: NSWindow) -> Bool {
-        window.identifier == managedWindowIdentifier
+        (objc_getAssociatedObject(window, &managedWindowAssociationKey) as? Bool == true)
             || window.windowController is any ApplicationLayoutDirectionManagedWindowController
     }
 
