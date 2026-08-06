@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "Koble til en SSH-profil, eller bruk det lokale reléet.";
 "mobile.mirror.transport.detail.unavailable" = "Den valgte SSH-profilen er utilgjengelig. Bruk en annen tilkoblet profil eller det lokale reléet.";
 "mobile.mirror.transport.localDetail" = "TLS krypterer dette reléet på det private nettverket. Terminalservere forblir på loopback; ingen skytjeneste brukes.";
-"mobile.mirror.security.title" = "Ende-til-ende-beskyttet";
-"mobile.mirror.security.detail" = "Terminalutdata krypteres, og handlinger autentiseres med QR-koden.";
-"mobile.mirror.tls.warning" = "Telefonen viser en sertifikatadvarsel før sammenkobling.";
+"mobile.mirror.security.title" = "Beskyttet med QR-nøkkelen";
+"mobile.mirror.security.detail" = "Tastaturinndata, innlimt tekst og terminalutdata krypteres ende-til-ende med QR-nøkkelen.";
+"mobile.mirror.tls.warning" = "Fortsett bare forbi sertifikatadvarselen hvis du startet denne sammenkoblingen på et privat nettverk du stoler på.";
+"mobile.mirror.audit.unavailable" = "Den lokale revisjonsloggen er utilgjengelig.";
 "mobile.mirror.transport.sshOptional" = "Bruk en tilkoblet SSH-profil";
 "mobile.mirror.transport.sshLabel" = "Sikker SSH-forbindelse";
 "mobile.mirror.transport.sshDetail" = "SSH er valgfritt og gjør sammenkoblingsendepunktet tilgjengelig bare gjennom den valgte forbindelsen.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "Åpne prosjekter";
 "mobile.web.projects.title" = "Prosjekter";
 "mobile.web.status.authenticationFailed" = "Autentisering mislyktes";
+"mobile.web.status.clipboardUnavailable" = "Utklippstavlesvar er utilgjengelige i sikker mobilmodus";
 "mobile.web.status.inputRejected" = "Inndata avvist";
+"mobile.web.status.readOnly" = "Terminalen er skrivebeskyttet";
+"mobile.web.status.rescanRequired" = "Skann en ny QR-kode på Macen for å koble til igjen";
 "mobile.web.status.syncing" = "Synkroniserer...";
 "mobile.web.status.unavailable" = "Nettterminal er utilgjengelig";
 "mobile.web.terminal.input" = "Skriv i terminalen";

@@ -19,8 +19,12 @@ struct MobileMirrorSecuritySwiftTestingTests {
         let expectedTerminalKey = try data(
             hex: "06999873580e00273a89c9990aca2d0269d1396bae9244c9a40ba7cfa832ad8a"
         )
+        let expectedTerminalInputKey = try data(
+            hex: "48bdf0ebf64e911297b80a0a6906a249e35afc894b27a7d1045dbb9bf4e95fdb"
+        )
         #expect(keys.actionToken.secret == expectedActionKey)
         #expect(keys.terminalEncryptionKey == expectedTerminalKey)
+        #expect(keys.terminalInputEncryptionKey == expectedTerminalInputKey)
 
         let body = Data(
             "{\"kind\":\"select-session\",\"sessionID\":\"s\",\"surfaceID\":\"u\"}".utf8
@@ -86,8 +90,8 @@ struct MobileMirrorSecuritySwiftTestingTests {
         }
     }
 
-    @Test("signed actions bind timestamp nonce and exact body and reject replay")
-    func signedActionsRejectReplay() throws {
+    @Test("encrypted actions authenticate before opening and reject replay or reordering")
+    func encryptedActionsAuthenticateBeforeOpeningAndRejectReplay() throws {
         let authority = MobileMirrorPairingAuthority()
         let identity = MobileMirrorClientIdentity(remoteAddress: "10.0.0.8", userAgent: "Phone")
         let offer = authority.makeOffer()
@@ -109,65 +113,96 @@ struct MobileMirrorSecuritySwiftTestingTests {
             channelID: offer.id
         )
         #expect(credentials.terminalEncryptionKey == sessionKeys.terminalEncryptionKey)
-        let body = Data("{\"kind\":\"select-session\"}".utf8)
-        let timestamp = String(UInt64(Date().timeIntervalSince1970))
-        let nonce = UUID().uuidString
-        let signature = sign(
-            timestamp: timestamp,
-            nonce: nonce,
+        let plaintext = Data("{\"kind\":\"select-session\"}".utf8)
+        let body = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            plaintext: plaintext,
+            key: sessionKeys.terminalInputEncryptionKey,
+            sequence: 0
+        )
+        let wrongToken = RelayToken(secret: Data(repeating: 0xA5, count: 32))
+
+        #expect(throws: MobileMirrorError.invalidSignature) {
+            try openAction(
+                authority: authority,
+                cookie: cookie,
+                body: plaintext,
+                actionToken: sessionKeys.actionToken,
+                signingToken: wrongToken
+            )
+        }
+        #expect(throws: MobileMirrorEncryptedActionEnvelopeError.invalidEnvelope) {
+            try openAction(
+                authority: authority,
+                cookie: cookie,
+                body: plaintext,
+                actionToken: sessionKeys.actionToken
+            )
+        }
+        #expect(throws: MobileMirrorError.invalidSignature) {
+            try openAction(
+                authority: authority,
+                cookie: cookie,
+                body: body,
+                actionToken: sessionKeys.actionToken,
+                signingToken: wrongToken
+            )
+        }
+
+        let opened = try openAction(
+            authority: authority,
+            cookie: cookie,
             body: body,
             actionToken: sessionKeys.actionToken
         )
+        #expect(opened.channelID == credentials.channelID)
+        #expect(opened.body == plaintext)
 
-        let wrongSignature = sign(
-            timestamp: timestamp,
-            nonce: nonce,
-            body: body,
-            actionToken: RelayToken(secret: Data(repeating: 0xA5, count: 32))
-        )
-        #expect(throws: MobileMirrorError.invalidSignature) {
-            try authority.validateAction(
-                cookie: cookie,
-                method: "POST",
-                path: "/mobile/api/action",
-                timestamp: timestamp,
-                nonce: nonce,
-                signature: wrongSignature,
-                body: body
-            )
-        }
-
-        #expect(try authority.validateAction(
-            cookie: cookie,
-            method: "POST",
-            path: "/mobile/api/action",
-            timestamp: timestamp,
-            nonce: nonce,
-            signature: signature,
-            body: body
-        ) == credentials.channelID)
         #expect(throws: MobileMirrorError.replayDetected) {
-            try authority.validateAction(
+            try openAction(
+                authority: authority,
                 cookie: cookie,
-                method: "POST",
-                path: "/mobile/api/action",
-                timestamp: timestamp,
-                nonce: nonce,
-                signature: signature,
-                body: body
+                body: body,
+                actionToken: sessionKeys.actionToken
             )
         }
 
-        let changedBody = Data("{\"kind\":\"project-create\"}".utf8)
-        #expect(throws: MobileMirrorError.invalidSignature) {
-            try authority.validateAction(
+        let wrongKeyBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            plaintext: plaintext,
+            key: Data(repeating: 0x5A, count: 32),
+            sequence: 1
+        )
+        #expect(throws: MobileMirrorEncryptedActionEnvelopeError.invalidEnvelope) {
+            try openAction(
+                authority: authority,
                 cookie: cookie,
-                method: "POST",
-                path: "/mobile/api/action",
-                timestamp: timestamp,
-                nonce: UUID().uuidString,
-                signature: signature,
-                body: changedBody
+                body: wrongKeyBody,
+                actionToken: sessionKeys.actionToken
+            )
+        }
+
+        let advancedBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            plaintext: plaintext,
+            key: sessionKeys.terminalInputEncryptionKey,
+            sequence: 2
+        )
+        _ = try openAction(
+            authority: authority,
+            cookie: cookie,
+            body: advancedBody,
+            actionToken: sessionKeys.actionToken
+        )
+
+        let reorderedBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            plaintext: plaintext,
+            key: sessionKeys.terminalInputEncryptionKey,
+            sequence: 1
+        )
+        #expect(throws: MobileMirrorError.replayDetected) {
+            try openAction(
+                authority: authority,
+                cookie: cookie,
+                body: reorderedBody,
+                actionToken: sessionKeys.actionToken
             )
         }
     }
@@ -365,20 +400,30 @@ struct MobileMirrorSecuritySwiftTestingTests {
         }
     }
 
-    private func sign(
-        timestamp: String,
-        nonce: String,
+    private func openAction(
+        authority: MobileMirrorPairingAuthority,
+        cookie: String,
         body: Data,
-        actionToken: RelayToken
-    ) -> String {
-        let payload = MobileMirrorSessionKeys.canonicalActionPayload(
-            method: "POST",
-            path: "/mobile/api/action",
+        actionToken: RelayToken,
+        signingToken: RelayToken? = nil
+    ) throws -> MobileMirrorOpenedAction {
+        let timestamp = String(UInt64(Date().timeIntervalSince1970))
+        let nonce = UUID().uuidString
+        let signature = MobileMirrorEncryptedActionTestSupport.signature(
             body: body,
             timestamp: timestamp,
-            nonce: nonce
+            nonce: nonce,
+            actionToken: signingToken ?? actionToken
         )
-        return MobileMirrorPairingAuthority.base64URL(actionToken.sign(payload))
+        return try authority.openAction(
+            cookie: cookie,
+            method: "POST",
+            path: "/mobile/api/action",
+            timestamp: timestamp,
+            nonce: nonce,
+            signature: signature,
+            body: body
+        )
     }
 
     private func data(hex: String) throws -> Data {

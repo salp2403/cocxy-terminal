@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "Kết nối hồ sơ SSH hoặc dùng bộ chuyển tiếp cục bộ.";
 "mobile.mirror.transport.detail.unavailable" = "Hồ sơ SSH đã chọn không khả dụng. Hãy dùng hồ sơ khác đã kết nối hoặc bộ chuyển tiếp cục bộ.";
 "mobile.mirror.transport.localDetail" = "TLS mã hóa bộ chuyển tiếp trên mạng riêng này. Máy chủ trình dòng lệnh vẫn dùng giao diện loopback; không sử dụng dịch vụ đám mây.";
-"mobile.mirror.security.title" = "Bảo vệ đầu cuối";
-"mobile.mirror.security.detail" = "Đầu ra thiết bị đầu cuối được mã hóa và các thao tác được xác thực bằng mã QR.";
-"mobile.mirror.tls.warning" = "Điện thoại sẽ hiển thị cảnh báo chứng chỉ trước khi ghép nối.";
+"mobile.mirror.security.title" = "Được bảo vệ bằng khóa QR";
+"mobile.mirror.security.detail" = "Dữ liệu bàn phím, văn bản dán và đầu ra thiết bị đầu cuối được mã hóa đầu cuối bằng khóa QR.";
+"mobile.mirror.tls.warning" = "Chỉ tiếp tục qua cảnh báo chứng chỉ nếu bạn đã bắt đầu ghép nối này trên một mạng riêng đáng tin cậy.";
+"mobile.mirror.audit.unavailable" = "Nhật ký kiểm tra cục bộ không khả dụng.";
 "mobile.mirror.transport.sshOptional" = "Dùng hồ sơ SSH đã kết nối";
 "mobile.mirror.transport.sshLabel" = "Kết nối SSH bảo mật";
 "mobile.mirror.transport.sshDetail" = "SSH là tùy chọn và chỉ công bố điểm cuối ghép đôi qua kết nối đã chọn.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "Mở dự án";
 "mobile.web.projects.title" = "Dự án";
 "mobile.web.status.authenticationFailed" = "Xác thực không thành công";
+"mobile.web.status.clipboardUnavailable" = "Phản hồi bảng tạm không khả dụng trong chế độ di động bảo mật";
 "mobile.web.status.inputRejected" = "Dữ liệu nhập bị từ chối";
+"mobile.web.status.readOnly" = "Thiết bị đầu cuối ở chế độ chỉ đọc";
+"mobile.web.status.rescanRequired" = "Quét mã QR mới trên máy Mac để kết nối lại";
 "mobile.web.status.syncing" = "Đang đồng bộ...";
 "mobile.web.status.unavailable" = "Không thể dùng trình dòng lệnh web";
 "mobile.web.terminal.input" = "Nhập trong trình dòng lệnh";

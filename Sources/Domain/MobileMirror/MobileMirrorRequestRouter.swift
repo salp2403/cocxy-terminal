@@ -13,6 +13,27 @@ enum MobileMirrorRouterTransport: Sendable {
         case .sshTunnel: "http"
         }
     }
+
+    var requiresSecureCookie: Bool {
+        switch self {
+        case .localTLS: true
+        case .sshTunnel: false
+        }
+    }
+
+    func urlComponents(address: String, port: UInt16) -> URLComponents? {
+        guard !address.isEmpty, port > 0 else { return nil }
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = address
+        components.port = Int(port)
+        guard components.url != nil else { return nil }
+        return components
+    }
+
+    func origin(address: String, port: UInt16) -> String? {
+        urlComponents(address: address, port: port)?.url?.absoluteString
+    }
 }
 
 final class MobileMirrorRequestRouter: @unchecked Sendable {
@@ -101,7 +122,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     var baseURL: String? {
         endpointLock.lock()
         defer { endpointLock.unlock() }
-        return gatewayPort.map { "\(transport.scheme)://\(publicAddress):\($0)" }
+        return gatewayPort.flatMap { transport.origin(address: publicAddress, port: $0) }
     }
 
     func route(
@@ -129,14 +150,18 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
 
         guard let cookie = request.cookie(named: Self.cookieName) else {
             return rejected(
-                .error("Pair this device from Cocxy Terminal.", status: 401),
+                .error(currentLocalization().text(
+                    "mobile.web.status.rescanRequired"
+                ), status: 401),
                 identity: identity
             )
         }
         guard let activePairing = authority.activePairing(cookie: cookie),
               activePairing.identity.fingerprint == identity.fingerprint else {
             return rejected(
-                .error(MobileMirrorError.sessionExpired.localizedDescription, status: 401),
+                .error(currentLocalization().text(
+                    "mobile.web.status.rescanRequired"
+                ), status: 401),
                 identity: identity
             )
         }
@@ -222,10 +247,11 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                 return .response(.json(["status": "denied"], status: 403))
             case .confirmed(let cookie):
                 let maxAge = Int(MobileMirrorPairingAuthority.sessionTTL)
+                let secureAttribute = transport.requiresSecureCookie ? "; Secure" : ""
                 return .response(.json(
                     ["status": "confirmed", "redirect": "/"],
                     headers: [
-                        "Set-Cookie": "\(Self.cookieName)=\(cookie); Path=/; HttpOnly; SameSite=Strict; Max-Age=\(maxAge)",
+                        "Set-Cookie": "\(Self.cookieName)=\(cookie); Path=/; HttpOnly; SameSite=Strict; Max-Age=\(maxAge)\(secureAttribute)",
                     ]
                 ))
             }
@@ -260,9 +286,9 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                 identity: identity
             )
         }
-        let channelID: UUID
+        let openedAction: MobileMirrorOpenedAction
         do {
-            channelID = try authority.validateAction(
+            openedAction = try authority.openAction(
                 cookie: cookie,
                 method: request.method,
                 path: request.path,
@@ -271,7 +297,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                 signature: signature,
                 body: request.body
             )
-            guard channelID == expectedChannelID else {
+            guard openedAction.channelID == expectedChannelID else {
                 throw MobileMirrorError.sessionExpired
             }
         } catch {
@@ -282,17 +308,20 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             ) {
                 return auditFailure
             }
-            return errorResponse(error, identity: identity, authenticationFailure: true)
+            let responseError: Error = error is MobileMirrorEncryptedActionEnvelopeError
+                ? MobileMirrorError.invalidSignature
+                : error
+            return errorResponse(responseError, identity: identity, authenticationFailure: true)
         }
 
         let action: MobileMirrorAction
         do {
-            action = try JSONDecoder().decode(MobileMirrorAction.self, from: request.body)
+            action = try JSONDecoder().decode(MobileMirrorAction.self, from: openedAction.body)
             try action.validate()
         } catch {
             if let auditFailure = await auditRejection(
                 .malformedAction,
-                channelID: channelID,
+                channelID: openedAction.channelID,
                 identity: identity
             ) {
                 return auditFailure
@@ -305,7 +334,12 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         }
 
         do {
-            let snapshot = try await actionHandler(action, cookie, channelID, identity)
+            let snapshot = try await actionHandler(
+                action,
+                cookie,
+                openedAction.channelID,
+                identity
+            )
             let responseSnapshot = action.kind == .terminalControl ? nil : snapshot
             return .response(.json(MobileMirrorActionResponse.success(
                 snapshot: responseSnapshot
@@ -326,7 +360,10 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             try await rejectionAuditor(reason, channelID, identity)
             return nil
         } catch {
-            return .response(.error("Local audit log is unavailable.", status: 503))
+            return .response(.error(
+                currentLocalization().text("mobile.mirror.audit.unavailable"),
+                status: 503
+            ))
         }
     }
 
@@ -359,8 +396,12 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                 identity: identity
             )
         }
+        let terminalSessionID = Self.terminalSessionID(from: request.path)
+        if isWebSocket, request.path != "/ws", terminalSessionID == nil {
+            return .response(.error("Not found.", status: 404))
+        }
 
-        if let surfaceID = Self.terminalSessionID(from: request.path) {
+        if let surfaceID = terminalSessionID {
             guard UUID(uuidString: surfaceID) != nil,
                   let route = routeRegistry.route(forSurfaceID: surfaceID),
                   let credentials = try? authority.credentials(cookie: cookie) else {

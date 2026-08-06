@@ -221,12 +221,12 @@ struct MobileMirrorView: View {
             VStack(spacing: 6) {
                 Text(localizer.string(
                     "mobile.mirror.security.title",
-                    fallback: "End-to-end protected"
+                    fallback: "Protected with the QR key"
                 ))
                 .font(.caption.weight(.semibold))
                 Text(localizer.string(
                     "mobile.mirror.security.detail",
-                    fallback: "Terminal output is encrypted and actions are authenticated with this QR code."
+                    fallback: "Keyboard input, pasted text, and terminal output are encrypted end to end with the QR key."
                 ))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -234,7 +234,7 @@ struct MobileMirrorView: View {
                 if !coordinator.usesSSHTunnel {
                     Text(localizer.string(
                         "mobile.mirror.tls.warning",
-                        fallback: "Your phone will show a certificate warning before pairing."
+                        fallback: "Continue past the certificate warning only after starting this pairing on a trusted private network."
                     ))
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.orange)

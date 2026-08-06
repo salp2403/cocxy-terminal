@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "Tilslut en SSH-profil, eller brug det lokale relæ.";
 "mobile.mirror.transport.detail.unavailable" = "Den valgte SSH-profil er ikke tilgængelig. Brug en anden tilsluttet profil eller det lokale relæ.";
 "mobile.mirror.transport.localDetail" = "TLS krypterer dette relæ på det private netværk. Terminalservere forbliver på loopback; ingen skytjeneste anvendes.";
-"mobile.mirror.security.title" = "End-to-end-beskyttet";
-"mobile.mirror.security.detail" = "Terminaloutput krypteres, og handlinger godkendes med QR-koden.";
-"mobile.mirror.tls.warning" = "Din telefon viser en certifikatadvarsel før parring.";
+"mobile.mirror.security.title" = "Beskyttet med QR-nøglen";
+"mobile.mirror.security.detail" = "Tastaturinput, indsat tekst og terminaloutput krypteres end-to-end med QR-nøglen.";
+"mobile.mirror.tls.warning" = "Fortsæt kun forbi certifikatadvarslen, hvis du startede denne parring på et privat netværk, du har tillid til.";
+"mobile.mirror.audit.unavailable" = "Den lokale revisionslog er ikke tilgængelig.";
 "mobile.mirror.transport.sshOptional" = "Brug en tilsluttet SSH-profil";
 "mobile.mirror.transport.sshLabel" = "Sikker SSH-forbindelse";
 "mobile.mirror.transport.sshDetail" = "SSH er valgfrit og gør kun parringsslutpunktet tilgængeligt via den valgte forbindelse.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "Åbn projekter";
 "mobile.web.projects.title" = "Projekter";
 "mobile.web.status.authenticationFailed" = "Autentificering mislykkedes";
+"mobile.web.status.clipboardUnavailable" = "Udklipsholdersvar er ikke tilgængelige i sikker mobiltilstand";
 "mobile.web.status.inputRejected" = "Input afvist";
+"mobile.web.status.readOnly" = "Terminalen er skrivebeskyttet";
+"mobile.web.status.rescanRequired" = "Scan en ny QR-kode på Mac-computeren for at oprette forbindelse igen";
 "mobile.web.status.syncing" = "Synkroniserer...";
 "mobile.web.status.unavailable" = "Webterminal er ikke tilgængelig";
 "mobile.web.terminal.input" = "Skriv i terminalen";

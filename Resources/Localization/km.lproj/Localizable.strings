@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "ភ្ជាប់ប្រវត្តិរូប SSH ឬប្រើរ៉ឺឡេមូលដ្ឋាន។";
 "mobile.mirror.transport.detail.unavailable" = "ប្រវត្តិរូប SSH ដែលបានជ្រើសមិនអាចប្រើបានទេ។ ប្រើប្រវត្តិរូបផ្សេងដែលបានភ្ជាប់ ឬរ៉ឺឡេមូលដ្ឋាន។";
 "mobile.mirror.transport.localDetail" = "TLS អ៊ិនគ្រីបរ៉ឺឡេនៅលើបណ្ដាញឯកជននេះ។ ម៉ាស៊ីនមេស្ថានីយនៅតែប្រើ loopback ហើយមិនប្រើសេវាពពកទេ។";
-"mobile.mirror.security.title" = "ការពារពីចុងដល់ចុង";
-"mobile.mirror.security.detail" = "លទ្ធផលស្ថានីយត្រូវបានអ៊ិនគ្រីប ហើយសកម្មភាពត្រូវបានផ្ទៀងផ្ទាត់ដោយកូដ QR។";
-"mobile.mirror.tls.warning" = "ទូរសព្ទរបស់អ្នកនឹងបង្ហាញការព្រមានអំពីវិញ្ញាបនបត្រមុនពេលផ្គូផ្គង។";
+"mobile.mirror.security.title" = "ការពារដោយសោ QR";
+"mobile.mirror.security.detail" = "ការបញ្ចូលពីក្តារចុច អត្ថបទដែលបានបិទភ្ជាប់ និងលទ្ធផលស្ថានីយត្រូវបានអ៊ិនគ្រីបពីចុងដល់ចុងដោយសោ QR។";
+"mobile.mirror.tls.warning" = "បន្តហួសការព្រមានវិញ្ញាបនបត្រតែបើអ្នកបានចាប់ផ្តើមការផ្គូផ្គងនេះលើបណ្តាញឯកជនដែលទុកចិត្ត។";
+"mobile.mirror.audit.unavailable" = "កំណត់ហេតុសវនកម្មមូលដ្ឋានមិនអាចប្រើបាន។";
 "mobile.mirror.transport.sshOptional" = "ប្រើប្រវត្តិរូប SSH ដែលបានភ្ជាប់";
 "mobile.mirror.transport.sshLabel" = "ការតភ្ជាប់ SSH ដែលមានសុវត្ថិភាព";
 "mobile.mirror.transport.sshDetail" = "SSH ជាជម្រើស ហើយបង្ហាញចំណុចបញ្ចប់សម្រាប់ការផ្គូផ្គងតែតាមការតភ្ជាប់ដែលបានជ្រើសប៉ុណ្ណោះ។";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "បើកគម្រោង";
 "mobile.web.projects.title" = "គម្រោង";
 "mobile.web.status.authenticationFailed" = "ការផ្ទៀងផ្ទាត់បានបរាជ័យ";
+"mobile.web.status.clipboardUnavailable" = "ការឆ្លើយតបក្ដារតម្បៀតខ្ទាស់មិនអាចប្រើបានក្នុងរបៀបទូរសព្ទសុវត្ថិភាព";
 "mobile.web.status.inputRejected" = "ការបញ្ចូលត្រូវបានបដិសេធ";
+"mobile.web.status.readOnly" = "ស្ថានីយអាចអានបានតែប៉ុណ្ណោះ";
+"mobile.web.status.rescanRequired" = "ស្កេនកូដ QR ថ្មីនៅលើ Mac ដើម្បីភ្ជាប់ឡើងវិញ";
 "mobile.web.status.syncing" = "កំពុងធ្វើសមកាលកម្ម...";
 "mobile.web.status.unavailable" = "ស្ថានីយវេបមិនអាចប្រើបាន";
 "mobile.web.terminal.input" = "វាយក្នុងស្ថានីយ";

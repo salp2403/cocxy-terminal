@@ -41,6 +41,11 @@ struct MobileMirrorSessionCredentials: Equatable, Sendable {
     let selectedSurfaceID: String?
 }
 
+struct MobileMirrorOpenedAction: Equatable, Sendable {
+    let channelID: UUID
+    let body: Data
+}
+
 struct MobileMirrorTerminalSelection: Equatable, Sendable {
     let sessionID: String
     let surfaceID: String
@@ -78,10 +83,12 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
         let cookieDigest: String
         let actionToken: RelayToken
         let terminalEncryptionKey: Data
+        let terminalInputEncryptionKey: Data
         let pairedAt: Date
         let expiresAt: Date
         var selectedSessionID: String?
         var selectedSurfaceID: String?
+        var lastInputSequence: UInt64?
         var replayTracker: ReplayTracker
     }
 
@@ -184,10 +191,12 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
                 cookieDigest: Self.digest(Data(cookie.utf8)),
                 actionToken: keys.actionToken,
                 terminalEncryptionKey: keys.terminalEncryptionKey,
+                terminalInputEncryptionKey: keys.terminalInputEncryptionKey,
                 pairedAt: pairedAt,
                 expiresAt: expiresAt,
                 selectedSessionID: nil,
                 selectedSurfaceID: nil,
+                lastInputSequence: nil,
                 replayTracker: ReplayTracker(windowSeconds: Self.actionFreshnessSeconds)
             )
             current.cookieDeliveryToken = cookie
@@ -313,7 +322,7 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
         }
     }
 
-    func validateAction(
+    func openAction(
         cookie: String,
         method: String,
         path: String,
@@ -321,7 +330,7 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
         nonce: String,
         signature: String,
         body: Data
-    ) throws -> UUID {
+    ) throws -> MobileMirrorOpenedAction {
         guard let timestampValue = UInt64(timestamp),
               let nonceUUID = UUID(uuidString: nonce),
               let receivedSignature = Self.decodeBase64URL(signature) else {
@@ -345,6 +354,14 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
             ) else {
                 throw MobileMirrorError.invalidSignature
             }
+            let opened = try MobileMirrorEncryptedActionEnvelope.open(
+                requestBody: body,
+                encryptionKey: current.terminalInputEncryptionKey
+            )
+            if let lastSequence = current.lastInputSequence,
+               opened.sequence <= lastSequence {
+                throw MobileMirrorError.replayDetected
+            }
             let nonceData = withUnsafeBytes(of: nonceUUID.uuid) { Data($0) }
             guard current.replayTracker.isAllowed(
                 timestamp: timestampValue,
@@ -352,8 +369,12 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
             ) else {
                 throw MobileMirrorError.replayDetected
             }
+            current.lastInputSequence = opened.sequence
             session = current
-            return current.channelID
+            return MobileMirrorOpenedAction(
+                channelID: current.channelID,
+                body: opened.plaintext
+            )
         }
     }
 

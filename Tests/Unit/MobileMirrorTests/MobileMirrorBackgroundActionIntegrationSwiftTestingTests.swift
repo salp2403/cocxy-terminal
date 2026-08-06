@@ -145,6 +145,41 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         })
     }
 
+    @Test("background audit failure reaches the desktop in the configured language")
+    func backgroundAuditFailureIsLocalized() async throws {
+        let sandbox = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let localizationRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Resources/Localization", isDirectory: true)
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(Bundle(url: localizationRoot))
+        )
+        let context = makeCoordinator(
+            sandbox: sandbox,
+            auditWriter: MobileMirrorIntegrationAuditWriter(failsWrites: true),
+            localizer: localizer
+        )
+        defer { context.stop() }
+
+        context.coordinator.startBackgroundAction(
+            MobileMirrorAction(kind: .projectCreate, name: "Trabajo"),
+            channelID: UUID(),
+            identity: MobileMirrorClientIdentity(
+                remoteAddress: "192.168.50.23",
+                userAgent: "Mobile integration test"
+            ),
+            notificationSessionID: UUID().uuidString,
+            operation: { .accepted }
+        )
+
+        #expect(await eventually {
+            context.coordinator.state == .failed(
+                "El registro de auditoría local no está disponible."
+            )
+        })
+    }
+
     private func preparedProjectCreation(
         name: String,
         context: MobileMirrorCoordinatorTestContext,
@@ -197,7 +232,9 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
 
     private func makeCoordinator(
         sandbox: URL,
-        projectService: any MobileMirrorProjectCreating = MobileMirrorProjectService()
+        projectService: any MobileMirrorProjectCreating = MobileMirrorProjectService(),
+        auditWriter: MobileMirrorIntegrationAuditWriter = MobileMirrorIntegrationAuditWriter(),
+        localizer: AppLocalizer? = nil
     ) -> MobileMirrorCoordinatorTestContext {
         let appDelegate = AppDelegate()
         let profileStore = MockRemoteProfileStore()
@@ -220,7 +257,6 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         let projectRegistry = ProjectRegistry(store: ProjectRegistryStore(
             fileURL: sandbox.appendingPathComponent("registry.json")
         ))
-        let auditWriter = MobileMirrorIntegrationAuditWriter()
         let coordinator = MobileMirrorCoordinator(
             appDelegate: appDelegate,
             projectRegistry: projectRegistry,
@@ -232,6 +268,7 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
             relayManager: relayManager,
             tunnelController: tunnelController,
             projectService: projectService,
+            localizer: localizer,
             projectCreationConfirmation: { _, _ in true }
         )
         return MobileMirrorCoordinatorTestContext(
@@ -336,13 +373,19 @@ private final class SuspendedPublishedProjectService: MobileMirrorProjectCreatin
 
 private final class MobileMirrorIntegrationAuditWriter: AuditLogWriting, @unchecked Sendable {
     private let lock = NSLock()
+    private let failsWrites: Bool
     private var lines: [String] = []
+
+    init(failsWrites: Bool = false) {
+        self.failsWrites = failsWrites
+    }
 
     var currentSize: Int {
         lock.withLock { lines.joined(separator: "\n").utf8.count }
     }
 
-    func appendLine(_ line: String) {
+    func appendLine(_ line: String) throws {
+        if failsWrites { throw RelayAuditWriterTestFailure.injected }
         lock.withLock { lines.append(line) }
     }
 

@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "Povežite SSH profil ili koristite lokalni relej.";
 "mobile.mirror.transport.detail.unavailable" = "Odabrani SSH profil nije dostupan. Koristite drugi povezani profil ili lokalni relej.";
 "mobile.mirror.transport.localDetail" = "TLS šifrira ovaj relej na privatnoj mreži. Terminalski serveri ostaju na loopback interfejsu; ne koristi se nijedna usluga u oblaku.";
-"mobile.mirror.security.title" = "Zaštićeno s kraja na kraj";
-"mobile.mirror.security.detail" = "Izlaz terminala je šifriran, a radnje se potvrđuju QR kodom.";
-"mobile.mirror.tls.warning" = "Telefon će prikazati upozorenje o certifikatu prije uparivanja.";
+"mobile.mirror.security.title" = "Zaštićeno QR ključem";
+"mobile.mirror.security.detail" = "Unos s tastature, zalijepljeni tekst i izlaz terminala šifrirani su s kraja na kraj QR ključem.";
+"mobile.mirror.tls.warning" = "Nastavite nakon upozorenja o certifikatu samo ako ste pokrenuli ovo uparivanje na pouzdanoj privatnoj mreži.";
+"mobile.mirror.audit.unavailable" = "Lokalni zapis revizije nije dostupan.";
 "mobile.mirror.transport.sshOptional" = "Koristi povezani SSH profil";
 "mobile.mirror.transport.sshLabel" = "Sigurna SSH veza";
 "mobile.mirror.transport.sshDetail" = "SSH je opcionalan i objavljuje krajnju tačku za uparivanje samo putem odabrane veze.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "Otvori projekte";
 "mobile.web.projects.title" = "Projekti";
 "mobile.web.status.authenticationFailed" = "Autentifikacija nije uspjela";
+"mobile.web.status.clipboardUnavailable" = "Odgovori međuspremnika nisu dostupni u sigurnom mobilnom načinu";
 "mobile.web.status.inputRejected" = "Unos je odbijen";
+"mobile.web.status.readOnly" = "Terminal je samo za čitanje";
+"mobile.web.status.rescanRequired" = "Skenirajte novi QR kod na Macu za ponovno povezivanje";
 "mobile.web.status.syncing" = "Sinhronizacija...";
 "mobile.web.status.unavailable" = "Web terminal nije dostupan";
 "mobile.web.terminal.input" = "Pišite u terminal";

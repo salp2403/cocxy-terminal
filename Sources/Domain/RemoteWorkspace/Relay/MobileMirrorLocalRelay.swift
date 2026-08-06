@@ -11,7 +11,6 @@ struct MobileMirrorLocalRelayLease: Equatable, Sendable {
     let id: UUID
     let address: String
     let port: UInt16
-    let certificateFingerprint: String
 }
 
 enum MobileMirrorLocalRelayError: Error, Equatable, LocalizedError {
@@ -180,6 +179,7 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
     typealias AddressProvider = @Sendable () -> String?
     typealias BindAddressPolicy = @Sendable (String) -> Bool
     typealias PeerAddressNormalizer = @Sendable (String) -> String?
+    typealias TLSIdentityProvider = @Sendable (String) throws -> MobileMirrorEphemeralTLSIdentity
 
     static let idleTimeout: TimeInterval = 45
     private static let handshakeTimeout: TimeInterval = 8
@@ -203,6 +203,7 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
     private let addressProvider: AddressProvider
     private let bindAddressPolicy: BindAddressPolicy
     private let peerAddressNormalizer: PeerAddressNormalizer
+    private let tlsIdentityProvider: TLSIdentityProvider
     private let connectionLimits: MobileMirrorConnectionLimits
     private let connectionIdleTimeout: TimeInterval
     private let listenerQueue = DispatchQueue(label: "dev.cocxy.mobile.relay.listener")
@@ -224,6 +225,9 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
             MobileMirrorPrivateNetworkAddress.isPrivateIPv4($0)
         },
         peerAddressNormalizer: @escaping PeerAddressNormalizer = { $0 },
+        tlsIdentityProvider: @escaping TLSIdentityProvider = {
+            try MobileMirrorEphemeralTLSIdentity.generate(bindAddress: $0)
+        },
         connectionLimits: MobileMirrorConnectionLimits = .default,
         connectionIdleTimeout: TimeInterval = MobileMirrorLocalRelay.idleTimeout
     ) {
@@ -232,6 +236,7 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
         self.addressProvider = addressProvider
         self.bindAddressPolicy = bindAddressPolicy
         self.peerAddressNormalizer = peerAddressNormalizer
+        self.tlsIdentityProvider = tlsIdentityProvider
         self.connectionLimits = connectionLimits
         self.connectionIdleTimeout = max(1, connectionIdleTimeout)
         self.connectionPolicy = MobileMirrorConnectionPolicy(limits: connectionLimits)
@@ -252,7 +257,7 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
 
         let identity: MobileMirrorEphemeralTLSIdentity
         do {
-            identity = try MobileMirrorEphemeralTLSIdentity.generate(bindAddress: bindAddress)
+            identity = try tlsIdentityProvider(bindAddress)
         } catch {
             finishFailedStart()
             throw MobileMirrorLocalRelayError.tlsIdentityUnavailable
@@ -428,8 +433,7 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
         let resolved = MobileMirrorLocalRelayLease(
             id: id,
             address: bindAddress,
-            port: port,
-            certificateFingerprint: identity.fingerprint
+            port: port
         )
         lease = resolved
         isStarting = false

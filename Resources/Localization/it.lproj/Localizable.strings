@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "Collega un profilo SSH oppure usa il servizio di inoltro locale.";
 "mobile.mirror.transport.detail.unavailable" = "Il profilo SSH selezionato non è disponibile. Usa un altro profilo connesso o il servizio di inoltro locale.";
 "mobile.mirror.transport.localDetail" = "TLS cifra questo relay sulla rete privata. I server terminale restano sull’interfaccia di loopback; non viene usato alcun servizio cloud.";
-"mobile.mirror.security.title" = "Protezione end-to-end";
-"mobile.mirror.security.detail" = "L'output del terminale è cifrato e le azioni sono autenticate con il codice QR.";
-"mobile.mirror.tls.warning" = "Il telefono mostrerà un avviso relativo al certificato prima dell'abbinamento.";
+"mobile.mirror.security.title" = "Protetto con la chiave del codice QR";
+"mobile.mirror.security.detail" = "L’input da tastiera, il testo incollato e l’output del terminale sono cifrati end-to-end con la chiave del codice QR.";
+"mobile.mirror.tls.warning" = "Supera l’avviso del certificato solo dopo aver avviato questo abbinamento su una rete privata attendibile.";
+"mobile.mirror.audit.unavailable" = "Il registro di controllo locale non è disponibile.";
 "mobile.mirror.transport.sshOptional" = "Usa un profilo SSH connesso";
 "mobile.mirror.transport.sshLabel" = "Connessione SSH sicura";
 "mobile.mirror.transport.sshDetail" = "SSH è facoltativo e pubblica l’endpoint di abbinamento solo tramite la connessione selezionata.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "Apri progetti";
 "mobile.web.projects.title" = "Progetti";
 "mobile.web.status.authenticationFailed" = "Autenticazione non riuscita";
+"mobile.web.status.clipboardUnavailable" = "Le risposte degli appunti non sono disponibili nella modalità mobile sicura";
 "mobile.web.status.inputRejected" = "Input rifiutato";
+"mobile.web.status.readOnly" = "Il terminale è di sola lettura";
+"mobile.web.status.rescanRequired" = "Scansiona un nuovo codice QR sul Mac per riconnetterti";
 "mobile.web.status.syncing" = "Sincronizzazione...";
 "mobile.web.status.unavailable" = "Terminale web non disponibile";
 "mobile.web.terminal.input" = "Digita nel terminale";

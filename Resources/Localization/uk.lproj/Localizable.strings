@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "Підключіть профіль SSH або використайте локальний ретранслятор.";
 "mobile.mirror.transport.detail.unavailable" = "Вибраний профіль SSH недоступний. Використайте інший підключений профіль або локальний ретранслятор.";
 "mobile.mirror.transport.localDetail" = "TLS шифрує цей ретранслятор у приватній мережі. Сервери терміналів залишаються на інтерфейсі loopback; хмарні служби не використовуються.";
-"mobile.mirror.security.title" = "Наскрізний захист";
-"mobile.mirror.security.detail" = "Вивід термінала зашифровано, а дії автентифікуються за допомогою QR-коду.";
-"mobile.mirror.tls.warning" = "Перед сполученням телефон покаже попередження про сертифікат.";
+"mobile.mirror.security.title" = "Захищено ключем QR-коду";
+"mobile.mirror.security.detail" = "Введення з клавіатури, вставлений текст і вивід термінала наскрізно шифруються ключем QR-коду.";
+"mobile.mirror.tls.warning" = "Продовжуйте після попередження про сертифікат, лише якщо ви почали це сполучення в довіреній приватній мережі.";
+"mobile.mirror.audit.unavailable" = "Локальний журнал аудиту недоступний.";
 "mobile.mirror.transport.sshOptional" = "Використовувати підключений профіль SSH";
 "mobile.mirror.transport.sshLabel" = "Захищене SSH-з’єднання";
 "mobile.mirror.transport.sshDetail" = "SSH необов’язковий і публікує кінцеву точку спарювання лише через вибране підключення.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "Відкрити проєкти";
 "mobile.web.projects.title" = "Проєкти";
 "mobile.web.status.authenticationFailed" = "Помилка автентифікації";
+"mobile.web.status.clipboardUnavailable" = "Відповіді буфера обміну недоступні в безпечному мобільному режимі";
 "mobile.web.status.inputRejected" = "Введення відхилено";
+"mobile.web.status.readOnly" = "Термінал доступний лише для читання";
+"mobile.web.status.rescanRequired" = "Відскануйте новий QR-код на Mac, щоб підключитися знову";
 "mobile.web.status.syncing" = "Синхронізація...";
 "mobile.web.status.unavailable" = "Вебтермінал недоступний";
 "mobile.web.terminal.input" = "Введіть текст у терміналі";

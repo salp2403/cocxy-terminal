@@ -81,9 +81,6 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
             now: verificationDate,
             keychain: keychain.reference
         )
-        let expectedFingerprint = testCertificateFingerprint(tlsIdentity.certificateDER)
-        #expect(tlsIdentity.fingerprint == expectedFingerprint)
-
         let policy = SecPolicyCreateSSL(true, "127.0.0.1" as CFString)
         var trust: SecTrust?
         #expect(SecTrustCreateWithCertificates(
@@ -169,12 +166,11 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
             keychain: keychain.reference
         ) == errSecSuccess)
 
-        let result = MobileMirrorEphemeralTLSIdentity.removeStaleKeychainItems(
+        MobileMirrorEphemeralTLSIdentity.removeStaleKeychainItems(
             keychain: keychain.reference,
             processIsAlive: { $0 == activeOwner }
         )
 
-        #expect(result.matchedIdentityCount == 1)
         #expect(Self.keychainStatus(
             itemClass: kSecClassCertificate,
             attribute: kSecAttrPublicKeyHash,
@@ -219,26 +215,61 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
         #expect(MobileMirrorLocalRelayError.listenerUnavailable.localizedDescription(using: spanish) == "No se pudo iniciar el relay móvil privado.")
     }
 
-    @Test("local pairing URL carries a one-use application key")
-    func localPairingURLContract() throws {
-        let url = try #require(MobileMirrorPairingURL.local(
-            address: "192.168.1.8",
-            port: 4_242,
+    @Test("pairing URL and router share the active transport contract")
+    func pairingURLUsesRouterTransportAndCompleteOffer() throws {
+        let offer = MobileMirrorPairingOffer(
+            id: UUID(),
             token: "one-use-token",
-            pairingSecret: "pairing-secret"
-        ))
+            pairingSecret: "pairing-secret",
+            expiresAt: .distantFuture
+        )
+        let cases: [(MobileMirrorRouterTransport, String, UInt16, String)] = [
+            (
+                .localTLS,
+                "192.168.1.8",
+                4_242,
+                "https://192.168.1.8:4242/pair?token=one-use-token#pairing-key=pairing-secret"
+            ),
+            (
+                .sshTunnel,
+                "127.0.0.1",
+                4_243,
+                "http://127.0.0.1:4243/pair?token=one-use-token#pairing-key=pairing-secret"
+            ),
+        ]
 
-        #expect(url.absoluteString == "https://192.168.1.8:4242/pair?token=one-use-token#pairing-key=pairing-secret")
-        #expect(MobileMirrorPairingURL.pairingSecret(from: url) == "pairing-secret")
+        for (transport, address, port, expectedURL) in cases {
+            let url = try #require(MobileMirrorPairingURL.make(
+                transport: transport,
+                address: address,
+                port: port,
+                offer: offer
+            ))
+            #expect(url.absoluteString == expectedURL)
 
-        let tunneled = try #require(MobileMirrorPairingURL.sshTunnel(
-            address: "127.0.0.1",
-            port: 4_243,
-            token: "tunnel-token",
-            pairingSecret: "tunnel-secret"
-        ))
-        #expect(tunneled.absoluteString == "http://127.0.0.1:4243/pair?token=tunnel-token#pairing-key=tunnel-secret")
-        #expect(MobileMirrorPairingURL.pairingSecret(from: tunneled) == "tunnel-secret")
+            let router = MobileMirrorRequestRouter(
+                publicAddress: address,
+                transport: transport,
+                authority: MobileMirrorPairingAuthority(),
+                routeRegistry: MobileMirrorRouteRegistry(),
+                snapshotProvider: { _ in .empty },
+                actionHandler: { _, _, _, _ in .empty },
+                pendingPairingHandler: { _ in }
+            )
+            router.updatePublicPort(port)
+            #expect(router.baseURL == "\(url.scheme ?? "")://\(url.host ?? ""):\(port)")
+
+            let components = try #require(URLComponents(
+                url: url,
+                resolvingAgainstBaseURL: false
+            ))
+            #expect(components.queryItems?.first(where: { $0.name == "token" })?.value
+                == offer.token)
+            var fragment = URLComponents()
+            fragment.percentEncodedQuery = components.percentEncodedFragment
+            #expect(fragment.queryItems?.first(where: { $0.name == "pairing-key" })?.value
+                == offer.pairingSecret)
+        }
     }
 
     @Test("private relay reaches the loopback gateway and preserves client identity")
@@ -251,6 +282,9 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
             return .response(.json(["status": "ok"]))
         }
         let gatewayPort = try gateway.start()
+        let tlsIdentity = try MobileMirrorTestRelayTLSIdentity(
+            bindAddress: MobileMirrorGateway.loopbackAddress
+        )
         let relay = MobileMirrorLocalRelay(
             gatewayPort: gatewayPort,
             preambleSecret: secret,
@@ -259,7 +293,8 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
             peerAddressNormalizer: { address in
                 guard address == MobileMirrorGateway.loopbackAddress else { return nil }
                 return relayedAddress
-            }
+            },
+            tlsIdentityProvider: tlsIdentity.provider
         )
         let lease = try await relay.start()
         defer {
@@ -271,7 +306,7 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
             address: lease.address,
             port: lease.port,
             path: "/health",
-            certificateFingerprint: lease.certificateFingerprint
+            expectedFingerprint: testCertificateFingerprint(tlsIdentity.identity.certificate)
         )
         let text = String(decoding: response, as: UTF8.self)
         #expect(text == "{\"status\":\"ok\"}")
@@ -286,10 +321,12 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
             }
             return
         }
+        let tlsIdentity = try MobileMirrorTestRelayTLSIdentity(bindAddress: address)
         let relay = MobileMirrorLocalRelay(
             gatewayPort: 1,
             preambleSecret: "private-bind-test",
-            addressProvider: { address }
+            addressProvider: { address },
+            tlsIdentityProvider: tlsIdentity.provider
         )
         let lease = try await relay.start()
         defer { relay.stop() }
@@ -301,11 +338,15 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
     @Test("relay rejects a non-private peer before forwarding bytes")
     func relayRejectsNonPrivatePeer() async throws {
         let gatewayProbe = try LoopbackConnectionProbe()
+        let tlsIdentity = try MobileMirrorTestRelayTLSIdentity(
+            bindAddress: MobileMirrorGateway.loopbackAddress
+        )
         let relay = MobileMirrorLocalRelay(
             gatewayPort: gatewayProbe.port,
             preambleSecret: "non-private-peer-test",
             addressProvider: { MobileMirrorGateway.loopbackAddress },
-            bindAddressPolicy: { $0 == MobileMirrorGateway.loopbackAddress }
+            bindAddressPolicy: { $0 == MobileMirrorGateway.loopbackAddress },
+            tlsIdentityProvider: tlsIdentity.provider
         )
         let lease = try await relay.start()
         defer {
@@ -318,7 +359,7 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
                 address: lease.address,
                 port: lease.port,
                 path: "/health",
-                certificateFingerprint: lease.certificateFingerprint
+                expectedFingerprint: testCertificateFingerprint(tlsIdentity.identity.certificate)
             )
         }
         let forwarded = await gatewayProbe.waitForConnection(timeout: 1)
@@ -347,12 +388,16 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
                 : .response(.json(["status": "ok"]))
         }
         let gatewayPort = try gateway.start()
+        let tlsIdentity = try MobileMirrorTestRelayTLSIdentity(
+            bindAddress: MobileMirrorGateway.loopbackAddress
+        )
         let relay = MobileMirrorLocalRelay(
             gatewayPort: gatewayPort,
             preambleSecret: secret,
             addressProvider: { MobileMirrorGateway.loopbackAddress },
             bindAddressPolicy: { $0 == MobileMirrorGateway.loopbackAddress },
             peerAddressNormalizer: { _ in relayedAddress },
+            tlsIdentityProvider: tlsIdentity.provider,
             connectionLimits: limits
         )
         let lease = try await relay.start()
@@ -369,7 +414,7 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
                 address: lease.address,
                 port: lease.port,
                 path: "/health",
-                certificateFingerprint: lease.certificateFingerprint
+                expectedFingerprint: testCertificateFingerprint(tlsIdentity.identity.certificate)
             )
             Issue.record("A second connection from an exhausted peer reached the gateway")
         } catch {
@@ -385,7 +430,7 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
                     address: lease.address,
                     port: lease.port,
                     path: "/health",
-                    certificateFingerprint: lease.certificateFingerprint
+                    expectedFingerprint: testCertificateFingerprint(tlsIdentity.identity.certificate)
                 )
                 recovered = String(decoding: response, as: UTF8.self)
                     .contains("\"status\":\"ok\"")
@@ -417,10 +462,10 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
         address: String,
         port: UInt16,
         path: String,
-        certificateFingerprint: String
+        expectedFingerprint: String
     ) async throws -> Data {
         let delegate = MobileMirrorPinnedTLSDelegate(
-            expectedFingerprint: certificateFingerprint
+            expectedFingerprint: expectedFingerprint
         )
         return try await request(
             address: address,

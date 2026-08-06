@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "Bir SSH profili bağlayın veya yerel aktarıcıyı kullanın.";
 "mobile.mirror.transport.detail.unavailable" = "Seçilen SSH profili kullanılamıyor. Bağlı başka bir profil veya yerel aktarıcı kullanın.";
 "mobile.mirror.transport.localDetail" = "TLS, bu özel ağ aktarıcısını şifreler. Terminal sunucuları geri döngüde kalır; bulut hizmeti kullanılmaz.";
-"mobile.mirror.security.title" = "Uçtan uca koruma";
-"mobile.mirror.security.detail" = "Terminal çıktısı şifrelenir ve işlemler QR koduyla doğrulanır.";
-"mobile.mirror.tls.warning" = "Telefonunuz eşleştirmeden önce bir sertifika uyarısı gösterecektir.";
+"mobile.mirror.security.title" = "QR anahtarıyla korunur";
+"mobile.mirror.security.detail" = "Klavye girişi, yapıştırılan metin ve terminal çıktısı QR anahtarıyla uçtan uca şifrelenir.";
+"mobile.mirror.tls.warning" = "Sertifika uyarısını yalnızca bu eşleştirmeyi güvendiğiniz özel bir ağda başlattıysanız geçin.";
+"mobile.mirror.audit.unavailable" = "Yerel denetim günlüğü kullanılamıyor.";
 "mobile.mirror.transport.sshOptional" = "Bağlı bir SSH profili kullan";
 "mobile.mirror.transport.sshLabel" = "Güvenli SSH Bağlantısı";
 "mobile.mirror.transport.sshDetail" = "SSH isteğe bağlıdır ve eşleştirme uç noktasını yalnızca seçilen bağlantı üzerinden yayınlar.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "Projeleri aç";
 "mobile.web.projects.title" = "Projeler";
 "mobile.web.status.authenticationFailed" = "Kimlik doğrulama başarısız";
+"mobile.web.status.clipboardUnavailable" = "Güvenli mobil modda pano yanıtları kullanılamıyor";
 "mobile.web.status.inputRejected" = "Giriş reddedildi";
+"mobile.web.status.readOnly" = "Terminal salt okunur";
+"mobile.web.status.rescanRequired" = "Yeniden bağlanmak için Mac’te yeni bir QR kodu tarayın";
 "mobile.web.status.syncing" = "Eşitleniyor...";
 "mobile.web.status.unavailable" = "Web terminali kullanılamıyor";
 "mobile.web.terminal.input" = "Terminale yazın";

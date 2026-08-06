@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "صِل ملف تعريف SSH أو استخدم المرحّل المحلي.";
 "mobile.mirror.transport.detail.unavailable" = "ملف تعريف SSH المحدد غير متاح. استخدم ملفًا متصلًا آخر أو المرحّل المحلي.";
 "mobile.mirror.transport.localDetail" = "يشفّر TLS مرحّل الشبكة الخاصة هذا. تبقى خوادم الطرفية على واجهة loopback ولا تُستخدم أي خدمة سحابية.";
-"mobile.mirror.security.title" = "محمي من طرف إلى طرف";
-"mobile.mirror.security.detail" = "يتم تشفير مخرجات الطرفية وتوثيق الإجراءات باستخدام رمز QR.";
-"mobile.mirror.tls.warning" = "سيعرض هاتفك تحذيرًا بشأن الشهادة قبل الاقتران.";
+"mobile.mirror.security.title" = "محمي بمفتاح رمز QR";
+"mobile.mirror.security.detail" = "يتم تشفير إدخال لوحة المفاتيح والنص الملصق ومخرجات الطرفية من طرف إلى طرف باستخدام مفتاح رمز QR.";
+"mobile.mirror.tls.warning" = "لا تتجاوز تحذير الشهادة إلا بعد بدء هذا الاقتران على شبكة خاصة موثوقة.";
+"mobile.mirror.audit.unavailable" = "سجل التدقيق المحلي غير متاح.";
 "mobile.mirror.transport.sshOptional" = "استخدام ملف تعريف SSH متصل";
 "mobile.mirror.transport.sshLabel" = "اتصال SSH آمن";
 "mobile.mirror.transport.sshDetail" = "SSH اختياري، ولا تُنشر نقطة نهاية الإقران إلا عبر الاتصال المحدد.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "فتح المشاريع";
 "mobile.web.projects.title" = "المشاريع";
 "mobile.web.status.authenticationFailed" = "فشلت المصادقة";
+"mobile.web.status.clipboardUnavailable" = "استجابات الحافظة غير متاحة في وضع الهاتف الآمن";
 "mobile.web.status.inputRejected" = "تم رفض الإدخال";
+"mobile.web.status.readOnly" = "الطرفية للقراءة فقط";
+"mobile.web.status.rescanRequired" = "امسح رمز QR جديدًا على جهاز Mac لإعادة الاتصال";
 "mobile.web.status.syncing" = "جارٍ المزامنة...";
 "mobile.web.status.unavailable" = "الطرفية عبر الويب غير متاحة";
 "mobile.web.terminal.input" = "اكتب في الطرفية";

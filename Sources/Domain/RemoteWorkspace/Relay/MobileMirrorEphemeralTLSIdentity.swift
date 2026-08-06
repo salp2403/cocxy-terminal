@@ -1,7 +1,6 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // MobileMirrorEphemeralTLSIdentity.swift - Session-scoped LAN relay identity.
 
-import CryptoKit
 import Darwin
 import Foundation
 import Security
@@ -26,8 +25,6 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
 
     let identity: SecIdentity
     let certificate: SecCertificate
-    let certificateDER: Data
-    let fingerprint: String
     let storageCertificatePublicKeyHash: Data
     let storageKeyTag: Data
 
@@ -38,16 +35,12 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
     private init(
         identity: SecIdentity,
         certificate: SecCertificate,
-        certificateDER: Data,
-        fingerprint: String,
         keyTag: Data,
         certificatePublicKeyHash: Data,
         keychain: SecKeychain?
     ) {
         self.identity = identity
         self.certificate = certificate
-        self.certificateDER = certificateDER
-        self.fingerprint = fingerprint
         self.storageCertificatePublicKeyHash = certificatePublicKeyHash
         self.storageKeyTag = keyTag
         self.keychain = keychain
@@ -150,10 +143,6 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
         return MobileMirrorEphemeralTLSIdentity(
             identity: identity,
             certificate: certificate,
-            certificateDER: certificateDER,
-            fingerprint: MobileMirrorPairingAuthority.base64URL(
-                Data(SHA256.hash(data: certificateDER))
-            ),
             keyTag: keyTag,
             certificatePublicKeyHash: certificatePublicKeyHash,
             keychain: keychain
@@ -182,11 +171,10 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
         lock.unlock()
     }
 
-    @discardableResult
     static func removeStaleKeychainItems(
         keychain: SecKeychain? = nil,
         processIsAlive: (pid_t) -> Bool = processIsAlive
-    ) -> MobileMirrorTLSIdentitySweepResult {
+    ) {
         keychainLock.lock()
         defer { keychainLock.unlock() }
 
@@ -215,9 +203,6 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
                 deleteKey(tag: identity.tag, keychain: keychain)
             }
         }
-        return MobileMirrorTLSIdentitySweepResult(
-            matchedIdentityCount: taggedIdentities.count
-        )
     }
 
     deinit {
@@ -420,10 +405,6 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
         }
         return SecItemDelete(query as CFDictionary)
     }
-}
-
-struct MobileMirrorTLSIdentitySweepResult: Equatable, Sendable {
-    let matchedIdentityCount: Int
 }
 
 private enum DER {

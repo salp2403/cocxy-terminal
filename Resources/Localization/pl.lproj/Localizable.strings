@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "Połącz profil SSH lub użyj lokalnego przekaźnika.";
 "mobile.mirror.transport.detail.unavailable" = "Wybrany profil SSH jest niedostępny. Użyj innego połączonego profilu lub lokalnego przekaźnika.";
 "mobile.mirror.transport.localDetail" = "TLS szyfruje ten przekaźnik w sieci prywatnej. Serwery terminali pozostają na interfejsie loopback; żadna usługa chmurowa nie jest używana.";
-"mobile.mirror.security.title" = "Ochrona typu end-to-end";
-"mobile.mirror.security.detail" = "Dane wyjściowe terminala są szyfrowane, a działania uwierzytelniane za pomocą kodu QR.";
-"mobile.mirror.tls.warning" = "Przed sparowaniem telefon wyświetli ostrzeżenie o certyfikacie.";
+"mobile.mirror.security.title" = "Ochrona za pomocą klucza QR";
+"mobile.mirror.security.detail" = "Dane z klawiatury, wklejony tekst i wyjście terminala są szyfrowane kompleksowo za pomocą klucza QR.";
+"mobile.mirror.tls.warning" = "Przejdź dalej mimo ostrzeżenia o certyfikacie tylko po rozpoczęciu parowania w zaufanej sieci prywatnej.";
+"mobile.mirror.audit.unavailable" = "Lokalny dziennik audytu jest niedostępny.";
 "mobile.mirror.transport.sshOptional" = "Użyj połączonego profilu SSH";
 "mobile.mirror.transport.sshLabel" = "Bezpieczne połączenie SSH";
 "mobile.mirror.transport.sshDetail" = "Użycie SSH jest opcjonalne, a punkt końcowy parowania jest udostępniany tylko przez wybrane połączenie.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "Otwórz projekty";
 "mobile.web.projects.title" = "Projekty";
 "mobile.web.status.authenticationFailed" = "Uwierzytelnianie nie powiodło się";
+"mobile.web.status.clipboardUnavailable" = "Odpowiedzi schowka są niedostępne w bezpiecznym trybie mobilnym";
 "mobile.web.status.inputRejected" = "Odrzucono dane wejściowe";
+"mobile.web.status.readOnly" = "Terminal jest tylko do odczytu";
+"mobile.web.status.rescanRequired" = "Zeskanuj nowy kod QR na Macu, aby połączyć się ponownie";
 "mobile.web.status.syncing" = "Synchronizowanie...";
 "mobile.web.status.unavailable" = "Terminal webowy jest niedostępny";
 "mobile.web.terminal.input" = "Wpisz w terminalu";

@@ -39,7 +39,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             userAgent: "Mobile Browser"
         )
         let offer = authority.makeOffer()
-        let sessionKeys = try sessionKeys(for: offer)
+        let sessionKeys = try MobileMirrorEncryptedActionTestSupport.sessionKeys(for: offer)
 
         let pairResult = await router.route(
             request: request(
@@ -64,6 +64,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let setCookie = try #require(pollResponse.headers["Set-Cookie"])
         #expect(setCookie.contains("HttpOnly"))
         #expect(setCookie.contains("SameSite=Strict"))
+        #expect(setCookie.contains("; Secure"))
         let cookie = try #require(setCookie
             .split(separator: ";").first?
             .split(separator: "=", maxSplits: 1).last
@@ -90,7 +91,13 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
                 userAgent: "Mobile Browser"
             )
         )
-        #expect(try response(from: foreignBootstrap).status == 401)
+        let foreignBootstrapResponse = try response(from: foreignBootstrap)
+        #expect(foreignBootstrapResponse.status == 401)
+        let foreignBootstrapPayload = try #require(
+            JSONSerialization.jsonObject(with: foreignBootstrapResponse.body) as? [String: Any]
+        )
+        #expect(foreignBootstrapPayload["error"] as? String ==
+            "Escanea un nuevo código QR en el Mac para volver a conectarte")
 
         let bootstrapResult = await router.route(
             request: request(
@@ -104,6 +111,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             from: try response(from: bootstrapResult).body
         )
         #expect(bootstrap.snapshot == snapshot)
+        #expect(bootstrap.channelID == offer.id.uuidString.lowercased())
         #expect(bootstrap.locale == "es")
         #expect(bootstrap.direction == "ltr")
         #expect(bootstrap.catalog["mobile.web.projects.title"] == "Proyectos")
@@ -146,26 +154,20 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             sessionID: UUID().uuidString,
             surfaceID: UUID().uuidString
         )
-        let body = try JSONEncoder().encode(action)
-        let timestamp = String(UInt64(Date().timeIntervalSince1970))
-        let nonce = UUID().uuidString
-        let signedActionSignature = signature(
-            body: body,
-            timestamp: timestamp,
-            nonce: nonce,
-            actionToken: sessionKeys.actionToken
+        let body = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            action: action,
+            key: sessionKeys.terminalInputEncryptionKey,
+            sequence: 0
         )
         let signedRequest = request(
             method: "POST",
             path: "/mobile/api/action",
-            headers: [
-                "cookie": "cocxy_mobile=\(cookie)",
-                "origin": "https://127.0.0.1:43120",
-                "content-type": "application/json",
-                "x-cocxy-timestamp": timestamp,
-                "x-cocxy-nonce": nonce,
-                "x-cocxy-signature": signedActionSignature,
-            ],
+            headers: MobileMirrorEncryptedActionTestSupport.signedHeaders(
+                body: body,
+                actionToken: sessionKeys.actionToken,
+                cookie: cookie,
+                origin: "https://127.0.0.1:43120"
+            ),
             body: body
         )
         let actionResult = await router.route(request: signedRequest, identity: identity)
@@ -176,42 +178,57 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(try response(from: replayResult).status == 403)
         #expect(await actionRecorder.values == [action])
 
+        var invalidSignatureHeaders = MobileMirrorEncryptedActionTestSupport.signedHeaders(
+            body: body,
+            actionToken: sessionKeys.actionToken,
+            cookie: cookie,
+            origin: "https://127.0.0.1:43120"
+        )
+        invalidSignatureHeaders["x-cocxy-signature"] = "bad"
         let invalidSignatureRequest = request(
             method: "POST",
             path: "/mobile/api/action",
-            headers: [
-                "cookie": "cocxy_mobile=\(cookie)",
-                "origin": "https://127.0.0.1:43120",
-                "content-type": "application/json",
-                "x-cocxy-timestamp": String(UInt64(Date().timeIntervalSince1970)),
-                "x-cocxy-nonce": UUID().uuidString,
-                "x-cocxy-signature": "bad",
-            ],
+            headers: invalidSignatureHeaders,
             body: body
         )
         #expect(try response(
             from: await router.route(request: invalidSignatureRequest, identity: identity)
         ).status == 403)
 
-        let malformedBody = Data("{".utf8)
-        let malformedTimestamp = String(UInt64(Date().timeIntervalSince1970))
-        let malformedNonce = UUID().uuidString
+        let wrongKeyBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            action: action,
+            key: Data(repeating: 0xA5, count: 32),
+            sequence: 1
+        )
+        let wrongKeyRequest = request(
+            method: "POST",
+            path: "/mobile/api/action",
+            headers: MobileMirrorEncryptedActionTestSupport.signedHeaders(
+                body: wrongKeyBody,
+                actionToken: sessionKeys.actionToken,
+                cookie: cookie,
+                origin: "https://127.0.0.1:43120"
+            ),
+            body: wrongKeyBody
+        )
+        #expect(try response(
+            from: await router.route(request: wrongKeyRequest, identity: identity)
+        ).status == 403)
+
+        let malformedBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            plaintext: Data("{".utf8),
+            key: sessionKeys.terminalInputEncryptionKey,
+            sequence: 1
+        )
         let malformedRequest = request(
             method: "POST",
             path: "/mobile/api/action",
-            headers: [
-                "cookie": "cocxy_mobile=\(cookie)",
-                "origin": "https://127.0.0.1:43120",
-                "content-type": "application/json",
-                "x-cocxy-timestamp": malformedTimestamp,
-                "x-cocxy-nonce": malformedNonce,
-                "x-cocxy-signature": signature(
-                    body: malformedBody,
-                    timestamp: malformedTimestamp,
-                    nonce: malformedNonce,
-                    actionToken: sessionKeys.actionToken
-                ),
-            ],
+            headers: MobileMirrorEncryptedActionTestSupport.signedHeaders(
+                body: malformedBody,
+                actionToken: sessionKeys.actionToken,
+                cookie: cookie,
+                origin: "https://127.0.0.1:43120"
+            ),
             body: malformedBody
         )
         #expect(try response(
@@ -220,6 +237,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(await rejectionRecorder.reasons == [
             .replayDetected,
             .invalidSignature,
+            .invalidEnvelope,
             .malformedAction,
         ])
 
@@ -230,26 +248,21 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             controlType: "viewport-scroll",
             scrollDelta: 3
         )
-        let terminalBody = try JSONEncoder().encode(terminalAction)
-        let terminalTimestamp = String(UInt64(Date().timeIntervalSince1970))
-        let terminalNonce = UUID().uuidString
+        let terminalBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            action: terminalAction,
+            key: sessionKeys.terminalInputEncryptionKey,
+            sequence: 2
+        )
         let terminalResult = await router.route(
             request: request(
                 method: "POST",
                 path: "/mobile/api/action",
-                headers: [
-                    "cookie": "cocxy_mobile=\(cookie)",
-                    "origin": "https://127.0.0.1:43120",
-                    "content-type": "application/json",
-                    "x-cocxy-timestamp": terminalTimestamp,
-                    "x-cocxy-nonce": terminalNonce,
-                    "x-cocxy-signature": self.signature(
-                        body: terminalBody,
-                        timestamp: terminalTimestamp,
-                        nonce: terminalNonce,
-                        actionToken: sessionKeys.actionToken
-                    ),
-                ],
+                headers: MobileMirrorEncryptedActionTestSupport.signedHeaders(
+                    body: terminalBody,
+                    actionToken: sessionKeys.actionToken,
+                    cookie: cookie,
+                    origin: "https://127.0.0.1:43120"
+                ),
                 body: terminalBody
             ),
             identity: identity
@@ -309,27 +322,22 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             return
         }
 
-        for _ in 0..<32 {
-            let sustainedBody = try JSONEncoder().encode(terminalAction)
-            let sustainedTimestamp = String(UInt64(Date().timeIntervalSince1970))
-            let sustainedNonce = UUID().uuidString
+        for index in 0..<32 {
+            let sustainedBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+                action: terminalAction,
+                key: sessionKeys.terminalInputEncryptionKey,
+                sequence: UInt64(index + 3)
+            )
             let sustainedResult = await router.route(
                 request: request(
                     method: "POST",
                     path: "/mobile/api/action",
-                    headers: [
-                        "cookie": "cocxy_mobile=\(cookie)",
-                        "origin": "https://127.0.0.1:43120",
-                        "content-type": "application/json",
-                        "x-cocxy-timestamp": sustainedTimestamp,
-                        "x-cocxy-nonce": sustainedNonce,
-                        "x-cocxy-signature": self.signature(
-                            body: sustainedBody,
-                            timestamp: sustainedTimestamp,
-                            nonce: sustainedNonce,
-                            actionToken: sessionKeys.actionToken
-                        ),
-                    ],
+                    headers: MobileMirrorEncryptedActionTestSupport.signedHeaders(
+                        body: sustainedBody,
+                        actionToken: sessionKeys.actionToken,
+                        cookie: cookie,
+                        origin: "https://127.0.0.1:43120"
+                    ),
                     body: sustainedBody
                 ),
                 identity: identity
@@ -377,6 +385,39 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(legacy.channelID.isEmpty)
     }
 
+    @Test("SSH tunnel session cookie remains usable over loopback HTTP")
+    func SSHTunnelCookieOmitsSecureAttribute() async throws {
+        let authority = MobileMirrorPairingAuthority()
+        let identity = MobileMirrorClientIdentity(
+            remoteAddress: "SSH workstation",
+            userAgent: "Mobile Browser"
+        )
+        let offer = authority.makeOffer()
+        let pending = try authority.consumeOffer(token: offer.token, identity: identity)
+        _ = try authority.decide(pendingID: pending.id, approve: true)
+        let router = MobileMirrorRequestRouter(
+            publicAddress: "127.0.0.1",
+            transport: .sshTunnel,
+            authority: authority,
+            routeRegistry: MobileMirrorRouteRegistry(),
+            snapshotProvider: { _ in .empty },
+            actionHandler: { _, _, _, _ in .empty },
+            pendingPairingHandler: { _ in }
+        )
+        router.updatePublicPort(43120)
+
+        let result = await router.route(
+            request: request(
+                path: "/mobile/api/pair-status",
+                query: ["id": pending.id.uuidString]
+            ),
+            identity: identity
+        )
+        let setCookie = try #require(try response(from: result).headers["Set-Cookie"])
+        #expect(setCookie.contains("HttpOnly"))
+        #expect(!setCookie.contains("; Secure"))
+    }
+
     @Test("audit persistence failure blocks an unaudited action rejection")
     func auditFailureBlocksRejectedActionResponse() async throws {
         let authority = MobileMirrorPairingAuthority()
@@ -397,6 +438,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             transport: .sshTunnel,
             authority: authority,
             routeRegistry: MobileMirrorRouteRegistry(),
+            localization: try webLocalization(.spanish),
             snapshotProvider: { _ in .empty },
             actionHandler: { action, _, _, _ in
                 await actionRecorder.record(action)
@@ -422,7 +464,13 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             identity: identity
         )
 
-        #expect(try response(from: result).status == 503)
+        let failure = try response(from: result)
+        #expect(failure.status == 503)
+        let payload = try #require(
+            JSONSerialization.jsonObject(with: failure.body) as? [String: Any]
+        )
+        #expect(payload["error"] as? String ==
+            "El registro de auditoría local no está disponible.")
         #expect(await actionRecorder.values.isEmpty)
     }
 
@@ -477,6 +525,20 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(target.bearerToken == "compiled-assets")
         #expect(target.rewrittenPath == "/mobile_ui.js")
 
+        let assetWebSocket = await router.route(
+            request: request(
+                path: "/mobile_ui.js",
+                host: "127.0.0.1:4444",
+                headers: [
+                    "cookie": "cocxy_mobile=\(cookie)",
+                    "origin": "http://127.0.0.1:4444",
+                    "upgrade": "websocket",
+                ]
+            ),
+            identity: identity
+        )
+        #expect(try response(from: assetWebSocket).status == 404)
+
         let internalAsset = await router.route(
             request: request(
                 path: "/tests/render-smoke.html",
@@ -521,31 +583,6 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         return response
     }
 
-    private func signature(
-        body: Data,
-        timestamp: String,
-        nonce: String,
-        actionToken: RelayToken
-    ) -> String {
-        let payload = MobileMirrorSessionKeys.canonicalActionPayload(
-            method: "POST",
-            path: "/mobile/api/action",
-            body: body,
-            timestamp: timestamp,
-            nonce: nonce
-        )
-        return MobileMirrorPairingAuthority.base64URL(
-            actionToken.sign(payload)
-        )
-    }
-
-    private func sessionKeys(for offer: MobileMirrorPairingOffer) throws -> MobileMirrorSessionKeys {
-        let secret = try #require(
-            MobileMirrorPairingAuthority.decodeBase64URL(offer.pairingSecret)
-        )
-        return MobileMirrorSessionKeys.derive(pairingSecret: secret, channelID: offer.id)
-    }
-
     private func webLocalization(_ language: AppLanguage) throws -> MobileMirrorWebLocalization {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let bundle = try #require(Bundle(
@@ -560,32 +597,4 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
 
 private enum MobileMirrorRouterTestError: Error {
     case expectedResponse
-}
-
-private actor MobileMirrorPendingRecorder {
-    private(set) var value: MobileMirrorPendingPairing?
-    func record(_ pending: MobileMirrorPendingPairing) { value = pending }
-}
-
-private actor MobileMirrorActionRecorder {
-    private(set) var values: [MobileMirrorAction] = []
-    func record(_ action: MobileMirrorAction) { values.append(action) }
-}
-
-private actor MobileMirrorRejectionRecorder {
-    private(set) var reasons: [MobileMirrorActionAudit.RejectionReason] = []
-
-    func record(
-        _ reason: MobileMirrorActionAudit.RejectionReason,
-        channelID: UUID,
-        identity: MobileMirrorClientIdentity
-    ) {
-        _ = channelID
-        _ = identity
-        reasons.append(reason)
-    }
-}
-
-private enum RelayAuditWriterTestFailure: Error {
-    case injected
 }

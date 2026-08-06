@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "Connect an SSH profile or use the local relay.";
 "mobile.mirror.transport.detail.unavailable" = "The selected SSH profile is unavailable. Use another connected profile or the local relay.";
 "mobile.mirror.transport.localDetail" = "TLS encrypts this private-network relay. Terminal servers stay on loopback; no cloud service is used.";
-"mobile.mirror.security.title" = "End-to-end protected";
-"mobile.mirror.security.detail" = "Terminal output is encrypted and actions are authenticated with the QR code.";
-"mobile.mirror.tls.warning" = "Your phone will show a certificate warning before pairing.";
+"mobile.mirror.security.title" = "Protected with the QR key";
+"mobile.mirror.security.detail" = "Keyboard input, pasted text, and terminal output are encrypted end to end with the QR key.";
+"mobile.mirror.tls.warning" = "Continue past the certificate warning only after starting this pairing on a trusted private network.";
+"mobile.mirror.audit.unavailable" = "The local audit log is unavailable.";
 "mobile.mirror.transport.sshOptional" = "Use a connected SSH profile";
 "mobile.mirror.transport.sshLabel" = "Secure SSH Connection";
 "mobile.mirror.transport.sshDetail" = "SSH is optional and publishes the pairing endpoint only through the selected connection.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "Open projects";
 "mobile.web.projects.title" = "Projects";
 "mobile.web.status.authenticationFailed" = "Authentication failed";
+"mobile.web.status.clipboardUnavailable" = "Clipboard responses are unavailable in secure mobile mode";
 "mobile.web.status.inputRejected" = "Input rejected";
+"mobile.web.status.readOnly" = "Terminal is read only";
+"mobile.web.status.rescanRequired" = "Scan a new QR code on the Mac to reconnect";
 "mobile.web.status.syncing" = "Syncing...";
 "mobile.web.status.unavailable" = "Web terminal unavailable";
 "mobile.web.terminal.input" = "Type in terminal";

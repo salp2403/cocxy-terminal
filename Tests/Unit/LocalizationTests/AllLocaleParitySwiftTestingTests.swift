@@ -337,14 +337,14 @@ struct AllLocaleParitySwiftTestingTests {
             #expect(strings["mobile.mirror.tls.fingerprint"] == nil)
             #expect(strings["mobile.mirror.tls.verify"] == nil)
             if locale != "en" {
-                #expect(securityTitle != "End-to-end protected")
+                #expect(securityTitle != "Protected with the QR key")
                 #expect(
                     securityDetail
-                        != "Terminal output is encrypted and actions are authenticated with the QR code."
+                        != "Keyboard input, pasted text, and terminal output are encrypted end to end with the QR key."
                 )
                 #expect(
                     tlsWarning
-                        != "Your phone will show a certificate warning before pairing."
+                        != "Continue past the certificate warning only after starting this pairing on a trusted private network."
                 )
             }
             for key in [
@@ -373,14 +373,14 @@ struct AllLocaleParitySwiftTestingTests {
             english["mobile.mirror.transport.localDetail"]
                 == "TLS encrypts this private-network relay. Terminal servers stay on loopback; no cloud service is used."
         )
-        #expect(english["mobile.mirror.security.title"] == "End-to-end protected")
+        #expect(english["mobile.mirror.security.title"] == "Protected with the QR key")
         #expect(
             english["mobile.mirror.security.detail"]
-                == "Terminal output is encrypted and actions are authenticated with the QR code."
+                == "Keyboard input, pasted text, and terminal output are encrypted end to end with the QR key."
         )
         #expect(
             english["mobile.mirror.tls.warning"]
-                == "Your phone will show a certificate warning before pairing."
+                == "Continue past the certificate warning only after starting this pairing on a trusted private network."
         )
         #expect(english["mobile.mirror.transport.sshOptional"] == "Use a connected SSH profile")
         #expect(

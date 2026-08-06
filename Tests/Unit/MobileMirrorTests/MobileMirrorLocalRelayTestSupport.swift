@@ -177,3 +177,7 @@ func testCertificateFingerprint(_ certificateData: Data) -> String {
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: "=", with: "")
 }
+
+func testCertificateFingerprint(_ certificate: SecCertificate) -> String {
+    testCertificateFingerprint(SecCertificateCopyData(certificate) as Data)
+}

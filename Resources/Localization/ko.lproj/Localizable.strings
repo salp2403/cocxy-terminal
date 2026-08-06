@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "SSH 프로필을 연결하거나 로컬 릴레이를 사용하십시오.";
 "mobile.mirror.transport.detail.unavailable" = "선택한 SSH 프로필을 사용할 수 없습니다. 연결된 다른 프로필이나 로컬 릴레이를 사용하십시오.";
 "mobile.mirror.transport.localDetail" = "TLS가 이 개인 네트워크 릴레이를 암호화합니다. 터미널 서버는 루프백에 유지되며 클라우드 서비스는 사용되지 않습니다.";
-"mobile.mirror.security.title" = "종단 간 보호";
-"mobile.mirror.security.detail" = "터미널 출력은 암호화되며 작업은 QR 코드로 인증됩니다.";
-"mobile.mirror.tls.warning" = "페어링 전에 휴대폰에 인증서 경고가 표시됩니다.";
+"mobile.mirror.security.title" = "QR 키로 보호됨";
+"mobile.mirror.security.detail" = "키보드 입력, 붙여넣은 텍스트 및 터미널 출력은 QR 키로 종단 간 암호화됩니다.";
+"mobile.mirror.tls.warning" = "신뢰할 수 있는 개인 네트워크에서 이 페어링을 시작한 경우에만 인증서 경고를 지나 계속하십시오.";
+"mobile.mirror.audit.unavailable" = "로컬 감사 로그를 사용할 수 없습니다.";
 "mobile.mirror.transport.sshOptional" = "연결된 SSH 프로필 사용";
 "mobile.mirror.transport.sshLabel" = "보안 SSH 연결";
 "mobile.mirror.transport.sshDetail" = "SSH는 선택 사항이며 페어링 엔드포인트는 선택한 연결을 통해서만 공개됩니다.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "프로젝트 열기";
 "mobile.web.projects.title" = "프로젝트";
 "mobile.web.status.authenticationFailed" = "인증 실패";
+"mobile.web.status.clipboardUnavailable" = "보안 모바일 모드에서는 클립보드 응답을 사용할 수 없습니다";
 "mobile.web.status.inputRejected" = "입력이 거부되었습니다";
+"mobile.web.status.readOnly" = "터미널이 읽기 전용입니다";
+"mobile.web.status.rescanRequired" = "다시 연결하려면 Mac에서 새 QR 코드를 스캔하십시오";
 "mobile.web.status.syncing" = "동기화 중...";
 "mobile.web.status.unavailable" = "웹 터미널을 사용할 수 없습니다";
 "mobile.web.terminal.input" = "터미널에 입력";

@@ -7,9 +7,11 @@ import Foundation
 struct MobileMirrorSessionKeys: Sendable {
     static let authenticationInfo = Data("dev.cocxy.mobile.action.v1".utf8)
     static let terminalEncryptionInfo = Data("dev.cocxy.mobile.terminal.v1".utf8)
+    static let terminalInputEncryptionInfo = Data("dev.cocxy.mobile.terminal.input.v1".utf8)
 
     let actionToken: RelayToken
     let terminalEncryptionKey: Data
+    let terminalInputEncryptionKey: Data
 
     static func derive(pairingSecret: Data, channelID: UUID) -> Self {
         let inputKeyMaterial = SymmetricKey(data: pairingSecret)
@@ -26,9 +28,16 @@ struct MobileMirrorSessionKeys: Sendable {
             info: terminalEncryptionInfo,
             outputByteCount: 32
         )
+        let inputEncryptionKey = HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: inputKeyMaterial,
+            salt: salt,
+            info: terminalInputEncryptionInfo,
+            outputByteCount: 32
+        )
         return Self(
             actionToken: RelayToken(secret: authenticationKey.data),
-            terminalEncryptionKey: encryptionKey.data
+            terminalEncryptionKey: encryptionKey.data,
+            terminalInputEncryptionKey: inputEncryptionKey.data
         )
     }
 

@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "連接 SSH 設定檔，或使用本機轉送。";
 "mobile.mirror.transport.detail.unavailable" = "所選 SSH 設定檔無法使用。請使用其他已連接的設定檔或本機轉送。";
 "mobile.mirror.transport.localDetail" = "TLS 會加密此私人網路轉送。終端機伺服器仍繫結至迴路介面；不使用任何雲端服務。";
-"mobile.mirror.security.title" = "端對端保護";
-"mobile.mirror.security.detail" = "終端輸出會加密，操作則透過 QR Code 驗證。";
-"mobile.mirror.tls.warning" = "配對前，手機會顯示憑證警告。";
+"mobile.mirror.security.title" = "使用 QR 金鑰保護";
+"mobile.mirror.security.detail" = "鍵盤輸入、貼上的文字和終端輸出都會使用 QR 金鑰進行端對端加密。";
+"mobile.mirror.tls.warning" = "只有在受信任的私人網路上開始這次配對時，才可略過憑證警告繼續操作。";
+"mobile.mirror.audit.unavailable" = "本機稽核記錄無法使用。";
 "mobile.mirror.transport.sshOptional" = "使用已連接的 SSH 設定檔";
 "mobile.mirror.transport.sshLabel" = "安全 SSH 連線";
 "mobile.mirror.transport.sshDetail" = "SSH 為選用方式，且只會透過所選連線發佈配對端點。";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "開啟專案";
 "mobile.web.projects.title" = "專案";
 "mobile.web.status.authenticationFailed" = "驗證失敗";
+"mobile.web.status.clipboardUnavailable" = "安全行動模式無法使用剪貼簿回應";
 "mobile.web.status.inputRejected" = "輸入遭拒";
+"mobile.web.status.readOnly" = "終端為唯讀模式";
+"mobile.web.status.rescanRequired" = "請在 Mac 上掃描新的 QR Code 以重新連線";
 "mobile.web.status.syncing" = "正在同步...";
 "mobile.web.status.unavailable" = "Web 終端機無法使用";
 "mobile.web.terminal.input" = "在終端機中輸入";

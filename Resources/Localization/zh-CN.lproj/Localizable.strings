@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "连接 SSH 配置，或使用本地中继。";
 "mobile.mirror.transport.detail.unavailable" = "所选 SSH 配置不可用。请使用其他已连接的配置或本地中继。";
 "mobile.mirror.transport.localDetail" = "TLS 会加密此专用网络中继。终端服务器仍绑定到环回接口；不使用任何云服务。";
-"mobile.mirror.security.title" = "端到端保护";
-"mobile.mirror.security.detail" = "终端输出会加密，操作通过二维码进行身份验证。";
-"mobile.mirror.tls.warning" = "配对前，手机会显示证书警告。";
+"mobile.mirror.security.title" = "使用二维码密钥保护";
+"mobile.mirror.security.detail" = "键盘输入、粘贴文本和终端输出均使用二维码密钥进行端到端加密。";
+"mobile.mirror.tls.warning" = "只有在受信任的专用网络上发起了此次配对，才可绕过证书警告继续操作。";
+"mobile.mirror.audit.unavailable" = "本地审核日志不可用。";
 "mobile.mirror.transport.sshOptional" = "使用已连接的 SSH 配置";
 "mobile.mirror.transport.sshLabel" = "安全 SSH 连接";
 "mobile.mirror.transport.sshDetail" = "SSH 为可选方式，且仅通过所选连接发布配对端点。";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "打开项目";
 "mobile.web.projects.title" = "项目";
 "mobile.web.status.authenticationFailed" = "身份验证失败";
+"mobile.web.status.clipboardUnavailable" = "安全移动模式下无法使用剪贴板响应";
 "mobile.web.status.inputRejected" = "输入被拒绝";
+"mobile.web.status.readOnly" = "终端为只读模式";
+"mobile.web.status.rescanRequired" = "请在 Mac 上扫描新的二维码以重新连接";
 "mobile.web.status.syncing" = "正在同步...";
 "mobile.web.status.unavailable" = "Web 终端不可用";
 "mobile.web.terminal.input" = "在终端中输入";

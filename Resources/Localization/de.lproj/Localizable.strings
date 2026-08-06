@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "Verbinden Sie ein SSH-Profil oder verwenden Sie den lokalen Vermittlungsdienst.";
 "mobile.mirror.transport.detail.unavailable" = "Das ausgewählte SSH-Profil ist nicht verfügbar. Verwenden Sie ein anderes verbundenes Profil oder den lokalen Vermittlungsdienst.";
 "mobile.mirror.transport.localDetail" = "TLS verschlüsselt diesen Relay im privaten Netzwerk. Terminalserver bleiben an Loopback gebunden; es wird kein Cloud-Dienst verwendet.";
-"mobile.mirror.security.title" = "Ende-zu-Ende-geschützt";
-"mobile.mirror.security.detail" = "Die Terminalausgabe ist verschlüsselt, und Aktionen werden mit dem QR-Code authentifiziert.";
-"mobile.mirror.tls.warning" = "Ihr Telefon zeigt vor dem Koppeln eine Zertifikatswarnung an.";
+"mobile.mirror.security.title" = "Mit dem QR-Schlüssel geschützt";
+"mobile.mirror.security.detail" = "Tastatureingaben, eingefügter Text und Terminalausgaben werden mit dem QR-Schlüssel Ende-zu-Ende verschlüsselt.";
+"mobile.mirror.tls.warning" = "Fahren Sie nach der Zertifikatswarnung nur fort, wenn Sie diese Kopplung in einem vertrauenswürdigen privaten Netzwerk gestartet haben.";
+"mobile.mirror.audit.unavailable" = "Das lokale Auditprotokoll ist nicht verfügbar.";
 "mobile.mirror.transport.sshOptional" = "Verbundenes SSH-Profil verwenden";
 "mobile.mirror.transport.sshLabel" = "Sichere SSH-Verbindung";
 "mobile.mirror.transport.sshDetail" = "SSH ist optional und stellt den Kopplungsendpunkt nur über die ausgewählte Verbindung bereit.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "Projekte öffnen";
 "mobile.web.projects.title" = "Projekte";
 "mobile.web.status.authenticationFailed" = "Authentifizierung fehlgeschlagen";
+"mobile.web.status.clipboardUnavailable" = "Zwischenablageantworten sind im sicheren Mobilmodus nicht verfügbar";
 "mobile.web.status.inputRejected" = "Eingabe abgelehnt";
+"mobile.web.status.readOnly" = "Das Terminal ist schreibgeschützt";
+"mobile.web.status.rescanRequired" = "Scannen Sie zum erneuten Verbinden einen neuen QR-Code auf dem Mac";
 "mobile.web.status.syncing" = "Synchronisierung...";
 "mobile.web.status.unavailable" = "Web-Terminal ist nicht verfügbar";
 "mobile.web.terminal.input" = "Im Terminal eingeben";

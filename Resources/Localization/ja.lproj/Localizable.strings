@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "SSH プロファイルを接続するか、ローカルリレーを使用してください。";
 "mobile.mirror.transport.detail.unavailable" = "選択した SSH プロファイルは利用できません。接続済みの別のプロファイルまたはローカルリレーを使用してください。";
 "mobile.mirror.transport.localDetail" = "TLS がこのプライベートネットワークのリレーを暗号化します。ターミナルサーバーはループバック上に留まり、クラウドサービスは使用されません。";
-"mobile.mirror.security.title" = "エンドツーエンドで保護";
-"mobile.mirror.security.detail" = "ターミナル出力は暗号化され、操作はQRコードで認証されます。";
-"mobile.mirror.tls.warning" = "ペアリング前に、スマートフォンに証明書の警告が表示されます。";
+"mobile.mirror.security.title" = "QRキーで保護";
+"mobile.mirror.security.detail" = "キーボード入力、貼り付けたテキスト、ターミナル出力はQRキーでエンドツーエンド暗号化されます。";
+"mobile.mirror.tls.warning" = "信頼できるプライベートネットワークでこのペアリングを開始した場合にのみ、証明書の警告を越えて続行してください。";
+"mobile.mirror.audit.unavailable" = "ローカル監査ログを利用できません。";
 "mobile.mirror.transport.sshOptional" = "接続済みの SSH プロファイルを使用";
 "mobile.mirror.transport.sshLabel" = "安全な SSH 接続";
 "mobile.mirror.transport.sshDetail" = "SSH は任意であり、ペアリングエンドポイントは選択した接続を通じてのみ公開されます。";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "プロジェクトを開く";
 "mobile.web.projects.title" = "プロジェクト";
 "mobile.web.status.authenticationFailed" = "認証に失敗しました";
+"mobile.web.status.clipboardUnavailable" = "安全なモバイルモードではクリップボード応答を利用できません";
 "mobile.web.status.inputRejected" = "入力が拒否されました";
+"mobile.web.status.readOnly" = "ターミナルは読み取り専用です";
+"mobile.web.status.rescanRequired" = "再接続するにはMacで新しいQRコードをスキャンしてください";
 "mobile.web.status.syncing" = "同期中...";
 "mobile.web.status.unavailable" = "Webターミナルを利用できません";
 "mobile.web.terminal.input" = "ターミナルに入力";

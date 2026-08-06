@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "Conecta un perfil SSH o usa el relay local.";
 "mobile.mirror.transport.detail.unavailable" = "El perfil SSH seleccionado no está disponible. Usa otro perfil conectado o el relay local.";
 "mobile.mirror.transport.localDetail" = "TLS cifra este relay de red privada. Los servidores de terminal permanecen en loopback; no se usa ningún servicio en la nube.";
-"mobile.mirror.security.title" = "Protección de extremo a extremo";
-"mobile.mirror.security.detail" = "La salida del terminal está cifrada y las acciones se autentican con el código QR.";
-"mobile.mirror.tls.warning" = "Tu teléfono mostrará una advertencia de certificado antes de emparejarse.";
+"mobile.mirror.security.title" = "Protegido con la clave del QR";
+"mobile.mirror.security.detail" = "La entrada del teclado, el texto pegado y la salida del terminal se cifran de extremo a extremo con la clave del QR.";
+"mobile.mirror.tls.warning" = "Continúa tras la advertencia del certificado solo si iniciaste este emparejamiento en una red privada de confianza.";
+"mobile.mirror.audit.unavailable" = "El registro de auditoría local no está disponible.";
 "mobile.mirror.transport.sshOptional" = "Usar un perfil SSH conectado";
 "mobile.mirror.transport.sshLabel" = "Conexión SSH segura";
 "mobile.mirror.transport.sshDetail" = "SSH es opcional y publica el endpoint de emparejamiento solo mediante la conexión seleccionada.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "Abrir proyectos";
 "mobile.web.projects.title" = "Proyectos";
 "mobile.web.status.authenticationFailed" = "Falló la autenticación";
+"mobile.web.status.clipboardUnavailable" = "Las respuestas del portapapeles no están disponibles en el modo móvil seguro";
 "mobile.web.status.inputRejected" = "Entrada rechazada";
+"mobile.web.status.readOnly" = "El terminal es de solo lectura";
+"mobile.web.status.rescanRequired" = "Escanea un nuevo código QR en el Mac para volver a conectarte";
 "mobile.web.status.syncing" = "Sincronizando...";
 "mobile.web.status.unavailable" = "El terminal web no está disponible";
 "mobile.web.terminal.input" = "Escribe en el terminal";

@@ -63,12 +63,16 @@ struct MobileMirrorTLSE2ESwiftTestingTests {
             await router.route(request: request, identity: client)
         }
         let gatewayPort = try gateway.start()
+        let tlsIdentity = try MobileMirrorTestRelayTLSIdentity(
+            bindAddress: MobileMirrorGateway.loopbackAddress
+        )
         let relay = MobileMirrorLocalRelay(
             gatewayPort: gatewayPort,
             preambleSecret: relaySecret,
             addressProvider: { MobileMirrorGateway.loopbackAddress },
             bindAddressPolicy: { $0 == MobileMirrorGateway.loopbackAddress },
-            peerAddressNormalizer: { _ in remoteAddress }
+            peerAddressNormalizer: { _ in remoteAddress },
+            tlsIdentityProvider: tlsIdentity.provider
         )
         let lease = try await relay.start()
         defer {
@@ -78,7 +82,7 @@ struct MobileMirrorTLSE2ESwiftTestingTests {
         router.updatePublicPort(lease.port)
 
         let delegate = MobileMirrorE2ETLSTrustDelegate(
-            expectedFingerprint: lease.certificateFingerprint
+            expectedFingerprint: tlsIdentity.fingerprint
         )
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 3
@@ -92,15 +96,20 @@ struct MobileMirrorTLSE2ESwiftTestingTests {
         let origin = "https://\(lease.address):\(lease.port)"
 
         let action = MobileMirrorAction(kind: .projectCreate, name: "Relay E2E")
-        let body = try JSONEncoder().encode(action)
-        let timestamp = String(UInt64(Date().timeIntervalSince1970))
-        let nonce = UUID().uuidString
         let keys = MobileMirrorSessionKeys.derive(
             pairingSecret: try #require(
                 MobileMirrorPairingAuthority.decodeBase64URL(offer.pairingSecret)
             ),
             channelID: offer.id
         )
+        let body = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            action: action,
+            key: keys.terminalInputEncryptionKey,
+            sequence: 0
+        )
+        #expect(!String(decoding: body, as: UTF8.self).contains("Relay E2E"))
+        let timestamp = String(UInt64(Date().timeIntervalSince1970))
+        let nonce = UUID().uuidString
         let signature = MobileMirrorPairingAuthority.base64URL(keys.actionToken.sign(
             MobileMirrorSessionKeys.canonicalActionPayload(
                 method: "POST",
@@ -154,6 +163,7 @@ struct MobileMirrorTLSE2ESwiftTestingTests {
             key: keys.terminalEncryptionKey
         )
         #expect(decrypted.kind == 1)
+        #expect(decrypted.sequence == 0)
         #expect(String(decoding: decrypted.payload, as: UTF8.self) == "{\"type\":\"auth_ok\"}")
     }
 
@@ -181,17 +191,20 @@ struct MobileMirrorTLSE2ESwiftTestingTests {
     private static func decryptTerminalEnvelope(
         _ envelope: Data,
         key: Data
-    ) throws -> (kind: UInt8, payload: Data) {
-        let headerLength = 18
+    ) throws -> (kind: UInt8, sequence: UInt64, payload: Data) {
+        let headerLength = 26
         let tagLength = 16
         guard envelope.count >= headerLength + tagLength,
               envelope.prefix(4) == Data("CXYE".utf8),
-              envelope[4] == 1,
+              envelope[4] == 2,
               envelope[5] <= 1 else {
             throw MobileMirrorTLSE2EError.invalidEnvelope
         }
         let header = envelope.prefix(headerLength)
-        let nonce = try AES.GCM.Nonce(data: header.suffix(12))
+        let sequence = header[6..<14].reduce(into: UInt64.zero) { value, byte in
+            value = (value << 8) | UInt64(byte)
+        }
+        let nonce = try AES.GCM.Nonce(data: header[14..<26])
         let sealedBox = try AES.GCM.SealedBox(
             nonce: nonce,
             ciphertext: envelope[headerLength..<(envelope.count - tagLength)],
@@ -202,7 +215,7 @@ struct MobileMirrorTLSE2ESwiftTestingTests {
             using: SymmetricKey(data: key),
             authenticating: header
         )
-        return (envelope[5], plaintext)
+        return (envelope[5], sequence, plaintext)
     }
 }
 

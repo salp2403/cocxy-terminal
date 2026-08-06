@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "Подключите профиль SSH или используйте локальный ретранслятор.";
 "mobile.mirror.transport.detail.unavailable" = "Выбранный профиль SSH недоступен. Используйте другой подключённый профиль или локальный ретранслятор.";
 "mobile.mirror.transport.localDetail" = "TLS шифрует этот ретранслятор в частной сети. Серверы терминалов остаются на интерфейсе loopback; облачные службы не используются.";
-"mobile.mirror.security.title" = "Сквозная защита";
-"mobile.mirror.security.detail" = "Вывод терминала зашифрован, а действия подтверждаются с помощью QR-кода.";
-"mobile.mirror.tls.warning" = "Перед сопряжением телефон покажет предупреждение о сертификате.";
+"mobile.mirror.security.title" = "Защищено ключом QR-кода";
+"mobile.mirror.security.detail" = "Ввод с клавиатуры, вставленный текст и вывод терминала защищены сквозным шифрованием с ключом QR-кода.";
+"mobile.mirror.tls.warning" = "Продолжайте после предупреждения о сертификате, только если вы начали это сопряжение в доверенной частной сети.";
+"mobile.mirror.audit.unavailable" = "Локальный журнал аудита недоступен.";
 "mobile.mirror.transport.sshOptional" = "Использовать подключённый профиль SSH";
 "mobile.mirror.transport.sshLabel" = "Защищённое SSH-соединение";
 "mobile.mirror.transport.sshDetail" = "SSH необязателен и публикует конечную точку сопряжения только через выбранное подключение.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "Открыть проекты";
 "mobile.web.projects.title" = "Проекты";
 "mobile.web.status.authenticationFailed" = "Ошибка аутентификации";
+"mobile.web.status.clipboardUnavailable" = "Ответы буфера обмена недоступны в безопасном мобильном режиме";
 "mobile.web.status.inputRejected" = "Ввод отклонён";
+"mobile.web.status.readOnly" = "Терминал доступен только для чтения";
+"mobile.web.status.rescanRequired" = "Отсканируйте новый QR-код на Mac, чтобы подключиться снова";
 "mobile.web.status.syncing" = "Синхронизация...";
 "mobile.web.status.unavailable" = "Веб-терминал недоступен";
 "mobile.web.terminal.input" = "Введите текст в терминал";

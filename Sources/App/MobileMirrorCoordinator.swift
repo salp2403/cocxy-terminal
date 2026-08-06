@@ -36,6 +36,7 @@ final class MobileMirrorCoordinator: ObservableObject {
     let staticAssetServer = MobileMirrorStaticAssetServer()
     let projectService: any MobileMirrorProjectCreating
     let projectCreationConfirmation: MobileMirrorProjectCreationConfirmation
+    var configuredLocalizer: AppLocalizer?
     let relayManager: RelayManagerImpl
     let tunnelController: MobileMirrorSSHTunnelController
     var projectRecordsSnapshot: [ProjectRecord]
@@ -68,6 +69,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         tunnelController: MobileMirrorSSHTunnelController,
         authority: MobileMirrorPairingAuthority = MobileMirrorPairingAuthority(),
         projectService: any MobileMirrorProjectCreating = MobileMirrorProjectService(),
+        localizer: AppLocalizer? = nil,
         projectCreationConfirmation: MobileMirrorProjectCreationConfirmation? = nil
     ) {
         self.appDelegate = appDelegate
@@ -81,6 +83,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         self.tunnelController = tunnelController
         self.authority = authority
         self.projectService = projectService
+        self.configuredLocalizer = localizer
         self.projectCreationConfirmation = projectCreationConfirmation ?? { [weak appDelegate] name, identity in
             await MobileMirrorProjectConfirmationPresenter.confirm(
                 named: name,
@@ -140,6 +143,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         generation: UInt64
     ) async {
         let publicAddress = "127.0.0.1"
+        let transport = MobileMirrorRouterTransport.sshTunnel
         let staticAssetEndpoint: MobileMirrorStaticAssetEndpoint
         do {
             staticAssetEndpoint = try staticAssetServer.start()
@@ -149,7 +153,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         }
         let router = makePairingRouter(
             publicAddress: publicAddress,
-            transport: .sshTunnel,
+            transport: transport,
             staticAssetEndpoint: staticAssetEndpoint
         )
         let gateway = MobileMirrorGateway(
@@ -176,11 +180,11 @@ final class MobileMirrorCoordinator: ObservableObject {
             }
             router.updatePublicPort(lease.remotePort)
             let offer = authority.makeOffer()
-            guard let url = MobileMirrorPairingURL.sshTunnel(
+            guard let url = MobileMirrorPairingURL.make(
+                transport: transport,
                 address: publicAddress,
                 port: lease.remotePort,
-                token: offer.token,
-                pairingSecret: offer.pairingSecret
+                offer: offer
             ) else {
                 gateway.stop()
                 await closeUnpublishedTunnelLease(lease)
@@ -224,9 +228,10 @@ final class MobileMirrorCoordinator: ObservableObject {
         let preambleSecret = MobileMirrorPairingAuthority.base64URL(
             RelayToken.generate().secret
         )
+        let transport = MobileMirrorRouterTransport.localTLS
         let router = makePairingRouter(
             publicAddress: publicAddress,
-            transport: .localTLS,
+            transport: transport,
             staticAssetEndpoint: staticAssetEndpoint
         )
         let gateway = MobileMirrorGateway(
@@ -256,11 +261,11 @@ final class MobileMirrorCoordinator: ObservableObject {
             }
             router.updatePublicPort(lease.port)
             let offer = authority.makeOffer()
-            guard let url = MobileMirrorPairingURL.local(
+            guard let url = MobileMirrorPairingURL.make(
+                transport: transport,
                 address: lease.address,
                 port: lease.port,
-                token: offer.token,
-                pairingSecret: offer.pairingSecret
+                offer: offer
             ) else {
                 throw MobileMirrorError.unavailable
             }
@@ -283,8 +288,10 @@ final class MobileMirrorCoordinator: ObservableObject {
         }
     }
 
-    private var mobileMirrorLocalizer: AppLocalizer {
-        appDelegate?.appLocalizer() ?? AppLocalizer(languagePreference: .system)
+    var mobileMirrorLocalizer: AppLocalizer {
+        configuredLocalizer
+            ?? appDelegate?.appLocalizer()
+            ?? AppLocalizer(languagePreference: .system)
     }
 
     private func localizedLocalRelayError(_ error: any Error) -> String {
@@ -299,14 +306,12 @@ final class MobileMirrorCoordinator: ObservableObject {
         transport: MobileMirrorRouterTransport,
         staticAssetEndpoint: MobileMirrorStaticAssetEndpoint
     ) -> MobileMirrorRequestRouter {
-        let localizer = appDelegate?.appLocalizer()
-            ?? AppLocalizer(languagePreference: .system)
         return MobileMirrorRequestRouter(
             publicAddress: publicAddress,
             transport: transport,
             authority: authority,
             routeRegistry: routeRegistry,
-            localization: MobileMirrorWebLocalization(localizer: localizer),
+            localization: MobileMirrorWebLocalization(localizer: mobileMirrorLocalizer),
             staticAssetEndpoint: staticAssetEndpoint,
             snapshotProvider: { [weak self] cookie in
                 guard let self else { throw MobileMirrorError.unavailable }

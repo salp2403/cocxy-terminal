@@ -3569,9 +3569,10 @@
 "mobile.mirror.transport.unavailable" = "Conecte um perfil SSH ou use o retransmissor local.";
 "mobile.mirror.transport.detail.unavailable" = "O perfil SSH selecionado não está disponível. Use outro perfil conectado ou o retransmissor local.";
 "mobile.mirror.transport.localDetail" = "O TLS criptografa este retransmissor de rede privada. Os servidores de terminal permanecem em loopback; nenhum serviço de nuvem é usado.";
-"mobile.mirror.security.title" = "Proteção de ponta a ponta";
-"mobile.mirror.security.detail" = "A saída do terminal é criptografada e as ações são autenticadas com o código QR.";
-"mobile.mirror.tls.warning" = "Seu telefone exibirá um aviso de certificado antes do pareamento.";
+"mobile.mirror.security.title" = "Protegido com a chave do código QR";
+"mobile.mirror.security.detail" = "A entrada do teclado, o texto colado e a saída do terminal são criptografados de ponta a ponta com a chave do código QR.";
+"mobile.mirror.tls.warning" = "Avance após o aviso de certificado somente se iniciou este pareamento em uma rede privada confiável.";
+"mobile.mirror.audit.unavailable" = "O registro de auditoria local não está disponível.";
 "mobile.mirror.transport.sshOptional" = "Usar um perfil SSH conectado";
 "mobile.mirror.transport.sshLabel" = "Conexão SSH segura";
 "mobile.mirror.transport.sshDetail" = "O SSH é opcional e publica o endpoint de emparelhamento apenas pela conexão selecionada.";
@@ -3614,7 +3615,10 @@
 "mobile.web.projects.open" = "Abrir projetos";
 "mobile.web.projects.title" = "Projetos";
 "mobile.web.status.authenticationFailed" = "Falha na autenticação";
+"mobile.web.status.clipboardUnavailable" = "As respostas da área de transferência não estão disponíveis no modo móvel seguro";
 "mobile.web.status.inputRejected" = "Entrada rejeitada";
+"mobile.web.status.readOnly" = "O terminal é somente leitura";
+"mobile.web.status.rescanRequired" = "Escaneie um novo código QR no Mac para reconectar";
 "mobile.web.status.syncing" = "Sincronizando...";
 "mobile.web.status.unavailable" = "Terminal web indisponível";
 "mobile.web.terminal.input" = "Digite no terminal";

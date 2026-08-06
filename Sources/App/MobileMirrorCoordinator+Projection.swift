@@ -5,6 +5,7 @@ import Foundation
 
 extension MobileMirrorCoordinator {
     func updateLocalization(_ localizer: AppLocalizer) {
+        configuredLocalizer = localizer
         router?.updateLocalization(MobileMirrorWebLocalization(localizer: localizer))
         refreshSnapshotAndPublish()
     }
@@ -21,8 +22,7 @@ extension MobileMirrorCoordinator {
             return
         }
         synchronizeTerminalStreams()
-        let localizer = appDelegate?.appLocalizer()
-            ?? AppLocalizer(languagePreference: .system)
+        let localizer = mobileMirrorLocalizer
         var projectsByID: [String: MobileMirrorProjectSnapshot] = [:]
         for record in projectRecordsSnapshot {
             projectsByID[record.id.storageKey] = projectSnapshot(
