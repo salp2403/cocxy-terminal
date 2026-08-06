@@ -22,7 +22,7 @@ final class WebSocketTestProbe: @unchecked Sendable {
     private let task: URLSessionWebSocketTask
 
     init(port: UInt16, bearerToken: String, origin: String? = nil) throws {
-        let url = try #require(URL(string: "ws://127.0.0.1:\(port)/"))
+        let url = try #require(URL(string: "ws://127.0.0.1:\(port)/ws"))
         var request = URLRequest(url: url)
         request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
         if let origin {
