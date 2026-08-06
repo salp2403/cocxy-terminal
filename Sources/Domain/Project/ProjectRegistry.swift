@@ -3,6 +3,7 @@
 
 import Combine
 import Foundation
+import os.log
 
 struct ProjectRecord: Codable, Equatable, Sendable, Identifiable {
     let id: ProjectID
@@ -121,6 +122,10 @@ struct ProjectRegistryRecoveryDiagnostic: Equatable, Sendable {
 
 struct ProjectRegistryStore: Sendable {
     static let maximumQuarantineFiles = 5
+    private static let logger = Logger(
+        subsystem: "dev.cocxy.terminal",
+        category: "ProjectRegistryStore"
+    )
 
     let fileURL: URL
     private let fileManager: FileManager
@@ -188,6 +193,9 @@ struct ProjectRegistryStore: Sendable {
                 || migrated.count != records.count
                 || rawIDs != records.map(\.id.rawValue) {
                 try save(migrated)
+            }
+            if let quarantineFileURL {
+                pruneQuarantineFiles(keeping: quarantineFileURL)
             }
             return ProjectRegistryStoreLoadReport(
                 records: migrated,
@@ -266,18 +274,26 @@ struct ProjectRegistryStore: Sendable {
             [.posixPermissions: NSNumber(value: 0o600)],
             ofItemAtPath: quarantineURL.path
         )
-        try pruneQuarantineFiles(keeping: quarantineURL)
         return quarantineURL
     }
 
-    private func pruneQuarantineFiles(keeping newestURL: URL) throws {
+    private func pruneQuarantineFiles(keeping newestURL: URL) {
         let root = fileURL.deletingLastPathComponent()
         let keys: Set<URLResourceKey> = [.contentModificationDateKey, .isRegularFileKey]
-        let candidates = try fileManager.contentsOfDirectory(
-            at: root,
-            includingPropertiesForKeys: Array(keys),
-            options: [.skipsHiddenFiles]
-        ).filter { url in
+        let contents: [URL]
+        do {
+            contents = try fileManager.contentsOfDirectory(
+                at: root,
+                includingPropertiesForKeys: Array(keys),
+                options: [.skipsHiddenFiles]
+            )
+        } catch {
+            Self.logger.error(
+                "Unable to enumerate project registry quarantine files: \(String(describing: error), privacy: .private)"
+            )
+            return
+        }
+        let candidates = contents.filter { url in
             let name = url.lastPathComponent
             guard name.hasPrefix("registry-quarantine-"), name.hasSuffix(".json") else {
                 return false
@@ -294,7 +310,13 @@ struct ProjectRegistryStore: Sendable {
                 return lhs.lastPathComponent > rhs.lastPathComponent
             }
         for staleURL in older.dropFirst(Self.maximumQuarantineFiles - 1) {
-            try fileManager.removeItem(at: staleURL)
+            do {
+                try fileManager.removeItem(at: staleURL)
+            } catch {
+                Self.logger.error(
+                    "Unable to prune project registry quarantine file at \(staleURL.path, privacy: .private): \(String(describing: error), privacy: .private)"
+                )
+            }
         }
     }
 
@@ -368,6 +390,8 @@ final class ProjectRegistry: ObservableObject {
     @Published private(set) var persistenceErrorDescription: String?
     @Published private(set) var recoveryDiagnostic: ProjectRegistryRecoveryDiagnostic?
     let recordsDidChange = PassthroughSubject<[ProjectRecord], Never>()
+    /// Receives the durable incoming snapshot before `@Published` emits in `willSet`.
+    var recordsWillPublish: (([ProjectRecord]) -> Void)?
 
     private let store: ProjectRegistryStore
     private let clock: () -> Date
@@ -488,6 +512,7 @@ final class ProjectRegistry: ObservableObject {
         updated.sort(by: Self.sortRecords)
         do {
             try store.save(updated)
+            recordsWillPublish?(updated)
             records = updated
             persistenceErrorDescription = nil
             recordsDidChange.send(updated)

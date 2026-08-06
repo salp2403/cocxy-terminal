@@ -236,6 +236,143 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         #expect(try await seedStore.notes(in: developmentLegacyID).isEmpty)
     }
 
+    @Test("forgetting a non-git project root does not change its tab's notes workspace")
+    func notesIdentitySurvivesRegisteredRootForget() async throws {
+        let sandbox = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjectNotesForget-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let projectRoot = sandbox.appendingPathComponent("project", isDirectory: true)
+        let tabDirectory = projectRoot.appendingPathComponent("Sources/Feature", isDirectory: true)
+        let storageRoot = sandbox.appendingPathComponent("notes", isDirectory: true)
+        let registryURL = sandbox.appendingPathComponent("registry.json")
+        try FileManager.default.createDirectory(at: tabDirectory, withIntermediateDirectories: true)
+
+        let projectID = ProjectID(rootURL: projectRoot)
+        let projectName = ProjectDescriptor.automaticName(for: projectRoot)
+        let registry = ProjectRegistry(store: ProjectRegistryStore(fileURL: registryURL))
+        try registry.recordOpen(ProjectDescriptor(
+            id: projectID,
+            rootURL: ProjectPathCanonicalizer.canonicalURL(projectRoot),
+            automaticName: projectName,
+            displayName: projectName,
+            parent: nil
+        ))
+        let resolver = CachedProjectResolver(projectRegistry: registry, cacheTTL: 60)
+
+        let provider = InMemoryConfigProvider(content: """
+        [notes]
+        enabled = true
+        storage-dir = "\(storageRoot.path)"
+        format = "markdown"
+        """)
+        let configService = ConfigService(fileProvider: provider)
+        try configService.reload()
+        let tabManager = TabManager()
+        let tabID = try #require(tabManager.tabs.first?.id)
+        tabManager.updateTab(id: tabID) { tab in
+            tab.workingDirectory = tabDirectory
+            tab.worktreeRoot = nil
+            tab.worktreeOriginRepo = nil
+        }
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            tabManager: tabManager,
+            projectResolver: resolver
+        )
+        let canonicalTabRoot = ProjectPathCanonicalizer.canonicalURL(tabDirectory)
+        let workspaceID = NoteWorkspaceID(workspaceRoot: canonicalTabRoot)
+        let seedStore = NoteStore(storageRoot: storageRoot, format: .markdown)
+        let note = try await seedStore.create(in: workspaceID, body: "# Stable after forget")
+
+        let beforeSource = try #require(AuroraSourceBuilder.buildSources(
+            tabs: tabManager.tabs,
+            surfaceIDsByTab: [:],
+            store: AgentStatePerSurfaceStore(),
+            projectResolver: resolver
+        ).first)
+        #expect(beforeSource.workspaceGroup == projectID.rawValue)
+        #expect(beforeSource.workspaceRootPath == canonicalTabRoot.path)
+
+        let viewModel = controller.resolveNotesViewModel(config: configService.current.notes)
+        await controller.loadNotesForVisibleTab(using: viewModel)
+        #expect(viewModel.workspace?.workspaceID == workspaceID)
+        #expect(viewModel.notes.map(\.id) == [note.id])
+
+        try registry.forget(projectID)
+        #expect(resolver.resolveProject(for: tabDirectory).id == ProjectID(rootURL: tabDirectory))
+        await controller.loadNotesForVisibleTab(using: viewModel)
+        let afterSource = try #require(AuroraSourceBuilder.buildSources(
+            tabs: tabManager.tabs,
+            surfaceIDsByTab: [:],
+            store: AgentStatePerSurfaceStore(),
+            projectResolver: resolver
+        ).first)
+
+        #expect(afterSource.workspaceRootPath == beforeSource.workspaceRootPath)
+        #expect(viewModel.workspace?.workspaceID == workspaceID)
+        #expect(viewModel.notes.map(\.id) == [note.id])
+    }
+
+    @Test("a symlinked non-worktree migrates when one legacy identity is already canonical")
+    func symlinkNotesMigrationSkipsOnlyCanonicalCandidate() async throws {
+        let caches = try #require(
+            FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        )
+        let sandbox = caches
+            .appendingPathComponent("ProjectNotesSymlink-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let physical = sandbox.appendingPathComponent("physical", isDirectory: true)
+        let alias = sandbox.appendingPathComponent("alias", isDirectory: true)
+        let storageRoot = sandbox.appendingPathComponent("notes", isDirectory: true)
+        try FileManager.default.createDirectory(at: physical, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: physical)
+
+        let provider = InMemoryConfigProvider(content: """
+        [notes]
+        enabled = true
+        storage-dir = "\(storageRoot.path)"
+        format = "markdown"
+        """)
+        let configService = ConfigService(fileProvider: provider)
+        try configService.reload()
+        let tabManager = TabManager()
+        let tabID = try #require(tabManager.tabs.first?.id)
+        tabManager.updateTab(id: tabID) { tab in
+            tab.workingDirectory = alias
+            tab.worktreeRoot = nil
+            tab.worktreeOriginRepo = nil
+        }
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            tabManager: tabManager,
+            projectResolver: CachedProjectResolver()
+        )
+        let canonicalRoot = ProjectPathCanonicalizer.canonicalURL(alias)
+        let canonicalID = NoteWorkspaceID(workspaceRoot: canonicalRoot)
+        let publishedLegacyID = NoteWorkspaceID(workspaceRoot: alias.standardizedFileURL)
+        let developmentLegacyID = NoteWorkspaceID(
+            workspaceRoot: ProjectPathCanonicalizer.canonicalURL(alias)
+        )
+        #expect(publishedLegacyID != canonicalID)
+        #expect(developmentLegacyID == canonicalID)
+        let seedStore = NoteStore(storageRoot: storageRoot, format: .markdown)
+        let note = try await seedStore.create(
+            in: publishedLegacyID,
+            body: "# Published symlink note"
+        )
+
+        let summaries = await controller.fetchAuroraNotesSummaries(for: [canonicalID.rawValue])
+        let viewModel = controller.resolveNotesViewModel(config: configService.current.notes)
+        await controller.loadNotesForVisibleTab(using: viewModel)
+
+        #expect(summaries[canonicalID.rawValue]?.count == 1)
+        #expect(viewModel.workspace?.workspaceID == canonicalID)
+        #expect(viewModel.notes.map(\.id) == [note.id])
+        #expect(try await seedStore.notes(in: publishedLegacyID).isEmpty)
+    }
+
     @Test("workspace rename migrates every open worktree alias to the folded identity")
     func renameMigratesLegacyWorktreeAlias() throws {
         let suiteName = "ProjectAuroraRenameTests.\(UUID().uuidString)"

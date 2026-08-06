@@ -6,7 +6,7 @@ import Testing
 @testable import CocxyTerminal
 
 @MainActor
-@Suite("Project registry Aurora integration")
+@Suite("Project registry Aurora integration", .serialized)
 struct ProjectAuroraRegistrySwiftTestingTests {
     @Test("project live in another window reaches Aurora with alias and pin state")
     func crossWindowLiveProjectProjection() throws {
@@ -102,10 +102,67 @@ struct ProjectAuroraRegistrySwiftTestingTests {
         )
     }
 
+    @Test("registry recovery warning renders localized text in the mounted sidebar")
+    func registryRecoveryRendersInSidebarSurface() throws {
+        let sandbox = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let registryURL = sandbox.appendingPathComponent("registry.json")
+        try Data(#"[{"id":"/tmp/valid-project"},"invalid"]"#.utf8)
+            .write(to: registryURL)
+        let registry = ProjectRegistry(store: ProjectRegistryStore(fileURL: registryURL))
+        let tabManager = TabManager()
+        let store = AgentStatePerSurfaceStore()
+        let controller = AuroraChromeController(
+            tabManager: tabManager,
+            store: store,
+            projectRegistry: registry
+        )
+        let localizationBundle = try #require(Bundle(url:
+            URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                .appendingPathComponent("Resources/Localization", isDirectory: true)
+        ))
+        controller.localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: localizationBundle
+        )
+        controller.beginObservingDomain()
+        let diagnostic = try #require(controller.projectRegistryRecoveryDiagnostic)
+        #expect(diagnostic.discardedRecordCount == 1)
+        let expectedMessage = "No se pudieron leer algunos metadatos de proyectos. Cocxy guardó los registros rechazados (1) en un archivo privado de recuperación."
+        let sidebar = AuroraSidebarHost(controller: controller).makeSidebarView()
+        let section = Design.AuroraProjectRegistrySection(
+            projects: controller.projects,
+            projectTaskCounts: [:],
+            registryAvailable: true,
+            recoveryMessage: sidebar.projectRegistryRecoveryMessage,
+            onActivate: nil,
+            onSetPinned: nil,
+            localizer: controller.localizer
+        )
+
+        let registrySurfaceStrings = renderedViewStrings(section.body)
+
+        #expect(sidebar.projectRegistryRecoveryMessage == expectedMessage)
+        #expect(registrySurfaceStrings.contains(expectedMessage))
+    }
+
     private func makeSandbox() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("ProjectAuroraRegistry-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return ProjectPathCanonicalizer.canonicalURL(url)
+    }
+}
+
+private func renderedViewStrings(
+    _ value: Any,
+    depth: Int = 0
+) -> [String] {
+    if let string = value as? String { return [string] }
+    guard depth < 32 else { return [] }
+    let mirror = Mirror(reflecting: value)
+    guard mirror.displayStyle != .class else { return [] }
+    return mirror.children.flatMap {
+        renderedViewStrings($0.value, depth: depth + 1)
     }
 }

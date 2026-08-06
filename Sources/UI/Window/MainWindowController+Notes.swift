@@ -311,10 +311,22 @@ extension MainWindowController {
     }
 
     private func notesGroupingRoot(for tab: Tab) -> URL {
-        let directory = tab.worktreeRoot ?? tab.workingDirectory
-        return ProjectPathCanonicalizer.canonicalURL(
-            projectResolver.resolveProject(for: directory).groupingRootURL
-        )
+        if let origin = tab.worktreeOriginRepo {
+            return resolvedNotesRoot(for: origin)
+        }
+        if let worktreeRoot = tab.worktreeRoot,
+           let parent = projectResolver.resolveProject(for: worktreeRoot).parent {
+            return ProjectPathCanonicalizer.canonicalURL(
+                URL(fileURLWithPath: parent.rawValue, isDirectory: true)
+            )
+        }
+        return resolvedNotesRoot(for: tab.worktreeRoot ?? tab.workingDirectory)
+    }
+
+    private func resolvedNotesRoot(for directory: URL) -> URL {
+        return DefaultNoteWorkspaceResolver()
+            .resolveWorkspace(for: directory)?.rootURL
+            ?? ProjectPathCanonicalizer.canonicalURL(directory)
     }
 
     private func migrateLegacyNotes(for tabs: [Tab], using store: NoteStore) async {

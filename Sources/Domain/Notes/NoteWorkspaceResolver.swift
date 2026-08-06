@@ -33,12 +33,13 @@ struct ResolvedNoteWorkspace: Sendable, Equatable {
 /// the Notes module can group on. Inputs are `Sendable` value types so
 /// the resolver can be called from any actor without contention.
 ///
-/// The default implementation prefers the nearest git ancestor (matches
-/// the Aurora sidebar grouping the user already sees) and falls back to
-/// the directory itself when no ancestor is reachable. Callers always
-/// receive a non-nil resolution from the default implementation; tests
-/// inject mocks that return `nil` to exercise the "no workspace" UI
-/// path without simulating a missing tab.
+/// The default implementation derives identity only from canonical
+/// filesystem and git state: it prefers the nearest git ancestor and
+/// falls back to the directory itself. Mutable project-registry metadata
+/// never changes where existing notes are stored. Callers always receive
+/// a non-nil resolution from the default implementation; tests inject
+/// mocks that return `nil` to exercise the "no workspace" UI path without
+/// simulating a missing tab.
 protocol NoteWorkspaceResolving: Sendable {
 
     /// Returns the workspace metadata for `directory`, or `nil` if the
@@ -48,8 +49,8 @@ protocol NoteWorkspaceResolving: Sendable {
 }
 
 /// Production resolver that delegates the git-ancestor lookup to the
-/// existing `AuroraWorkspaceRootResolver` (so Notes and Aurora group
-/// the same way) and falls back to the supplied directory when no
+/// existing filesystem resolver, folds linked worktrees into their
+/// origin checkout, and falls back to the supplied directory when no
 /// git ancestor is reachable.
 ///
 /// Falling back instead of returning `nil` is a deliberate Notes-only
@@ -71,9 +72,12 @@ struct DefaultNoteWorkspaceResolver: NoteWorkspaceResolving {
     }
 
     func resolveWorkspace(for directory: URL) -> ResolvedNoteWorkspace? {
-        let standardisedDirectory = directory.standardizedFileURL
-        let root = auroraResolver.workspaceRoot(for: standardisedDirectory)
-            ?? standardisedDirectory
+        let canonicalDirectory = ProjectPathCanonicalizer.canonicalURL(directory)
+        let workspaceRoot = auroraResolver.workspaceRoot(for: canonicalDirectory)
+            ?? canonicalDirectory
+        let canonicalRoot = ProjectPathCanonicalizer.canonicalURL(workspaceRoot)
+        let root = LinkedWorktreeOriginResolver.originRoot(for: canonicalRoot)
+            ?? canonicalRoot
         let displayName = Self.displayName(for: root)
         return ResolvedNoteWorkspace(
             workspaceID: NoteWorkspaceID(workspaceRoot: root),

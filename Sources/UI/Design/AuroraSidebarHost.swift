@@ -7,6 +7,11 @@ struct AuroraSidebarHost: View {
     @ObservedObject var controller: AuroraChromeController
 
     var body: some View {
+        makeSidebarView()
+            .designThemePalette(Design.palette(for: controller.themeIdentity))
+    }
+
+    func makeSidebarView() -> Design.AuroraSidebarView {
         Design.AuroraSidebarView(
             workspaces: controller.workspaces,
             projects: controller.projects,
@@ -102,6 +107,5 @@ struct AuroraSidebarHost: View {
             newTabShortcutLabel: controller.newTabShortcutLabel,
             localizer: controller.localizer
         )
-        .designThemePalette(Design.palette(for: controller.themeIdentity))
     }
 }

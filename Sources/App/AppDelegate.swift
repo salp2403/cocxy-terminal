@@ -42,12 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private(set) var quickTerminalController: QuickTerminalController?
     private(set) var themeEngine: ThemeEngineImpl?
     let gitInfoProvider = GitInfoProviderImpl()
-    let projectRegistry = ProjectRegistry()
-    lazy var projectResolver = CachedProjectResolver(knownProjectRoots: { [weak self] in
-        self?.projectRegistry.records.map {
-            URL(fileURLWithPath: $0.id.rawValue, isDirectory: true)
-        } ?? []
-    })
+    private let projectIdentityServices: ProjectIdentityServices
+    var projectRegistry: ProjectRegistry { projectIdentityServices.registry }
+    var projectResolver: CachedProjectResolver { projectIdentityServices.resolver }
     let projectConfigWatcherRegistry = ProjectConfigWatcherRegistry()
     let tabConfigProjectContextStore = TabConfigProjectContextStore()
     let terminalBlockStore = TerminalBlockStore()
@@ -97,6 +94,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var menuKeybindingsCancellable: AnyCancellable?
     /// Services-provider bridge for Finder contextual actions.
     var finderServiceProvider: FinderServiceProvider?
+
+    override init() {
+        projectIdentityServices = ProjectIdentityServices()
+        super.init()
+    }
+
+    init(projectIdentityServices: ProjectIdentityServices) {
+        self.projectIdentityServices = projectIdentityServices
+        super.init()
+    }
 
     /// The quick terminal view model for state management.
     /// Internal setter: extensions (+SessionManagement) assign during init.

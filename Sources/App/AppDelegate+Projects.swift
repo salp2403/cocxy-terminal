@@ -50,9 +50,6 @@ extension AppDelegate {
         projectRegistryChangeCancellable?.cancel()
         var changes: [AnyPublisher<Void, Never>] = [
             projectRegistry.recordsDidChange
-                .handleEvents(receiveOutput: { [weak self] _ in
-                    self?.projectResolver.invalidateAll()
-                })
                 .map { _ in () }
                 .eraseToAnyPublisher(),
             auroraWorkspaceTitleStore.$revision.dropFirst().map { _ in () }.eraseToAnyPublisher(),

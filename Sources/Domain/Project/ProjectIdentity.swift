@@ -135,6 +135,53 @@ struct ProjectDescriptor: Equatable, Sendable {
     }
 }
 
+enum LinkedWorktreeOriginResolver {
+    static func originRoot(for root: URL) -> URL? {
+        let canonicalRoot = ProjectPathCanonicalizer.canonicalURL(root)
+        let dotGitURL = canonicalRoot.appendingPathComponent(".git")
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: dotGitURL.path,
+            isDirectory: &isDirectory
+        ), !isDirectory.boolValue,
+              let gitDirectory = GitInfoProviderImpl.resolveGitDirectoryURL(at: canonicalRoot) else {
+            return nil
+        }
+
+        let commonDirectoryPointer = gitDirectory.appendingPathComponent("commondir")
+        guard let pointer = try? String(contentsOf: commonDirectoryPointer, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !pointer.isEmpty else {
+            return nil
+        }
+
+        let commonDirectory: URL
+        if pointer.hasPrefix("/") {
+            commonDirectory = ProjectPathCanonicalizer.canonicalURL(
+                URL(fileURLWithPath: pointer, isDirectory: true)
+            )
+        } else {
+            commonDirectory = ProjectPathCanonicalizer.canonicalURL(
+                gitDirectory.appendingPathComponent(pointer, isDirectory: true)
+            )
+        }
+
+        // A linked worktree points at the origin checkout's `<root>/.git`.
+        // Submodule common directories live below `.git/modules` and must not fold.
+        guard commonDirectory.lastPathComponent == ".git",
+              FileManager.default.fileExists(
+                atPath: commonDirectory.appendingPathComponent("HEAD").path
+              ) else {
+            return nil
+        }
+
+        let originRoot = ProjectPathCanonicalizer.canonicalURL(
+            commonDirectory.deletingLastPathComponent()
+        )
+        return originRoot == canonicalRoot ? nil : originRoot
+    }
+}
+
 @MainActor
 protocol ProjectResolving: AnyObject {
     func resolveProject(for directory: URL) -> ProjectDescriptor
@@ -157,6 +204,7 @@ final class CachedProjectResolver: ProjectResolving {
     private let clock: () -> Date
     private var cache: [String: CacheEntry] = [:]
     private var accessSequence: UInt64 = 0
+    private var knownProjectRootsSnapshot: [URL]?
 
     init(
         rootResolver: any AuroraWorkspaceRootResolver = GitAncestorWorkspaceRootResolver(),
@@ -172,6 +220,31 @@ final class CachedProjectResolver: ProjectResolving {
         self.cacheTTL = cacheTTL
         self.maximumEntryCount = maximumEntryCount
         self.clock = clock
+    }
+
+    convenience init(
+        projectRegistry: ProjectRegistry,
+        rootResolver: any AuroraWorkspaceRootResolver = GitAncestorWorkspaceRootResolver(),
+        cacheTTL: TimeInterval = 2,
+        maximumEntryCount: Int = 256,
+        clock: @escaping () -> Date = Date.init
+    ) {
+        self.init(
+            rootResolver: rootResolver,
+            knownProjectRoots: { [weak projectRegistry] in
+                projectRegistry?.records.map {
+                    URL(fileURLWithPath: $0.id.rawValue, isDirectory: true)
+                } ?? []
+            },
+            cacheTTL: cacheTTL,
+            maximumEntryCount: maximumEntryCount,
+            clock: clock
+        )
+        projectRegistry.recordsWillPublish = { [weak self] records in
+            self?.updateKnownProjectRoots(records.map {
+                URL(fileURLWithPath: $0.id.rawValue, isDirectory: true)
+            })
+        }
     }
 
     func resolveProject(for directory: URL) -> ProjectDescriptor {
@@ -213,6 +286,11 @@ final class CachedProjectResolver: ProjectResolving {
         cache.removeAll(keepingCapacity: true)
     }
 
+    private func updateKnownProjectRoots(_ roots: [URL]) {
+        knownProjectRootsSnapshot = roots.map(ProjectPathCanonicalizer.canonicalURL)
+        invalidateAll()
+    }
+
     var cachedEntryCount: Int {
         cache.count
     }
@@ -231,65 +309,19 @@ final class CachedProjectResolver: ProjectResolving {
             rootURL: root,
             automaticName: automaticName,
             displayName: automaticName,
-            parent: linkedWorktreeParent(for: root)
+            parent: LinkedWorktreeOriginResolver.originRoot(for: root)
+                .map(ProjectID.init(rootURL:))
         )
     }
 
     private func deepestKnownProjectRoot(containing directory: URL) -> URL? {
-        knownProjectRoots()
-            .map(ProjectPathCanonicalizer.canonicalURL)
+        (knownProjectRootsSnapshot ?? knownProjectRoots().map(ProjectPathCanonicalizer.canonicalURL))
             .filter {
                 Self.path(directory.path, isEqualToOrDescendantOf: $0.path)
             }
             .max { lhs, rhs in
                 lhs.pathComponents.count < rhs.pathComponents.count
             }
-    }
-
-    private func linkedWorktreeParent(for root: URL) -> ProjectID? {
-        let dotGitURL = root.appendingPathComponent(".git")
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(
-            atPath: dotGitURL.path,
-            isDirectory: &isDirectory
-        ), !isDirectory.boolValue,
-              let gitDirectory = GitInfoProviderImpl.resolveGitDirectoryURL(at: root) else {
-            return nil
-        }
-
-        let commonDirectoryPointer = gitDirectory.appendingPathComponent("commondir")
-        guard let pointer = try? String(contentsOf: commonDirectoryPointer, encoding: .utf8)
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-              !pointer.isEmpty else {
-            return nil
-        }
-
-        let commonDirectory: URL
-        if pointer.hasPrefix("/") {
-            commonDirectory = ProjectPathCanonicalizer.canonicalURL(
-                URL(fileURLWithPath: pointer, isDirectory: true)
-            )
-        } else {
-            commonDirectory = ProjectPathCanonicalizer.canonicalURL(
-                gitDirectory.appendingPathComponent(pointer, isDirectory: true)
-            )
-        }
-
-        // Linked worktrees share the origin checkout's `<root>/.git`.
-        // Submodules point into `.git/modules/...` and intentionally stay
-        // independent projects rather than being folded into their parent.
-        guard commonDirectory.lastPathComponent == ".git",
-              FileManager.default.fileExists(
-                atPath: commonDirectory.appendingPathComponent("HEAD").path
-              ) else {
-            return nil
-        }
-
-        let parentRoot = ProjectPathCanonicalizer.canonicalURL(
-            commonDirectory.deletingLastPathComponent()
-        )
-        guard parentRoot != root else { return nil }
-        return ProjectID(rootURL: parentRoot)
     }
 
     private func evictLeastRecentlyUsedEntriesIfNeeded() {
@@ -308,5 +340,16 @@ final class CachedProjectResolver: ProjectResolving {
         if candidate == ancestor { return true }
         let prefix = ancestor == "/" ? "/" : ancestor + "/"
         return candidate.hasPrefix(prefix)
+    }
+}
+
+@MainActor
+final class ProjectIdentityServices {
+    let registry: ProjectRegistry
+    let resolver: CachedProjectResolver
+
+    init(registry: ProjectRegistry = ProjectRegistry()) {
+        self.registry = registry
+        resolver = CachedProjectResolver(projectRegistry: registry)
     }
 }

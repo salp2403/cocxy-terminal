@@ -182,11 +182,21 @@ enum AuroraSourceBuilder {
             let workspaceBranch = gitInfoProvider?.currentBranch(
                 at: URL(fileURLWithPath: workspace.rootPath, isDirectory: true)
             ) ?? (workspace.unfoldedIdentity == workspace.identity ? tab.gitBranch : nil)
-            // Workspace root path used by the Aurora notes section so
-            // the sidebar can compute the same `NoteWorkspaceID` the
-            // Notes store uses on disk. Falls back to the tab's own
-            // working directory when no git ancestor exists, matching
-            // `DefaultNoteWorkspaceResolver`'s contract.
+            let notesDirectory: URL
+            if let origin = tab.worktreeOriginRepo {
+                notesDirectory = origin
+            } else if tab.worktreeRoot != nil,
+                      workspace.unfoldedIdentity != workspace.identity {
+                notesDirectory = URL(
+                    fileURLWithPath: workspace.rootPath,
+                    isDirectory: true
+                )
+            } else {
+                notesDirectory = tab.worktreeRoot ?? tab.workingDirectory
+            }
+            let notesRoot = DefaultNoteWorkspaceResolver()
+                .resolveWorkspace(for: notesDirectory)?.rootURL
+                ?? ProjectPathCanonicalizer.canonicalURL(notesDirectory)
             return Design.AuroraSourceTab(
                 id: tab.id.rawValue.uuidString,
                 name: tab.displayTitle,
@@ -201,7 +211,7 @@ enum AuroraSourceBuilder {
                 foregroundProcessName: tab.processName,
                 lastCommandSummary: commandSummary(for: tab),
                 hasWorktree: hasWorktree,
-                workspaceRootPath: workspace.rootPath
+                workspaceRootPath: notesRoot.path
             )
         }
     }

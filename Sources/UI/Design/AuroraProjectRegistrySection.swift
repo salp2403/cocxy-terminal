@@ -183,6 +183,8 @@ extension Design {
             .font(.system(size: 10.5, weight: .medium))
             .foregroundStyle(.orange)
             .accessibilityElement(children: .combine)
+            .accessibilityLabel(message)
+            .accessibilityIdentifier("project-registry-recovery")
         }
 
         static func localizedRecoveryMessage(
