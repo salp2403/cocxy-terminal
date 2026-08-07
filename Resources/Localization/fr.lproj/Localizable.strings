@@ -3578,6 +3578,7 @@
 "mobile.mirror.transport.sshDetail" = "SSH est facultatif et ne publie le point de terminaison du jumelage que via la connexion sélectionnée.";
 "mobile.mirror.transport.open" = "Ouvrir les connexions distantes";
 "mobile.mirror.error.noPrivateNetwork" = "Aucun réseau local privé n’est disponible.";
+"mobile.mirror.error.unavailable" = "La recopie mobile est indisponible.";
 "mobile.mirror.error.invalidGatewayPort" = "Le port de la passerelle mobile locale n’est pas valide.";
 "mobile.mirror.error.alreadyStarting" = "Le relais mobile privé est déjà en cours de démarrage.";
 "mobile.mirror.error.tlsIdentityUnavailable" = "Impossible de créer le chiffrement du relais mobile privé.";

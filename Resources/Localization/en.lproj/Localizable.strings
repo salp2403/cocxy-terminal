@@ -3578,6 +3578,7 @@
 "mobile.mirror.transport.sshDetail" = "SSH is optional and publishes the pairing endpoint only through the selected connection.";
 "mobile.mirror.transport.open" = "Open Remote Connections";
 "mobile.mirror.error.noPrivateNetwork" = "No private local network is available.";
+"mobile.mirror.error.unavailable" = "Mobile mirror is unavailable.";
 "mobile.mirror.error.invalidGatewayPort" = "The local mobile gateway port is invalid.";
 "mobile.mirror.error.alreadyStarting" = "The private mobile relay is already starting.";
 "mobile.mirror.error.tlsIdentityUnavailable" = "Could not create encryption for the private mobile relay.";

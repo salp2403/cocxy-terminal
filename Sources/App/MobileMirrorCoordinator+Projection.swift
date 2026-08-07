@@ -367,7 +367,8 @@ extension MobileMirrorCoordinator {
                             try self.auditLog.log(.channelClosed(channelID: channelID))
                         }
                     } catch {
-                        self?.state = .failed(error.localizedDescription)
+                        guard let self else { return }
+                        self.state = .failed(self.localizedStatusError(error))
                     }
                     self?.tunnelClosureTask = nil
                 }
@@ -376,7 +377,7 @@ extension MobileMirrorCoordinator {
             do {
                 try auditLog.log(.channelClosed(channelID: channelID))
             } catch {
-                state = .failed(error.localizedDescription)
+                state = .failed(localizedStatusError(error))
             }
         }
         for stream in ownedStreams.values { stopOwnedStream(stream) }

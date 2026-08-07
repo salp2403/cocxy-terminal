@@ -3578,6 +3578,7 @@
 "mobile.mirror.transport.sshDetail" = "Użycie SSH jest opcjonalne, a punkt końcowy parowania jest udostępniany tylko przez wybrane połączenie.";
 "mobile.mirror.transport.open" = "Otwórz połączenia zdalne";
 "mobile.mirror.error.noPrivateNetwork" = "Brak dostępnej prywatnej sieci lokalnej.";
+"mobile.mirror.error.unavailable" = "Mobilne dublowanie ekranu jest niedostępne.";
 "mobile.mirror.error.invalidGatewayPort" = "Port lokalnej bramy mobilnej jest nieprawidłowy.";
 "mobile.mirror.error.alreadyStarting" = "Prywatny przekaźnik mobilny jest już uruchamiany.";
 "mobile.mirror.error.tlsIdentityUnavailable" = "Nie udało się utworzyć szyfrowania dla prywatnego przekaźnika mobilnego.";

@@ -502,4 +502,59 @@ enum MobileMirrorError: Error, Equatable, Sendable, LocalizedError {
         case .projectCreationFailed(let message): return "Project creation failed: \(message)"
         }
     }
+
+    func localizedDescription(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .unavailable:
+            return localizer.string(
+                "mobile.mirror.error.unavailable",
+                fallback: "Mobile mirror is unavailable."
+            )
+        case .noPrivateNetwork:
+            return localizer.string(
+                "mobile.mirror.error.noPrivateNetwork",
+                fallback: "No private local network is available."
+            )
+        case .invalidPairingToken, .invalidSignature:
+            return localizer.string(
+                "mobile.web.status.authenticationFailed",
+                fallback: "Authentication failed"
+            )
+        case .pairingExpired, .sessionExpired:
+            return localizer.string(
+                "mobile.web.status.rescanRequired",
+                fallback: "Scan a new QR code on the Mac to reconnect"
+            )
+        case .pairingPending:
+            return localizer.string(
+                "mobile.mirror.status.confirmation",
+                fallback: "Desktop confirmation required"
+            )
+        case .pairingDenied:
+            return localizer.string(
+                "mobile.mirror.status.denied",
+                fallback: "Pairing denied"
+            )
+        case .replayDetected, .invalidAction, .authorizationDenied:
+            return localizer.string(
+                "mobile.web.error.actionRejected",
+                fallback: "Mobile action was rejected"
+            )
+        case .targetUnavailable:
+            return localizer.string(
+                "mobile.web.error.noTerminal",
+                fallback: "No terminal session is selected"
+            )
+        case .projectCreationUnavailable:
+            return localizer.string(
+                "mobile.web.project.creationUnavailable",
+                fallback: "Choose a creation folder on the Mac first."
+            )
+        case .invalidProjectName, .projectAlreadyExists, .projectCreationFailed:
+            return localizer.string(
+                "mobile.web.action.failed",
+                fallback: "Action could not be completed"
+            )
+        }
+    }
 }

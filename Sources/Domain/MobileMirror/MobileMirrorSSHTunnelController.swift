@@ -36,6 +36,21 @@ enum MobileMirrorTunnelError: Error, Equatable, LocalizedError {
             return "The SSH phone tunnel could not be closed safely."
         }
     }
+
+    func localizedDescription(using localizer: AppLocalizer) -> String {
+        switch self {
+        case .noConnectedTarget:
+            return localizer.string(
+                "mobile.mirror.transport.unavailable",
+                fallback: "Connect an SSH profile or use the local relay."
+            )
+        case .invalidLocalPort, .remotePortUnavailable, .closureUnconfirmed:
+            return localizer.string(
+                "mobile.mirror.error.unavailable",
+                fallback: "Mobile mirror is unavailable."
+            )
+        }
+    }
 }
 
 @MainActor

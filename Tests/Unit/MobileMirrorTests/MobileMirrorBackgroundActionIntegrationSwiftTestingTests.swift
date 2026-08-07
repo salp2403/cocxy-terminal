@@ -248,6 +248,27 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         })
     }
 
+    @Test("missing SSH target reaches the desktop in the configured language")
+    func missingSSHTargetIsLocalized() throws {
+        let sandbox = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let localizationRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Resources/Localization", isDirectory: true)
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(Bundle(url: localizationRoot))
+        )
+        let context = makeCoordinator(sandbox: sandbox, localizer: localizer)
+        defer { context.stop() }
+        context.coordinator.usesSSHTunnel = true
+
+        context.coordinator.startPairing()
+
+        #expect(context.coordinator.state == .unavailable(
+            "Conecta un perfil SSH o usa el relay local."
+        ))
+    }
+
     private func preparedProjectCreation(
         name: String,
         context: MobileMirrorCoordinatorTestContext,

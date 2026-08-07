@@ -3578,6 +3578,7 @@
 "mobile.mirror.transport.sshDetail" = "SSH je opcionalan i objavljuje krajnju tačku za uparivanje samo putem odabrane veze.";
 "mobile.mirror.transport.open" = "Otvori udaljene veze";
 "mobile.mirror.error.noPrivateNetwork" = "Nije dostupna privatna lokalna mreža.";
+"mobile.mirror.error.unavailable" = "Mobilno zrcaljenje nije dostupno.";
 "mobile.mirror.error.invalidGatewayPort" = "Port lokalnog mobilnog pristupnika nije važeći.";
 "mobile.mirror.error.alreadyStarting" = "Privatni mobilni relej se već pokreće.";
 "mobile.mirror.error.tlsIdentityUnavailable" = "Nije moguće kreirati šifriranje za privatni mobilni relej.";

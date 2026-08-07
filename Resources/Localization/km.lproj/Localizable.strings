@@ -3578,6 +3578,7 @@
 "mobile.mirror.transport.sshDetail" = "SSH ជាជម្រើស ហើយបង្ហាញចំណុចបញ្ចប់សម្រាប់ការផ្គូផ្គងតែតាមការតភ្ជាប់ដែលបានជ្រើសប៉ុណ្ណោះ។";
 "mobile.mirror.transport.open" = "បើកការតភ្ជាប់ពីចម្ងាយ";
 "mobile.mirror.error.noPrivateNetwork" = "មិនមានបណ្ដាញមូលដ្ឋានឯកជនទេ។";
+"mobile.mirror.error.unavailable" = "មិនអាចប្រើការឆ្លុះអេក្រង់ទូរសព្ទបានទេ។";
 "mobile.mirror.error.invalidGatewayPort" = "ច្រក gateway ទូរសព្ទមូលដ្ឋានមិនត្រឹមត្រូវទេ។";
 "mobile.mirror.error.alreadyStarting" = "relay ទូរសព្ទឯកជនកំពុងចាប់ផ្ដើមរួចហើយ។";
 "mobile.mirror.error.tlsIdentityUnavailable" = "មិនអាចបង្កើតការអ៊ិនគ្រីបសម្រាប់ relay ទូរសព្ទឯកជនបានទេ។";

@@ -3578,6 +3578,7 @@
 "mobile.mirror.transport.sshDetail" = "SSH เป็นตัวเลือก และจะเผยแพร่จุดเชื่อมต่อสำหรับการจับคู่ผ่านการเชื่อมต่อที่เลือกเท่านั้น";
 "mobile.mirror.transport.open" = "เปิดการเชื่อมต่อระยะไกล";
 "mobile.mirror.error.noPrivateNetwork" = "ไม่มีเครือข่ายภายในส่วนตัวที่พร้อมใช้งาน";
+"mobile.mirror.error.unavailable" = "ไม่สามารถใช้งานการมิเรอร์มือถือได้";
 "mobile.mirror.error.invalidGatewayPort" = "พอร์ตเกตเวย์มือถือภายในไม่ถูกต้อง";
 "mobile.mirror.error.alreadyStarting" = "รีเลย์มือถือส่วนตัวกำลังเริ่มทำงานอยู่แล้ว";
 "mobile.mirror.error.tlsIdentityUnavailable" = "ไม่สามารถสร้างการเข้ารหัสสำหรับรีเลย์มือถือส่วนตัวได้";

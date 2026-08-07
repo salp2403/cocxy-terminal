@@ -3578,6 +3578,7 @@
 "mobile.mirror.transport.sshDetail" = "SSH необязателен и публикует конечную точку сопряжения только через выбранное подключение.";
 "mobile.mirror.transport.open" = "Открыть удалённые подключения";
 "mobile.mirror.error.noPrivateNetwork" = "Частная локальная сеть недоступна.";
+"mobile.mirror.error.unavailable" = "Мобильное зеркалирование недоступно.";
 "mobile.mirror.error.invalidGatewayPort" = "Порт локального мобильного шлюза недействителен.";
 "mobile.mirror.error.alreadyStarting" = "Частный мобильный ретранслятор уже запускается.";
 "mobile.mirror.error.tlsIdentityUnavailable" = "Не удалось создать шифрование для частного мобильного ретранслятора.";

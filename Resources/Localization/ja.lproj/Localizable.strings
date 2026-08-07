@@ -3578,6 +3578,7 @@
 "mobile.mirror.transport.sshDetail" = "SSH は任意であり、ペアリングエンドポイントは選択した接続を通じてのみ公開されます。";
 "mobile.mirror.transport.open" = "リモート接続を開く";
 "mobile.mirror.error.noPrivateNetwork" = "利用可能なプライベートローカルネットワークがありません。";
+"mobile.mirror.error.unavailable" = "モバイルミラーリングを利用できません。";
 "mobile.mirror.error.invalidGatewayPort" = "ローカルモバイルゲートウェイのポートが無効です。";
 "mobile.mirror.error.alreadyStarting" = "プライベートモバイルリレーはすでに起動中です。";
 "mobile.mirror.error.tlsIdentityUnavailable" = "プライベートモバイルリレーの暗号化を作成できませんでした。";
