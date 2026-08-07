@@ -2,9 +2,10 @@
 
 import Foundation
 import Testing
+import WebKit
 @testable import CocxyTerminal
 
-@Suite("Mobile mirror request router")
+@Suite("Mobile mirror request router", .serialized)
 struct MobileMirrorRequestRouterSwiftTestingTests {
     @Test("pairing flow sets an HTTP-only cookie and signed action is one use")
     func pairingAndSignedActionFlow() async throws {
@@ -397,6 +398,47 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(legacy.channelID.isEmpty)
     }
 
+    @Test("confirmed pairing redirects through the real page script without dropping the QR fragment")
+    @MainActor
+    func pairingPagePreservesQRFragment() async throws {
+        let authority = MobileMirrorPairingAuthority()
+        let router = MobileMirrorRequestRouter(
+            publicAddress: "127.0.0.1",
+            transport: .localTLS,
+            authority: authority,
+            routeRegistry: MobileMirrorRouteRegistry(),
+            localization: try webLocalization(.english),
+            snapshotProvider: { _ in .empty },
+            actionHandler: { _, _, _, _ in .empty },
+            pendingPairingHandler: { _ in }
+        )
+        router.updatePublicPort(43120)
+        let offer = authority.makeOffer()
+        let result = await router.route(
+            request: request(path: "/pair", query: ["token": offer.token]),
+            identity: MobileMirrorClientIdentity(remoteAddress: "10.0.0.5", userAgent: "Phone")
+        )
+        let html = try #require(String(data: response(from: result).body, encoding: .utf8))
+        let scheme = "cocxy-pairing-test"
+        let handler = MobileMirrorPairingSchemeHandler(pairingHTML: html)
+        let configuration = WKWebViewConfiguration()
+        configuration.setURLSchemeHandler(handler, forURLScheme: scheme)
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        defer { webView.stopLoading() }
+        let fragment = "pairing-key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+        let initialURL = try #require(URL(string: "\(scheme)://relay/pair#\(fragment)"))
+
+        webView.load(URLRequest(url: initialURL))
+        for _ in 0..<100 {
+            if webView.url?.path == "/", webView.url?.fragment == fragment { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+
+        #expect(webView.url?.path == "/")
+        #expect(webView.url?.fragment == fragment)
+        #expect(handler.pairStatusRequestCount > 0)
+    }
+
     @Test("SSH tunnel session cookie remains usable over loopback HTTP")
     func SSHTunnelCookieOmitsSecureAttribute() async throws {
         let authority = MobileMirrorPairingAuthority()
@@ -609,4 +651,57 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
 
 private enum MobileMirrorRouterTestError: Error {
     case expectedResponse
+}
+
+private final class MobileMirrorPairingSchemeHandler: NSObject, WKURLSchemeHandler {
+    private let pairingHTML: Data
+    private let lock = NSLock()
+    private var _pairStatusRequestCount = 0
+
+    init(pairingHTML: String) {
+        self.pairingHTML = Data(pairingHTML.utf8)
+    }
+
+    var pairStatusRequestCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _pairStatusRequestCount
+    }
+
+    func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        guard let url = urlSchemeTask.request.url else {
+            urlSchemeTask.didFailWithError(URLError(.badURL))
+            return
+        }
+        let body: Data
+        let contentType: String
+        switch url.path {
+        case "/pair":
+            body = pairingHTML
+            contentType = "text/html; charset=utf-8"
+        case "/mobile/api/pair-status":
+            lock.lock()
+            _pairStatusRequestCount += 1
+            lock.unlock()
+            body = Data(#"{"status":"confirmed","redirect":"/"}"#.utf8)
+            contentType = "application/json"
+        default:
+            body = Data("<!doctype html><title>paired</title>".utf8)
+            contentType = "text/html; charset=utf-8"
+        }
+        guard let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": contentType]
+        ) else {
+            urlSchemeTask.didFailWithError(URLError(.badServerResponse))
+            return
+        }
+        urlSchemeTask.didReceive(response)
+        urlSchemeTask.didReceive(body)
+        urlSchemeTask.didFinish()
+    }
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
 }

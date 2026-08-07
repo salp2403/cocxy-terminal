@@ -223,6 +223,14 @@ struct TaskCollisionDetectorSwiftTestingTests {
         ) == ["~generated/Sources/App.swift"])
     }
 
+    @Test("home-relative paths are expanded before project boundary enforcement")
+    func normalizationExpandsHomeRelativePaths() {
+        #expect(TaskCollisionDetector.normalize(
+            ["~", "~/outside.swift"],
+            projectRoot: root
+        ).isEmpty)
+    }
+
     @Test("normalization resolves symlink aliases before enforcing project boundaries")
     func normalizationResolvesSymlinks() throws {
         let temporaryRoot = FileManager.default.temporaryDirectory
