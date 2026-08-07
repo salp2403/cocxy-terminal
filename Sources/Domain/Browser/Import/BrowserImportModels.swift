@@ -680,15 +680,6 @@ struct BrowserImportedBookmark: Sendable, Equatable {
     }
 }
 
-enum BrowserImportIssueKind: Sendable, Equatable {
-    case cookieBatchWrite(imported: Int, total: Int, uncertain: Int)
-    case cookieDecryptionFailed(count: Int)
-    case historyWriteFailed(count: Int)
-    case bookmarkWriteFailed(count: Int)
-    case bookmarkRootConflict
-    case cancelled
-}
-
 struct BrowserImportIssue: Sendable, Equatable {
     let source: BrowserImportSource
     let profileName: String

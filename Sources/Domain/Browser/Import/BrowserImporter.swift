@@ -4,14 +4,8 @@
 import CryptoKit
 import Darwin
 import Foundation
-import os.log
 
 struct BrowserImporter: Sendable {
-    private static let logger = Logger(
-        subsystem: "dev.cocxy.terminal",
-        category: "BrowserImport"
-    )
-
     let sourceImporter: any BrowserSourceImporting
     let historyStore: (any BrowserHistoryStoring)?
     let bookmarkStore: (any BrowserBookmarkStoring)?
@@ -138,9 +132,7 @@ struct BrowserImporter: Sendable {
                         if isCancellation(error) { throw BrowserImportError.cancelled }
                         skippedCount += 1
                         failedHistoryCount += 1
-                        Self.logger.error(
-                            "Browser history write failed: \(String(describing: error), privacy: .private)"
-                        )
+                        BrowserImportPrivacyLog.record("History write failed", error: error)
                     }
                 }
                 if failedHistoryCount > 0 {
@@ -450,9 +442,7 @@ struct BrowserImporter: Sendable {
             if isCancellation(error), error.savedItemIDs.isEmpty {
                 throw BrowserImportError.cancelled
             }
-            Self.logger.error(
-                "Browser bookmark write failed: \(error.detail, privacy: .private)"
-            )
+            BrowserImportPrivacyLog.record("Bookmark write failed", error: error)
             let importedCount = sourceBookmarkIDs.intersection(error.savedItemIDs).count
             let failedCount = sourceBookmarkIDs.count - importedCount
             return (
@@ -462,9 +452,7 @@ struct BrowserImporter: Sendable {
             )
         } catch {
             if isCancellation(error) { throw BrowserImportError.cancelled }
-            Self.logger.error(
-                "Browser bookmark write failed: \(String(describing: error), privacy: .private)"
-            )
+            BrowserImportPrivacyLog.record("Bookmark write failed", error: error)
             let failedCount = sourceBookmarkIDs.count
             return (
                 0,

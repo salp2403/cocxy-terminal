@@ -47,6 +47,24 @@ struct MacOSFloorVerifierSwiftTestingTests {
         #expect(failures.contains { $0.hasPrefix("preview workflow cask minimum expected") })
     }
 
+    @Test("public site verification invokes the macOS floor guard")
+    func publicSiteVerificationInvokesMacOSFloorGuard() throws {
+        let root = repositoryRoot()
+        let testGate = try String(
+            contentsOf: root.appendingPathComponent("scripts/run-tests.sh"),
+            encoding: .utf8
+        )
+        let verifySite = try String(
+            contentsOf: root.appendingPathComponent("web/scripts/verify-site.mjs"),
+            encoding: .utf8
+        )
+
+        #expect(testGate.contains("web/scripts/verify-site.mjs"))
+        #expect(verifySite.contains("for (const failure of verifyMacOSFloor({"))
+        #expect(verifySite.contains("const swiftAgents = readUTF8("))
+        #expect(verifySite.contains("const server = readUTF8("))
+    }
+
     private func runVerifier(fixture: FloorFixture) throws -> [String] {
         let verifierURL = repositoryRoot()
             .appendingPathComponent("web/scripts/verify-macos-floor.mjs")

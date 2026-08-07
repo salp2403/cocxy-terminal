@@ -2,14 +2,8 @@
 // BrowserSourceImporters.swift - Browser-specific history, cookie, and bookmark readers.
 
 import Foundation
-import os.log
 
 private enum BrowserSourceImportSupport {
-    private static let logger = Logger(
-        subsystem: "dev.cocxy.terminal",
-        category: "BrowserImportSource"
-    )
-
     private enum HistoryTimestampFormat {
         case chromium
         case firefox
@@ -31,23 +25,10 @@ private enum BrowserSourceImportSupport {
 
     static func issue(
         _ location: BrowserImportLocation,
-        _ message: String,
-        kind: BrowserImportIssueKind? = nil
+        _ message: String, kind: BrowserImportIssueKind? = nil
     ) -> BrowserImportIssue {
-        BrowserImportIssue(
-            source: location.source,
-            profileName: location.profileName,
-            message: message,
-            kind: kind
-        )
+        BrowserImportIssue(source: location.source, profileName: location.profileName, message: message, kind: kind)
     }
-
-    static func logCookieDecryptionFailure(_ error: any Error) {
-        logger.error(
-            "Browser cookie decryption failed: \(String(describing: error), privacy: .private)"
-        )
-    }
-
     static func appendMissingIssue(
         path: URL?,
         component: String,
@@ -370,7 +351,7 @@ struct ChromiumBrowserImporter: BrowserSourceImporting {
                                 )
                             } catch {
                                 decryptionFailureCount += 1
-                                BrowserSourceImportSupport.logCookieDecryptionFailure(error)
+                                BrowserImportPrivacyLog.record("Cookie decryption failed", error: error)
                                 value = nil
                             }
                         } else {
