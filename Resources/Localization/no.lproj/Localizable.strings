@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Importerte %d av %d informasjonskapsler. %d kunne ikke bekreftes av WebKit.";
 "browser.import.issue.bookmarkRootConflict" = "Den importerte bokmerkemappen er i konflikt med et eksisterende objekt.";
 "browser.import.issue.cancelled" = "Importen av nettleserdata ble avbrutt.";
+"browser.import.issue.historyWriteFailed" = "Historikkbesøk som ikke ble lagret: %d.";
+"browser.import.issue.bookmarkWriteFailed" = "Bokmerker som ikke ble lagret: %d.";
+"browser.import.issue.cookieDecryptionFailed" = "Krypterte informasjonskapsler som ble hoppet over: %d.";
 "browser.import.error.title" = "Importen kunne ikke fortsette";
 "browser.import.error.destinationUnavailable" = "Den valgte Cocxy-profilen finnes ikke lenger.";
 "browser.import.error.remoteDestination" = "Nettleserdata kan bare importeres til en lokal WebKit-profil.";

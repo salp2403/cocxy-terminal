@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Đã nhập %d trong số %d cookie; WebKit không thể xác nhận %d cookie.";
 "browser.import.issue.bookmarkRootConflict" = "Thư mục dấu trang đã nhập xung đột với một mục hiện có.";
 "browser.import.issue.cancelled" = "Đã hủy nhập dữ liệu trình duyệt.";
+"browser.import.issue.historyWriteFailed" = "Lượt truy cập lịch sử chưa lưu: %d.";
+"browser.import.issue.bookmarkWriteFailed" = "Dấu trang chưa lưu: %d.";
+"browser.import.issue.cookieDecryptionFailed" = "Cookie mã hóa đã bỏ qua: %d.";
 "browser.import.error.title" = "Không thể tiếp tục nhập";
 "browser.import.error.destinationUnavailable" = "Hồ sơ Cocxy đã chọn không còn tồn tại.";
 "browser.import.error.remoteDestination" = "Chỉ có thể nhập dữ liệu trình duyệt vào hồ sơ WebKit cục bộ.";

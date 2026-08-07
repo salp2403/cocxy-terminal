@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "นำเข้าคุกกี้ %d จาก %d รายการ โดย WebKit ยืนยันไม่ได้ %d รายการ";
 "browser.import.issue.bookmarkRootConflict" = "โฟลเดอร์บุ๊กมาร์กที่นำเข้าเกิดข้อขัดแย้งกับรายการที่มีอยู่";
 "browser.import.issue.cancelled" = "การนำเข้าข้อมูลเบราว์เซอร์ถูกยกเลิกแล้ว";
+"browser.import.issue.historyWriteFailed" = "การเข้าชมในประวัติที่ไม่ได้บันทึก: %d";
+"browser.import.issue.bookmarkWriteFailed" = "บุ๊กมาร์กที่ไม่ได้บันทึก: %d";
+"browser.import.issue.cookieDecryptionFailed" = "คุกกี้ที่เข้ารหัสซึ่งข้ามไป: %d";
 "browser.import.error.title" = "ไม่สามารถดำเนินการนำเข้าต่อได้";
 "browser.import.error.destinationUnavailable" = "โปรไฟล์ Cocxy ที่เลือกไม่มีอยู่อีกต่อไป";
 "browser.import.error.remoteDestination" = "สามารถนำเข้าข้อมูลเบราว์เซอร์ไปยังโปรไฟล์ WebKit ภายในเครื่องเท่านั้น";

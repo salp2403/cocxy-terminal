@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "تم استيراد %d من أصل %d من ملفات تعريف الارتباط؛ وتعذر على WebKit تأكيد %d منها.";
 "browser.import.issue.bookmarkRootConflict" = "يتعارض مجلد الإشارات المرجعية المستورد مع عنصر موجود.";
 "browser.import.issue.cancelled" = "تم إلغاء استيراد المتصفح.";
+"browser.import.issue.historyWriteFailed" = "زيارات السجل التي لم تُحفظ: %d.";
+"browser.import.issue.bookmarkWriteFailed" = "الإشارات المرجعية التي لم تُحفظ: %d.";
+"browser.import.issue.cookieDecryptionFailed" = "ملفات تعريف الارتباط المشفرة التي تم تخطيها: %d.";
 "browser.import.error.title" = "تعذر متابعة الاستيراد";
 "browser.import.error.destinationUnavailable" = "لم يعد ملف Cocxy الشخصي المحدد موجودًا.";
 "browser.import.error.remoteDestination" = "لا يمكن استيراد بيانات المتصفح إلا إلى ملف WebKit شخصي محلي.";

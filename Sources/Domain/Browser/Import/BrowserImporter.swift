@@ -4,8 +4,14 @@
 import CryptoKit
 import Darwin
 import Foundation
+import os.log
 
 struct BrowserImporter: Sendable {
+    private static let logger = Logger(
+        subsystem: "dev.cocxy.terminal",
+        category: "BrowserImport"
+    )
+
     let sourceImporter: any BrowserSourceImporting
     let historyStore: (any BrowserHistoryStoring)?
     let bookmarkStore: (any BrowserBookmarkStoring)?
@@ -114,7 +120,6 @@ struct BrowserImporter: Sendable {
         do {
             if plan.importHistory, let historyStore {
                 var failedHistoryCount = 0
-                var lastHistoryError: String?
                 for visit in preview.history {
                     try checkCancellation()
                     do {
@@ -133,16 +138,17 @@ struct BrowserImporter: Sendable {
                         if isCancellation(error) { throw BrowserImportError.cancelled }
                         skippedCount += 1
                         failedHistoryCount += 1
-                        lastHistoryError = (error as? LocalizedError)?.errorDescription
-                            ?? String(describing: error)
+                        Self.logger.error(
+                            "Browser history write failed: \(String(describing: error), privacy: .private)"
+                        )
                     }
                 }
                 if failedHistoryCount > 0 {
-                    let detail = lastHistoryError.map { ": \($0)" } ?? ""
                     issues.append(issue(
                         plan,
                         sourceProfile,
-                        "Skipped \(failedHistoryCount) history visits after write failures\(detail)"
+                        "Skipped \(failedHistoryCount) history visits after write failures",
+                        kind: .historyWriteFailed(count: failedHistoryCount)
                     ))
                 }
             } else if !preview.history.isEmpty {
@@ -210,11 +216,11 @@ struct BrowserImporter: Sendable {
                     importedBookmarkCount += bookmarkResult.imported
                     skippedCount += bookmarkResult.skipped
                     if bookmarkResult.failed > 0 {
-                        let detail = bookmarkResult.lastError.map { ": \($0)" } ?? ""
                         issues.append(issue(
                             plan,
                             sourceProfile,
-                            "Skipped \(bookmarkResult.failed) bookmarks after write failures\(detail)"
+                            "Skipped \(bookmarkResult.failed) bookmarks after write failures",
+                            kind: .bookmarkWriteFailed(count: bookmarkResult.failed)
                         ))
                     }
                 } catch {
@@ -347,9 +353,9 @@ struct BrowserImporter: Sendable {
         sourceProfile: String,
         sourceProfileIdentifier: String,
         store: any BrowserBookmarkStoring
-    ) throws -> (imported: Int, skipped: Int, failed: Int, lastError: String?) {
+    ) throws -> (imported: Int, skipped: Int, failed: Int) {
         try checkCancellation()
-        guard !imported.isEmpty else { return (0, 0, 0, nil) }
+        guard !imported.isEmpty else { return (0, 0, 0) }
         let existing = try store.loadAll()
         try checkCancellation()
         var pending: [BrowserBookmark] = []
@@ -439,27 +445,31 @@ struct BrowserImporter: Sendable {
         try checkCancellation()
         do {
             try store.saveBatch(pending)
-            return (sourceBookmarkIDs.count, skippedCount, 0, nil)
+            return (sourceBookmarkIDs.count, skippedCount, 0)
         } catch let error as BrowserBookmarkBatchSaveError {
             if isCancellation(error), error.savedItemIDs.isEmpty {
                 throw BrowserImportError.cancelled
             }
+            Self.logger.error(
+                "Browser bookmark write failed: \(error.detail, privacy: .private)"
+            )
             let importedCount = sourceBookmarkIDs.intersection(error.savedItemIDs).count
             let failedCount = sourceBookmarkIDs.count - importedCount
             return (
                 importedCount,
                 skippedCount + failedCount,
-                failedCount,
-                error.localizedDescription
+                failedCount
             )
         } catch {
             if isCancellation(error) { throw BrowserImportError.cancelled }
+            Self.logger.error(
+                "Browser bookmark write failed: \(String(describing: error), privacy: .private)"
+            )
             let failedCount = sourceBookmarkIDs.count
             return (
                 0,
                 skippedCount + failedCount,
-                failedCount,
-                (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+                failedCount
             )
         }
     }

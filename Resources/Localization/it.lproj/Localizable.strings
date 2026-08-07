@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Importati %d cookie su %d; %d non hanno potuto essere confermati da WebKit.";
 "browser.import.issue.bookmarkRootConflict" = "La cartella dei segnalibri importata è in conflitto con un elemento esistente.";
 "browser.import.issue.cancelled" = "L'importazione del browser è stata annullata.";
+"browser.import.issue.historyWriteFailed" = "Visite della cronologia non salvate: %d.";
+"browser.import.issue.bookmarkWriteFailed" = "Segnalibri non salvati: %d.";
+"browser.import.issue.cookieDecryptionFailed" = "Cookie crittografati ignorati: %d.";
 "browser.import.error.title" = "Impossibile continuare l'importazione";
 "browser.import.error.destinationUnavailable" = "Il profilo Cocxy selezionato non esiste più.";
 "browser.import.error.remoteDestination" = "I dati del browser possono essere importati solo in un profilo WebKit locale.";

@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "已导入 %d/%d 个 Cookie；其中 %d 个无法由 WebKit 确认。";
 "browser.import.issue.bookmarkRootConflict" = "导入的书签文件夹与现有项目冲突。";
 "browser.import.issue.cancelled" = "浏览器数据导入已取消。";
+"browser.import.issue.historyWriteFailed" = "未保存的历史访问记录：%d。";
+"browser.import.issue.bookmarkWriteFailed" = "未保存的书签：%d。";
+"browser.import.issue.cookieDecryptionFailed" = "已跳过的加密 Cookie：%d。";
 "browser.import.error.title" = "无法继续导入";
 "browser.import.error.destinationUnavailable" = "所选 Cocxy 配置已不存在。";
 "browser.import.error.remoteDestination" = "浏览器数据只能导入本地 WebKit 配置。";

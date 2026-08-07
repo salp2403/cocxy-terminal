@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "已匯入 %d 筆 Cookie（共 %d 筆）；其中 %d 筆無法由 WebKit 確認。";
 "browser.import.issue.bookmarkRootConflict" = "匯入的書籤檔案夾與現有項目衝突。";
 "browser.import.issue.cancelled" = "瀏覽器資料匯入已取消。";
+"browser.import.issue.historyWriteFailed" = "未儲存的瀏覽記錄：%d。";
+"browser.import.issue.bookmarkWriteFailed" = "未儲存的書籤：%d。";
+"browser.import.issue.cookieDecryptionFailed" = "已略過的加密 Cookie：%d。";
 "browser.import.error.title" = "無法繼續匯入";
 "browser.import.error.destinationUnavailable" = "所選的 Cocxy 設定檔已不存在。";
 "browser.import.error.remoteDestination" = "瀏覽器資料只能匯入本機 WebKit 設定檔。";

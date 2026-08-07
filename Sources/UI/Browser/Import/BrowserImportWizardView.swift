@@ -585,6 +585,30 @@ struct BrowserImportWizardView: View {
             return issue.message
         }
         switch kind {
+        case .historyWriteFailed(let count):
+            return String(
+                format: localizer.string(
+                    "browser.import.issue.historyWriteFailed",
+                    fallback: "History visits not saved: %d."
+                ),
+                count
+            )
+        case .bookmarkWriteFailed(let count):
+            return String(
+                format: localizer.string(
+                    "browser.import.issue.bookmarkWriteFailed",
+                    fallback: "Bookmarks not saved: %d."
+                ),
+                count
+            )
+        case .cookieDecryptionFailed(let count):
+            return String(
+                format: localizer.string(
+                    "browser.import.issue.cookieDecryptionFailed",
+                    fallback: "Encrypted cookies skipped: %d."
+                ),
+                count
+            )
         case .bookmarkRootConflict:
             return localizer.string(
                 "browser.import.issue.bookmarkRootConflict",

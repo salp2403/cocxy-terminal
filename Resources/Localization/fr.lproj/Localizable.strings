@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "%d cookies sur %d ont été importés ; %d n’ont pas pu être confirmés par WebKit.";
 "browser.import.issue.bookmarkRootConflict" = "Le dossier de signets importé entre en conflit avec un élément existant.";
 "browser.import.issue.cancelled" = "L’importation du navigateur a été annulée.";
+"browser.import.issue.historyWriteFailed" = "Visites de l’historique non enregistrées : %d.";
+"browser.import.issue.bookmarkWriteFailed" = "Signets non enregistrés : %d.";
+"browser.import.issue.cookieDecryptionFailed" = "Cookies chiffrés ignorés : %d.";
 "browser.import.error.title" = "L’importation n’a pas pu se poursuivre";
 "browser.import.error.destinationUnavailable" = "Le profil Cocxy sélectionné n’existe plus.";
 "browser.import.error.remoteDestination" = "Les données de navigation ne peuvent être importées que dans un profil WebKit local.";

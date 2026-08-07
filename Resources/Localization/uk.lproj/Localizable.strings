@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Імпортовано %d із %d файлів cookie; WebKit не вдалося підтвердити %d.";
 "browser.import.issue.bookmarkRootConflict" = "Імпортована папка закладок конфліктує з наявним елементом.";
 "browser.import.issue.cancelled" = "Імпорт даних браузера скасовано.";
+"browser.import.issue.historyWriteFailed" = "Незбережені відвідування в історії: %d.";
+"browser.import.issue.bookmarkWriteFailed" = "Незбережені закладки: %d.";
+"browser.import.issue.cookieDecryptionFailed" = "Пропущені зашифровані файли cookie: %d.";
 "browser.import.error.title" = "Не вдалося продовжити імпорт";
 "browser.import.error.destinationUnavailable" = "Вибраного профілю Cocxy більше не існує.";
 "browser.import.error.remoteDestination" = "Дані браузера можна імпортувати лише до локального профілю WebKit.";

@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "បាននាំចូល cookies ចំនួន %d ក្នុងចំណោម %d; ចំនួន %d មិនអាចបញ្ជាក់ដោយ WebKit បានទេ។";
 "browser.import.issue.bookmarkRootConflict" = "ថតចំណាំដែលបាននាំចូលមានការប៉ះទង្គិចជាមួយធាតុដែលមានស្រាប់។";
 "browser.import.issue.cancelled" = "ការនាំចូល browser ត្រូវបានបោះបង់។";
+"browser.import.issue.historyWriteFailed" = "ការចូលមើលប្រវត្តិដែលមិនបានរក្សាទុក៖ %d។";
+"browser.import.issue.bookmarkWriteFailed" = "ចំណាំដែលមិនបានរក្សាទុក៖ %d។";
+"browser.import.issue.cookieDecryptionFailed" = "ខូគីដែលបានអ៊ិនគ្រីបត្រូវបានរំលង៖ %d។";
 "browser.import.error.title" = "មិនអាចបន្តការនាំចូលបានទេ";
 "browser.import.error.destinationUnavailable" = "ប្រវត្តិរូប Cocxy ដែលបានជ្រើសលែងមានទៀតហើយ។";
 "browser.import.error.remoteDestination" = "ទិន្នន័យ browser អាចនាំចូលបានតែក្នុងប្រវត្តិរូប WebKit មូលដ្ឋានប៉ុណ្ណោះ។";

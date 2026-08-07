@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "%d / %d件のCookieを読み込みました。そのうち%d件はWebKitで確認できませんでした。";
 "browser.import.issue.bookmarkRootConflict" = "読み込んだブックマークフォルダが既存の項目と競合しています。";
 "browser.import.issue.cancelled" = "ブラウザの読み込みがキャンセルされました。";
+"browser.import.issue.historyWriteFailed" = "保存できなかった履歴の訪問数：%d。";
+"browser.import.issue.bookmarkWriteFailed" = "保存できなかったブックマーク数：%d。";
+"browser.import.issue.cookieDecryptionFailed" = "スキップした暗号化Cookie数：%d。";
 "browser.import.error.title" = "読み込みを続行できませんでした";
 "browser.import.error.destinationUnavailable" = "選択したCocxyプロファイルはもう存在しません。";
 "browser.import.error.remoteDestination" = "ブラウザデータはローカルのWebKitプロファイルにのみ読み込めます。";

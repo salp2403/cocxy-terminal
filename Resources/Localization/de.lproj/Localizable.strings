@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "%d von %d Cookies wurden importiert; %d konnten von WebKit nicht bestätigt werden.";
 "browser.import.issue.bookmarkRootConflict" = "Der importierte Lesezeichenordner steht in Konflikt mit einem vorhandenen Objekt.";
 "browser.import.issue.cancelled" = "Der Browserdatenimport wurde abgebrochen.";
+"browser.import.issue.historyWriteFailed" = "Nicht gespeicherte Verlaufseinträge: %d.";
+"browser.import.issue.bookmarkWriteFailed" = "Nicht gespeicherte Lesezeichen: %d.";
+"browser.import.issue.cookieDecryptionFailed" = "Übersprungene verschlüsselte Cookies: %d.";
 "browser.import.error.title" = "Import konnte nicht fortgesetzt werden";
 "browser.import.error.destinationUnavailable" = "Das ausgewählte Cocxy-Profil ist nicht mehr vorhanden.";
 "browser.import.error.remoteDestination" = "Browserdaten können nur in ein lokales WebKit-Profil importiert werden.";

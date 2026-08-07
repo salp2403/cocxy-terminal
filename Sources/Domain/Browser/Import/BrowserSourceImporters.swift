@@ -2,8 +2,14 @@
 // BrowserSourceImporters.swift - Browser-specific history, cookie, and bookmark readers.
 
 import Foundation
+import os.log
 
 private enum BrowserSourceImportSupport {
+    private static let logger = Logger(
+        subsystem: "dev.cocxy.terminal",
+        category: "BrowserImportSource"
+    )
+
     private enum HistoryTimestampFormat {
         case chromium
         case firefox
@@ -23,8 +29,23 @@ private enum BrowserSourceImportSupport {
         return location
     }
 
-    static func issue(_ location: BrowserImportLocation, _ message: String) -> BrowserImportIssue {
-        BrowserImportIssue(source: location.source, profileName: location.profileName, message: message)
+    static func issue(
+        _ location: BrowserImportLocation,
+        _ message: String,
+        kind: BrowserImportIssueKind? = nil
+    ) -> BrowserImportIssue {
+        BrowserImportIssue(
+            source: location.source,
+            profileName: location.profileName,
+            message: message,
+            kind: kind
+        )
+    }
+
+    static func logCookieDecryptionFailure(_ error: any Error) {
+        logger.error(
+            "Browser cookie decryption failed: \(String(describing: error), privacy: .private)"
+        )
     }
 
     static func appendMissingIssue(
@@ -294,7 +315,6 @@ struct ChromiumBrowserImporter: BrowserSourceImporting {
             )
             var decryptionFailureCount = 0
             var partitionedCookieCount = 0
-            var lastDecryptionError: String?
             let rows: [BrowserImportedCookie] = try BrowserSQLiteImportReader.readRows(
                 databaseURL: cookiesPath,
                 table: "cookies",
@@ -350,8 +370,7 @@ struct ChromiumBrowserImporter: BrowserSourceImporting {
                                 )
                             } catch {
                                 decryptionFailureCount += 1
-                                lastDecryptionError = (error as? LocalizedError)?.errorDescription
-                                    ?? String(describing: error)
+                                BrowserSourceImportSupport.logCookieDecryptionFailure(error)
                                 value = nil
                             }
                         } else {
@@ -384,10 +403,10 @@ struct ChromiumBrowserImporter: BrowserSourceImporting {
                 ))
             }
             if decryptionFailureCount > 0 {
-                let detail = lastDecryptionError.map { ": \($0)" } ?? ""
                 preview.errors.append(BrowserSourceImportSupport.issue(
                     location,
-                    "Skipped \(decryptionFailureCount) encrypted cookies\(detail)"
+                    "Skipped \(decryptionFailureCount) encrypted cookies",
+                    kind: .cookieDecryptionFailed(count: decryptionFailureCount)
                 ))
             }
         } catch {

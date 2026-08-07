@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Uvezeno je %d od %d kolačića; WebKit nije mogao potvrditi njih %d.";
 "browser.import.issue.bookmarkRootConflict" = "Uvezena mapa zabilješki u sukobu je s postojećom stavkom.";
 "browser.import.issue.cancelled" = "Uvoz podataka preglednika je otkazan.";
+"browser.import.issue.historyWriteFailed" = "Nesačuvane posjete historiji: %d.";
+"browser.import.issue.bookmarkWriteFailed" = "Nesačuvane oznake: %d.";
+"browser.import.issue.cookieDecryptionFailed" = "Preskočeni šifrirani kolačići: %d.";
 "browser.import.error.title" = "Uvoz nije moguće nastaviti";
 "browser.import.error.destinationUnavailable" = "Odabrani Cocxy profil više ne postoji.";
 "browser.import.error.remoteDestination" = "Podaci preglednika mogu se uvesti samo u lokalni WebKit profil.";

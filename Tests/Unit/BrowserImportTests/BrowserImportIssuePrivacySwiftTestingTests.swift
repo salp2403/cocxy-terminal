@@ -1,0 +1,232 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+// BrowserImportIssuePrivacySwiftTestingTests.swift - User-visible import error boundaries.
+
+import Foundation
+import SQLite3
+import Testing
+@testable import CocxyTerminal
+
+@Suite("Browser import issue privacy", .serialized)
+struct BrowserImportIssuePrivacySwiftTestingTests {
+    private static let privateErrorDetail = "/Users/private/Library/browser.db: database is full"
+
+    @Test("history write failures are counted and localized without private details")
+    @MainActor
+    func historyWriteFailureIsLocalized() throws {
+        let importer = BrowserImporter(
+            sourceImporter: PrivacyPreviewImporter(preview: BrowserImportPreview(
+                history: [BrowserImportedHistoryVisit(
+                    url: "https://example.com",
+                    title: "Example",
+                    visitedAt: Date(timeIntervalSince1970: 1_700_000_000)
+                )],
+                cookies: [],
+                bookmarks: [],
+                errors: []
+            )),
+            historyStore: PrivateFailureHistoryStore(detail: Self.privateErrorDetail),
+            bookmarkStore: nil,
+            cookieStore: nil
+        )
+
+        let result = try importer.importData(BrowserImportPlan(
+            source: .chrome,
+            profileID: UUID(),
+            importCookies: false,
+            importBookmarks: false
+        ))
+        let issue = try #require(result.errors.first)
+        let message = BrowserImportWizardView.localizedIssueMessage(
+            issue,
+            localizer: try spanishLocalizer()
+        )
+
+        #expect(issue.kind == .historyWriteFailed(count: 1))
+        #expect(message == "Visitas del historial sin guardar: 1.")
+        #expect(!issue.message.contains(Self.privateErrorDetail))
+        #expect(!message.contains(Self.privateErrorDetail))
+    }
+
+    @Test("bookmark write failures are counted and localized without private details")
+    @MainActor
+    func bookmarkWriteFailureIsLocalized() throws {
+        let importer = BrowserImporter(
+            sourceImporter: PrivacyPreviewImporter(preview: BrowserImportPreview(
+                history: [],
+                cookies: [],
+                bookmarks: [BrowserImportedBookmark(
+                    title: "Example",
+                    url: "https://example.com"
+                )],
+                errors: []
+            )),
+            historyStore: nil,
+            bookmarkStore: PrivateFailureBookmarkStore(detail: Self.privateErrorDetail),
+            cookieStore: nil
+        )
+
+        let result = try importer.importData(BrowserImportPlan(
+            source: .chrome,
+            profileID: UUID(),
+            importCookies: false,
+            importHistory: false
+        ))
+        let issue = try #require(result.errors.first)
+        let message = BrowserImportWizardView.localizedIssueMessage(
+            issue,
+            localizer: try spanishLocalizer()
+        )
+
+        #expect(issue.kind == .bookmarkWriteFailed(count: 1))
+        #expect(message == "Marcadores sin guardar: 1.")
+        #expect(!issue.message.contains(Self.privateErrorDetail))
+        #expect(!message.contains(Self.privateErrorDetail))
+    }
+
+    @Test("cookie decryption failures use the real source importer and hide private details")
+    @MainActor
+    func cookieDecryptionFailureIsLocalized() throws {
+        let fixture = try ChromiumCookiePrivacyFixture.make()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let location = BrowserImportLocation(
+            source: .chrome,
+            profileName: "Default",
+            historyPath: fixture.root.appendingPathComponent("History"),
+            cookiesPath: fixture.database,
+            bookmarksPath: nil
+        )
+        let importer = ChromiumBrowserImporter(
+            cookieDecryptor: PrivateFailureCookieDecryptor(detail: Self.privateErrorDetail)
+        )
+
+        let preview = try importer.preview(plan: BrowserImportPlan(
+            source: .chrome,
+            profileID: UUID(),
+            importHistory: false,
+            importBookmarks: false,
+            explicitLocations: [location],
+            readCookieValues: true
+        ))
+        let issue = try #require(preview.errors.first)
+        let message = BrowserImportWizardView.localizedIssueMessage(
+            issue,
+            localizer: try spanishLocalizer()
+        )
+
+        #expect(preview.cookies.count == 1)
+        #expect(issue.kind == .cookieDecryptionFailed(count: 1))
+        #expect(message == "Cookies cifradas omitidas: 1.")
+        #expect(!issue.message.contains(Self.privateErrorDetail))
+        #expect(!message.contains(Self.privateErrorDetail))
+    }
+
+    @MainActor
+    private func spanishLocalizer() throws -> AppLocalizer {
+        let localizationURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Resources/Localization", isDirectory: true)
+        return AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(Bundle(url: localizationURL))
+        )
+    }
+}
+
+private enum PrivateBrowserImportFailure: Error {
+    case operation(String)
+}
+
+private struct PrivacyPreviewImporter: BrowserSourceImporting {
+    let preview: BrowserImportPreview
+
+    func preview(plan: BrowserImportPlan) throws -> BrowserImportPreview {
+        preview
+    }
+}
+
+private struct PrivateFailureHistoryStore: BrowserHistoryStoring {
+    let detail: String
+
+    func recordVisit(url: String, title: String?, profileID: UUID) throws {
+        throw PrivateBrowserImportFailure.operation(detail)
+    }
+
+    func search(query: String, profileID: UUID?, limit: Int) throws -> [HistoryEntry] { [] }
+    func recentHistory(profileID: UUID?, limit: Int) throws -> [HistoryEntry] { [] }
+    func deleteByDateRange(from: Date, to: Date, profileID: UUID?) throws {}
+    func deleteAll(profileID: UUID?) throws {}
+    func groupedByDate(profileID: UUID?, limit: Int) throws -> [DateGroup<HistoryEntry>] { [] }
+}
+
+private struct PrivateFailureBookmarkStore: BrowserBookmarkStoring {
+    let detail: String
+
+    func loadAll() throws -> [BrowserBookmark] { [] }
+    func save(_ bookmark: BrowserBookmark) throws {}
+    func saveBatch(_ bookmarks: [BrowserBookmark]) throws {
+        throw PrivateBrowserImportFailure.operation(detail)
+    }
+    func update(_ bookmark: BrowserBookmark) throws {}
+    func delete(id: UUID) throws {}
+    func move(id: UUID, toParent: UUID?, sortOrder: Int) throws {}
+    func search(query: String) -> [BrowserBookmark] { [] }
+    func children(of parentID: UUID?) -> [BrowserBookmark] { [] }
+}
+
+private struct PrivateFailureCookieDecryptor: ChromiumCookieDecrypting {
+    let detail: String
+
+    func decrypt(
+        _ encryptedValue: Data,
+        domain: String,
+        source: BrowserImportSource,
+        databaseVersion: Int?
+    ) throws -> String {
+        throw PrivateBrowserImportFailure.operation(detail)
+    }
+}
+
+private struct ChromiumCookiePrivacyFixture {
+    let root: URL
+    let database: URL
+
+    static func make() throws -> ChromiumCookiePrivacyFixture {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("browser-import-privacy-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let database = root.appendingPathComponent("Cookies")
+        var handle: OpaquePointer?
+        guard sqlite3_open(database.path, &handle) == SQLITE_OK, let handle else {
+            throw PrivateBrowserImportFailure.operation("fixture open failed")
+        }
+        defer { sqlite3_close(handle) }
+        try execute(
+            """
+            CREATE TABLE cookies(
+                host_key TEXT,
+                name TEXT,
+                path TEXT,
+                value TEXT,
+                encrypted_value BLOB,
+                expires_utc INTEGER,
+                is_secure INTEGER,
+                is_httponly INTEGER
+            );
+            INSERT INTO cookies VALUES(
+                '.example.com', 'session', '/', '', X'76313001020304', 0, 1, 1
+            );
+            """,
+            in: handle
+        )
+        return ChromiumCookiePrivacyFixture(root: root, database: database)
+    }
+
+    private static func execute(_ sql: String, in database: OpaquePointer) throws {
+        var message: UnsafeMutablePointer<CChar>?
+        guard sqlite3_exec(database, sql, nil, nil, &message) == SQLITE_OK else {
+            defer { sqlite3_free(message) }
+            throw PrivateBrowserImportFailure.operation(
+                message.map { String(cString: $0) } ?? "fixture SQL failed"
+            )
+        }
+    }
+}

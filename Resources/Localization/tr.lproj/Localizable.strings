@@ -2432,6 +2432,9 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "%2$d çerezden %1$d tanesi aktarıldı; %3$d tanesi WebKit tarafından doğrulanamadı.";
 "browser.import.issue.bookmarkRootConflict" = "İçe aktarılan yer imi klasörü mevcut bir öğeyle çakışıyor.";
 "browser.import.issue.cancelled" = "Tarayıcı içe aktarması iptal edildi.";
+"browser.import.issue.historyWriteFailed" = "Kaydedilemeyen geçmiş ziyaretleri: %d.";
+"browser.import.issue.bookmarkWriteFailed" = "Kaydedilemeyen yer imleri: %d.";
+"browser.import.issue.cookieDecryptionFailed" = "Atlanan şifreli çerezler: %d.";
 "browser.import.error.title" = "İçe aktarma sürdürülemedi";
 "browser.import.error.destinationUnavailable" = "Seçilen Cocxy profili artık mevcut değil.";
 "browser.import.error.remoteDestination" = "Tarayıcı verileri yalnızca yerel bir WebKit profiline aktarılabilir.";
