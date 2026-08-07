@@ -54,7 +54,12 @@ struct ProjectAuroraRegistrySwiftTestingTests {
         let sandbox = try makeSandbox()
         defer { try? FileManager.default.removeItem(at: sandbox) }
         let registryURL = sandbox.appendingPathComponent("registry.json")
-        try Data("not-json".utf8).write(to: registryURL)
+        let redirectedURL = sandbox.appendingPathComponent("redirected.json")
+        try Data("[]".utf8).write(to: redirectedURL)
+        try FileManager.default.createSymbolicLink(
+            at: registryURL,
+            withDestinationURL: redirectedURL
+        )
         let registry = ProjectRegistry(store: ProjectRegistryStore(fileURL: registryURL))
         let tabManager = TabManager()
         let store = AgentStatePerSurfaceStore()
@@ -130,20 +135,10 @@ struct ProjectAuroraRegistrySwiftTestingTests {
         #expect(diagnostic.discardedRecordCount == 1)
         let expectedMessage = "No se pudieron leer algunos metadatos de proyectos. Cocxy guardó los registros rechazados (1) en un archivo privado de recuperación."
         let sidebar = AuroraSidebarHost(controller: controller).makeSidebarView()
-        let section = Design.AuroraProjectRegistrySection(
-            projects: controller.projects,
-            projectTaskCounts: [:],
-            registryAvailable: true,
-            recoveryMessage: sidebar.projectRegistryRecoveryMessage,
-            onActivate: nil,
-            onSetPinned: nil,
-            localizer: controller.localizer
-        )
-
-        let registrySurfaceStrings = renderedViewStrings(section.body)
+        let sidebarSurfaceStrings = renderedViewStrings(sidebar.body)
 
         #expect(sidebar.projectRegistryRecoveryMessage == expectedMessage)
-        #expect(registrySurfaceStrings.contains(expectedMessage))
+        #expect(sidebarSurfaceStrings.contains(expectedMessage))
     }
 
     private func makeSandbox() throws -> URL {

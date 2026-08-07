@@ -11,7 +11,7 @@ extension Design {
         let projects: [ProjectPresentationItem]
         let projectTaskCounts: [String: Int]
         let registryAvailable: Bool
-        var recoveryMessage: String? = nil
+        let recoveryMessage: String?
         let onActivate: ((String) -> Void)?
         let onSetPinned: ((String, Bool) -> Void)?
         let localizer: AppLocalizer

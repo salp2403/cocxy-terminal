@@ -330,8 +330,8 @@ struct ProjectRegistrySwiftTestingTests {
         ])
     }
 
-    @Test("load failure is visible and prevents destructive overwrite")
-    func corruptStoreFailsClosed() throws {
+    @Test("a corrupt document is quarantined and the registry remains writable")
+    func corruptStoreRecoversWithoutDiscardingEvidence() throws {
         let sandbox = makeSandbox()
         defer { try? FileManager.default.removeItem(at: sandbox) }
         let fileURL = sandbox.appendingPathComponent("registry.json")
@@ -339,11 +339,41 @@ struct ProjectRegistrySwiftTestingTests {
         try Data("not-json".utf8).write(to: fileURL)
         let registry = ProjectRegistry(store: ProjectRegistryStore(fileURL: fileURL))
 
-        #expect(registry.persistenceErrorDescription != nil)
-        #expect(throws: ProjectRegistryError.self) {
-            try registry.recordOpen(descriptor("/tmp/new-project"))
-        }
-        #expect(try String(contentsOf: fileURL, encoding: .utf8) == "not-json")
+        #expect(registry.persistenceErrorDescription == nil)
+        #expect(registry.records.isEmpty)
+        let recovery = try #require(registry.recoveryDiagnostic)
+        #expect(recovery.discardedRecordCount == 1)
+        #expect(recovery.discardedRecordIdentities == ["registry"])
+        #expect(try String(contentsOf: recovery.quarantineFileURL, encoding: .utf8) == "not-json")
+        #expect(permissionBits(at: recovery.quarantineFileURL) == 0o600)
+        #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+
+        try registry.recordOpen(descriptor("/tmp/new-project"))
+
+        #expect(try ProjectRegistryStore(fileURL: fileURL).load().map(\.id) == [
+            ProjectID(rawValue: "/tmp/new-project"),
+        ])
+    }
+
+    @Test("a non-array registry root is preserved before an empty writable recovery")
+    func nonArrayRootRecoversWithoutDiscardingEvidence() throws {
+        let sandbox = makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let fileURL = sandbox.appendingPathComponent("registry.json")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        let source = Data(#"{"unexpected":true}"#.utf8)
+        try source.write(to: fileURL)
+
+        let store = ProjectRegistryStore(fileURL: fileURL)
+        let report = try store.loadReport()
+
+        #expect(report.records.isEmpty)
+        #expect(report.discardedRecordCount == 1)
+        let quarantineURL = try #require(report.quarantineFileURL)
+        #expect(try Data(contentsOf: quarantineURL) == source)
+        #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+        try store.save([ProjectRecord(id: ProjectID(rawValue: "/tmp/recovered-root"))])
+        #expect(try store.load().map(\.id) == [ProjectID(rawValue: "/tmp/recovered-root")])
     }
 
     @Test("one invalid record is discarded without making valid projects read-only")

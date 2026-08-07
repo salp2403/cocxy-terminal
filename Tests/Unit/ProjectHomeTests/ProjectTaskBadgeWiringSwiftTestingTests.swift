@@ -83,6 +83,7 @@ struct ProjectTaskBadgeWiringSwiftTestingTests {
             projects: [],
             projectTaskCounts: snapshot,
             registryAvailable: true,
+            recoveryMessage: nil,
             onActivate: nil,
             onSetPinned: nil,
             localizer: AppLocalizer(languagePreference: .english)

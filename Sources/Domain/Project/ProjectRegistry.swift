@@ -129,14 +129,19 @@ struct ProjectRegistryStore: Sendable {
 
     let fileURL: URL
     private let fileManager: FileManager
+    private let atomicWrite: @Sendable (Data, URL) throws -> Void
 
     init(
         fileURL: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config/cocxy/projects/registry.json", isDirectory: false),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        atomicWrite: @escaping @Sendable (Data, URL) throws -> Void = { data, url in
+            try data.write(to: url, options: .atomic)
+        }
     ) {
         self.fileURL = fileURL.standardizedFileURL
         self.fileManager = fileManager
+        self.atomicWrite = atomicWrite
     }
 
     func load() throws -> [ProjectRecord] {
@@ -159,8 +164,20 @@ struct ProjectRegistryStore: Sendable {
                 throw ProjectRegistryStoreError.invalidRecord("Registry is not a regular file")
             }
             let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
-            guard let rawRecords = try JSONSerialization.jsonObject(with: data) as? [Any] else {
-                throw ProjectRegistryStoreError.invalidRecord("Registry root must be an array")
+            let decodedDocument: Any
+            do {
+                decodedDocument = try JSONSerialization.jsonObject(with: data)
+            } catch {
+                return try recoverCorruptDocument(
+                    data,
+                    reason: "Registry document is not valid JSON"
+                )
+            }
+            guard let rawRecords = decodedDocument as? [Any] else {
+                return try recoverCorruptDocument(
+                    data,
+                    reason: "Registry root must be an array"
+                )
             }
             var records: [ProjectRecord] = []
             var discardedRecords: [ProjectRegistryDiscardedRecord] = []
@@ -189,13 +206,15 @@ struct ProjectRegistryStore: Sendable {
             if !discardedRawRecords.isEmpty {
                 quarantineFileURL = try quarantine(discardedRawRecords)
             }
+            defer {
+                if let quarantineFileURL {
+                    pruneQuarantineFiles(keeping: quarantineFileURL)
+                }
+            }
             if !discardedRecords.isEmpty
                 || migrated.count != records.count
                 || rawIDs != records.map(\.id.rawValue) {
                 try save(migrated)
-            }
-            if let quarantineFileURL {
-                pruneQuarantineFiles(keeping: quarantineFileURL)
             }
             return ProjectRegistryStoreLoadReport(
                 records: migrated,
@@ -218,7 +237,7 @@ struct ProjectRegistryStore: Sendable {
             if fileManager.fileExists(atPath: fileURL.path) {
                 try rejectSymbolicLink(at: fileURL)
             }
-            try Self.encoder.encode(records).write(to: fileURL, options: .atomic)
+            try atomicWrite(Self.encoder.encode(records), fileURL)
             try fileManager.setAttributes(
                 [.posixPermissions: NSNumber(value: 0o600)],
                 ofItemAtPath: fileURL.path
@@ -247,10 +266,16 @@ struct ProjectRegistryStore: Sendable {
         } else {
             throw ProjectRegistryStoreError.invalidRoot(root.path)
         }
-        try fileManager.setAttributes(
-            [.posixPermissions: NSNumber(value: 0o700)],
-            ofItemAtPath: root.path
-        )
+        do {
+            try fileManager.setAttributes(
+                [.posixPermissions: NSNumber(value: 0o700)],
+                ofItemAtPath: root.path
+            )
+        } catch where !createIfMissing {
+            Self.logger.error(
+                "Unable to harden the project registry directory while reading: \(String(describing: error), privacy: .private)"
+            )
+        }
     }
 
     private func rejectSymbolicLink(at url: URL) throws {
@@ -261,20 +286,51 @@ struct ProjectRegistryStore: Sendable {
     }
 
     private func quarantine(_ rawRecords: [Any]) throws -> URL {
-        let quarantineURL = fileURL.deletingLastPathComponent().appendingPathComponent(
-            "registry-quarantine-\(UUID().uuidString.lowercased()).json",
-            isDirectory: false
-        )
+        let quarantineURL = makeQuarantineURL()
         let data = try JSONSerialization.data(
             withJSONObject: rawRecords,
             options: [.prettyPrinted, .sortedKeys]
         )
-        try data.write(to: quarantineURL, options: .atomic)
+        try atomicWrite(data, quarantineURL)
         try fileManager.setAttributes(
             [.posixPermissions: NSNumber(value: 0o600)],
             ofItemAtPath: quarantineURL.path
         )
         return quarantineURL
+    }
+
+    private func recoverCorruptDocument(
+        _ data: Data,
+        reason: String
+    ) throws -> ProjectRegistryStoreLoadReport {
+        let quarantineURL = makeQuarantineURL()
+        try atomicWrite(data, quarantineURL)
+        do {
+            try fileManager.setAttributes(
+                [.posixPermissions: NSNumber(value: 0o600)],
+                ofItemAtPath: quarantineURL.path
+            )
+            try fileManager.removeItem(at: fileURL)
+        } catch {
+            try? fileManager.removeItem(at: quarantineURL)
+            throw error
+        }
+        pruneQuarantineFiles(keeping: quarantineURL)
+        return ProjectRegistryStoreLoadReport(
+            records: [],
+            discardedRecords: [ProjectRegistryDiscardedRecord(
+                identity: "registry",
+                reason: reason
+            )],
+            quarantineFileURL: quarantineURL
+        )
+    }
+
+    private func makeQuarantineURL() -> URL {
+        fileURL.deletingLastPathComponent().appendingPathComponent(
+            "registry-quarantine-\(UUID().uuidString.lowercased()).json",
+            isDirectory: false
+        )
     }
 
     private func pruneQuarantineFiles(keeping newestURL: URL) {
