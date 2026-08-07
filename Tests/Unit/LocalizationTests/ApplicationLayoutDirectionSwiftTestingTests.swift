@@ -259,6 +259,7 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
             localizer: AppLocalizer(languagePreference: .arabic)
         )
         expectDirection(.rightToLeft, in: tabItem, label: "initial Arabic tab item")
+        expectMiniPillGeometry(.rightToLeft, in: tabItem)
         let initialViewIDs = Set(viewTree(rootedAt: tabItem).map(ObjectIdentifier.init))
 
         var updatedItem = makeActiveTabDisplayItem(title: "Updated")
@@ -281,14 +282,33 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
         let updatedTree = viewTree(rootedAt: tabItem)
         #expect(!Set(updatedTree.map(ObjectIdentifier.init)).subtracting(initialViewIDs).isEmpty)
         expectDirection(.rightToLeft, in: tabItem, label: "updated Arabic tab item")
+        expectMiniPillGeometry(.rightToLeft, in: tabItem)
 
         tabItem.updateLocalizer(AppLocalizer(languagePreference: .english))
         tabItem.update(with: initialItem)
         expectDirection(.leftToRight, in: tabItem, label: "updated LTR tab item")
+        expectMiniPillGeometry(.leftToRight, in: tabItem)
     }
 
     @Test("directional panel geometry uses fixed logical-edge coordinates")
     func directionalPanelGeometryUsesFixedOracles() {
+        let paneFrame = NSRect(x: 100, y: 0, width: 600, height: 500)
+        #expect(DirectionalPanelGeometry.paneTrailingOrigin(
+            paneFrame: paneFrame,
+            panelWidth: 280,
+            direction: .leftToRight
+        ) == 404)
+        #expect(DirectionalPanelGeometry.paneTrailingOrigin(
+            paneFrame: paneFrame,
+            panelWidth: 280,
+            direction: .rightToLeft
+        ) == 116)
+        #expect(DirectionalPanelGeometry.logicalLeadingOrigin(
+            containerWidth: 1_000,
+            panelWidth: 200,
+            inset: 18,
+            direction: .rightToLeft
+        ) == 782)
         #expect(DirectionalPanelGeometry.trailingOrigin(
             containerWidth: 1_000,
             panelWidth: 320,
@@ -398,6 +418,24 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
         for (placement, host) in controller.shortcutHintOverlayHosts {
             expectDirection(direction, in: host, label: "shortcut hint \(placement)")
         }
+        let overlay = try #require(controller.overlayContainerView)
+        let debugFrame = try #require(controller.shortcutHintOverlayHosts[.debug]).frame
+        if direction == .rightToLeft {
+            #expect(debugFrame.maxX == overlay.bounds.width - 18)
+        } else {
+            #expect(debugFrame.minX == 18)
+        }
+        let paneHost = try #require(controller.shortcutHintOverlayHosts[.pane])
+        let paneAnchor = controller.focusedPaneView()
+            ?? controller.terminalSurfaceView
+            ?? controller.terminalContainerView
+            ?? overlay
+        let paneFrame = paneAnchor.convert(paneAnchor.bounds, to: overlay)
+        let paneWidth = min(280, max(120, paneFrame.width - 24))
+        let expectedPaneX = direction == .rightToLeft
+            ? min(paneFrame.maxX - paneWidth - 12, paneFrame.minX + 16)
+            : max(paneFrame.minX + 12, paneFrame.maxX - paneWidth - 16)
+        #expect(paneHost.frame.minX == expectedPaneX)
 
         let firstPane = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 240))
         firstPane.addSubview(NSView(frame: NSRect(x: 0, y: 0, width: 40, height: 40)))
@@ -423,6 +461,31 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
                 "\(label) contains a child with the wrong layout direction"
             )
         }
+    }
+
+    private func expectMiniPillGeometry(
+        _ direction: NSUserInterfaceLayoutDirection,
+        in root: NSView
+    ) {
+        let pill = viewTree(rootedAt: root).compactMap { $0 as? MiniAgentPillView }.first
+        guard let pill else {
+            Issue.record("Tab item did not contain a mini agent pill")
+            return
+        }
+        pill.frame = NSRect(x: 0, y: 0, width: 30, height: 14)
+        pill.userInterfaceLayoutDirection = direction
+        pill.layoutSubtreeIfNeeded()
+        pill.layout()
+        guard let label = pill.subviews.compactMap({ $0 as? NSTextField }).first,
+              let dot = pill.layer?.sublayers?.first(where: {
+                  $0.frame.width == 6 && $0.frame.height == 6
+              }) else {
+            Issue.record("Mini agent pill did not expose its visual components")
+            return
+        }
+        #expect(label.frame.width > 0)
+        #expect(dot.frame.minX == (direction == .rightToLeft ? 19 : 5))
+        #expect(!dot.frame.intersects(label.frame))
     }
 
     private func viewTree(rootedAt root: NSView) -> [NSView] {

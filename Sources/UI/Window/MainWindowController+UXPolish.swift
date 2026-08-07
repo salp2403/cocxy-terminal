@@ -81,7 +81,7 @@ extension MainWindowController {
         shortcutHintOverlayHosts.removeAll()
     }
 
-    private func shortcutHintFrame(
+    func shortcutHintFrame(
         for placement: ShortcutHintPlacement,
         in overlayContainer: NSView
     ) -> NSRect {
@@ -112,15 +112,25 @@ extension MainWindowController {
         case .pane:
             let anchor = focusedPaneView() ?? terminalSurfaceView ?? terminalContainerView ?? overlayContainer
             let paneFrame = anchor.convert(anchor.bounds, to: overlayContainer)
+            let width = min(size.width, max(120, paneFrame.width - 24))
             return NSRect(
-                x: max(paneFrame.minX + 12, paneFrame.maxX - size.width - 16),
+                x: DirectionalPanelGeometry.paneTrailingOrigin(
+                    paneFrame: paneFrame,
+                    panelWidth: width,
+                    direction: shellLayoutDirection
+                ),
                 y: max(paneFrame.minY + 12, paneFrame.maxY - size.height - 16),
-                width: min(size.width, max(120, paneFrame.width - 24)),
+                width: width,
                 height: size.height
             )
         case .debug:
             return NSRect(
-                x: 18,
+                x: DirectionalPanelGeometry.logicalLeadingOrigin(
+                    containerWidth: bounds.width,
+                    panelWidth: size.width,
+                    inset: 18,
+                    direction: shellLayoutDirection
+                ),
                 y: max(12, bounds.height - size.height - 84),
                 width: size.width,
                 height: size.height

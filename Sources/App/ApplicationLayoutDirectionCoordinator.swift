@@ -109,6 +109,28 @@ extension MobileMirrorWindowController: ApplicationLayoutDirectionManagedWindowC
 extension CrashRecoveryOfferWindowController: ApplicationLayoutDirectionManagedWindowController {}
 
 enum DirectionalPanelGeometry {
+    static func paneTrailingOrigin(
+        paneFrame: NSRect,
+        panelWidth: CGFloat,
+        direction: NSUserInterfaceLayoutDirection
+    ) -> CGFloat {
+        if direction == .rightToLeft {
+            return min(paneFrame.maxX - panelWidth - 12, paneFrame.minX + 16)
+        }
+        return max(paneFrame.minX + 12, paneFrame.maxX - panelWidth - 16)
+    }
+
+    static func logicalLeadingOrigin(
+        containerWidth: CGFloat,
+        panelWidth: CGFloat,
+        inset: CGFloat,
+        direction: NSUserInterfaceLayoutDirection
+    ) -> CGFloat {
+        direction == .rightToLeft
+            ? containerWidth - panelWidth - inset
+            : inset
+    }
+
     static func trailingOrigin(
         containerWidth: CGFloat,
         panelWidth: CGFloat,

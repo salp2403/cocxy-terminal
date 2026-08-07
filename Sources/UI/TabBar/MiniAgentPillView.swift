@@ -99,7 +99,10 @@ final class MiniAgentPillView: NSView {
     override func layout() {
         super.layout()
         // Center the 6x6 dot vertically, 5pt from the leading edge.
-        dotLayer.frame = NSRect(x: 5, y: (bounds.height - 6) / 2, width: 6, height: 6)
+        let dotX = userInterfaceLayoutDirection == .rightToLeft
+            ? bounds.width - 11
+            : 5
+        dotLayer.frame = NSRect(x: dotX, y: (bounds.height - 6) / 2, width: 6, height: 6)
     }
 
     override func mouseDown(with event: NSEvent) {
