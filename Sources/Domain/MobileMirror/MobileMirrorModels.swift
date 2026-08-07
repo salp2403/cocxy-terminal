@@ -224,14 +224,37 @@ struct MobileMirrorStatePayload: Codable, Equatable, Sendable {
 struct MobileMirrorActionResponse: Codable, Equatable, Sendable {
     let ok: Bool
     let error: String?
+    let code: String?
     let snapshot: MobileMirrorSnapshot?
 
-    static func success(snapshot: MobileMirrorSnapshot?) -> Self {
-        Self(ok: true, error: nil, snapshot: snapshot)
+    private enum CodingKeys: String, CodingKey {
+        case ok
+        case error
+        case code
+        case snapshot
     }
 
-    static func failure(_ message: String) -> Self {
-        Self(ok: false, error: message, snapshot: nil)
+    init(ok: Bool, error: String?, code: String?, snapshot: MobileMirrorSnapshot?) {
+        self.ok = ok
+        self.error = error
+        self.code = code
+        self.snapshot = snapshot
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try container.decode(Bool.self, forKey: .ok)
+        error = try container.decodeIfPresent(String.self, forKey: .error)
+        code = try container.decodeIfPresent(String.self, forKey: .code)
+        snapshot = try container.decodeIfPresent(MobileMirrorSnapshot.self, forKey: .snapshot)
+    }
+
+    static func success(snapshot: MobileMirrorSnapshot?) -> Self {
+        Self(ok: true, error: nil, code: nil, snapshot: snapshot)
+    }
+
+    static func failure(_ message: String, code: String? = nil) -> Self {
+        Self(ok: false, error: message, code: code, snapshot: nil)
     }
 }
 

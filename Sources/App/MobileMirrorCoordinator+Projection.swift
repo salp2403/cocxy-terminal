@@ -341,6 +341,9 @@ extension MobileMirrorCoordinator {
             ?? pendingPairing?.channelID
             ?? pairingChannelID
         if revoke {
+            if activePairing != nil {
+                gateway?.eventHub.publishAndWait(event: "revoked", data: "{}")
+            }
             _ = authority.revoke()
         }
         if let lease = localRelayLease {

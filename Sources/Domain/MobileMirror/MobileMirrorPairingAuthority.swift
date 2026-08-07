@@ -51,6 +51,35 @@ struct MobileMirrorTerminalSelection: Equatable, Sendable {
     let surfaceID: String
 }
 
+private struct MobileMirrorInputSequenceWindow: Sendable {
+    private static let width: UInt64 = 64
+
+    private var highest: UInt64?
+    private var seen: UInt64 = 0
+
+    mutating func accept(_ sequence: UInt64) -> Bool {
+        guard let highest else {
+            self.highest = sequence
+            seen = 1
+            return true
+        }
+        if sequence > highest {
+            let distance = sequence - highest
+            seen = distance >= Self.width
+                ? 1
+                : (seen << Int(distance)) | 1
+            self.highest = sequence
+            return true
+        }
+        let distance = highest - sequence
+        guard distance < Self.width else { return false }
+        let bit = UInt64(1) << Int(distance)
+        guard seen & bit == 0 else { return false }
+        seen |= bit
+        return true
+    }
+}
+
 enum MobileMirrorPairingPollResult: Equatable, Sendable {
     case pending
     case denied
@@ -88,7 +117,7 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
         let expiresAt: Date
         var selectedSessionID: String?
         var selectedSurfaceID: String?
-        var lastInputSequence: UInt64?
+        var inputSequenceWindow: MobileMirrorInputSequenceWindow
         var replayTracker: ReplayTracker
     }
 
@@ -196,7 +225,7 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
                 expiresAt: expiresAt,
                 selectedSessionID: nil,
                 selectedSurfaceID: nil,
-                lastInputSequence: nil,
+                inputSequenceWindow: MobileMirrorInputSequenceWindow(),
                 replayTracker: ReplayTracker(windowSeconds: Self.actionFreshnessSeconds)
             )
             current.cookieDeliveryToken = cookie
@@ -358,8 +387,8 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
                 requestBody: body,
                 encryptionKey: current.terminalInputEncryptionKey
             )
-            if let lastSequence = current.lastInputSequence,
-               opened.sequence <= lastSequence {
+            var sequenceWindow = current.inputSequenceWindow
+            guard sequenceWindow.accept(opened.sequence) else {
                 throw MobileMirrorError.replayDetected
             }
             let nonceData = withUnsafeBytes(of: nonceUUID.uuid) { Data($0) }
@@ -369,7 +398,7 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
             ) else {
                 throw MobileMirrorError.replayDetected
             }
-            current.lastInputSequence = opened.sequence
+            current.inputSequenceWindow = sequenceWindow
             session = current
             return MobileMirrorOpenedAction(
                 channelID: current.channelID,

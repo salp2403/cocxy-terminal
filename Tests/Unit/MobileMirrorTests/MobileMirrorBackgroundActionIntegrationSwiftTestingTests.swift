@@ -145,6 +145,33 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         })
     }
 
+    @Test("revoking an active pairing notifies the mobile client before shutdown")
+    func activePairingRevocationPublishesEvent() async throws {
+        let sandbox = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let context = makeCoordinator(sandbox: sandbox)
+        defer { context.stop() }
+        _ = try activatePairing(
+            authority: context.coordinator.authority,
+            coordinator: context.coordinator
+        )
+        let eventCapture = MobileMirrorEventCapture()
+        let eventHub = MobileMirrorEventHub { data, _ in
+            eventCapture.append(data)
+            return true
+        }
+        eventHub.add(descriptor: 102, close: {})
+        context.coordinator.gateway = MobileMirrorGateway(eventHub: eventHub) { _, _ in
+            .response(.error("Unavailable", status: 503))
+        }
+
+        context.coordinator.revoke()
+
+        #expect(eventCapture.contains("event: revoked"))
+        #expect(context.coordinator.activePairing == nil)
+        #expect(context.coordinator.authority.activePairing() == nil)
+    }
+
     @Test("background audit failure reaches the desktop in the configured language")
     func backgroundAuditFailureIsLocalized() async throws {
         let sandbox = try makeTemporaryDirectory()

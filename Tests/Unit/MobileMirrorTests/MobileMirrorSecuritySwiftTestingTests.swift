@@ -90,8 +90,8 @@ struct MobileMirrorSecuritySwiftTestingTests {
         }
     }
 
-    @Test("encrypted actions authenticate before opening and reject replay or reordering")
-    func encryptedActionsAuthenticateBeforeOpeningAndRejectReplay() throws {
+    @Test("encrypted actions accept bounded reordering and reject duplicates or stale sequences")
+    func encryptedActionsUseBoundedReplayWindow() throws {
         let authority = MobileMirrorPairingAuthority()
         let identity = MobileMirrorClientIdentity(remoteAddress: "10.0.0.8", userAgent: "Phone")
         let offer = authority.makeOffer()
@@ -197,11 +197,43 @@ struct MobileMirrorSecuritySwiftTestingTests {
             key: sessionKeys.terminalInputEncryptionKey,
             sequence: 1
         )
+        let reordered = try openAction(
+            authority: authority,
+            cookie: cookie,
+            body: reorderedBody,
+            actionToken: sessionKeys.actionToken
+        )
+        #expect(reordered.body == plaintext)
         #expect(throws: MobileMirrorError.replayDetected) {
             try openAction(
                 authority: authority,
                 cookie: cookie,
                 body: reorderedBody,
+                actionToken: sessionKeys.actionToken
+            )
+        }
+
+        let farAdvancedBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            plaintext: plaintext,
+            key: sessionKeys.terminalInputEncryptionKey,
+            sequence: 68
+        )
+        _ = try openAction(
+            authority: authority,
+            cookie: cookie,
+            body: farAdvancedBody,
+            actionToken: sessionKeys.actionToken
+        )
+        let staleBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            plaintext: plaintext,
+            key: sessionKeys.terminalInputEncryptionKey,
+            sequence: 3
+        )
+        #expect(throws: MobileMirrorError.replayDetected) {
+            try openAction(
+                authority: authority,
+                cookie: cookie,
+                body: staleBody,
                 actionToken: sessionKeys.actionToken
             )
         }

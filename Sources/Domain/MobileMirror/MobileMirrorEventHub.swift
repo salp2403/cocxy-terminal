@@ -60,13 +60,7 @@ final class MobileMirrorEventHub: @unchecked Sendable {
     }
 
     func publish(event: String, data: String) {
-        guard event.utf8.count <= 64,
-              event.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" }),
-              data.utf8.count <= 16 * 1_024,
-              !data.contains("\r"),
-              !data.contains("\n") else {
-            return
-        }
+        guard Self.isValid(event: event, data: data) else { return }
         heartbeatQueue.async { [weak self] in
             guard let self else { return }
             let payload = self.makePayload(event: event, data: data)
@@ -75,6 +69,33 @@ final class MobileMirrorEventHub: @unchecked Sendable {
             }
             self.send(payload)
         }
+    }
+
+    @discardableResult
+    func publishAndWait(
+        event: String,
+        data: String,
+        timeout: DispatchTimeInterval = .milliseconds(250)
+    ) -> Bool {
+        guard Self.isValid(event: event, data: data) else { return false }
+        let group = DispatchGroup()
+        var clientCount = 0
+        heartbeatQueue.sync {
+            let payload = makePayload(event: event, data: data)
+            if event != "state" {
+                retain(payload: payload, id: nextEventID)
+            }
+            lock.lock()
+            let current = clientOrder.compactMap { clients[$0] }
+            lock.unlock()
+            clientCount = current.count
+            for client in current {
+                group.enter()
+                client.enqueue(payload) { _ in group.leave() }
+            }
+        }
+        guard clientCount > 0 else { return false }
+        return group.wait(timeout: .now() + timeout) == .success
     }
 
     func disconnect(descriptor: Int32) {
@@ -110,6 +131,14 @@ final class MobileMirrorEventHub: @unchecked Sendable {
         }
         heartbeat = timer
         timer.resume()
+    }
+
+    private static func isValid(event: String, data: String) -> Bool {
+        event.utf8.count <= 64
+            && event.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" }
+            && data.utf8.count <= 16 * 1_024
+            && !data.contains("\r")
+            && !data.contains("\n")
     }
 
     private func makePayload(event: String, data: String) -> Data {
@@ -177,7 +206,10 @@ private final class MobileMirrorEventClientWriter: @unchecked Sendable {
         self.queue = DispatchQueue(label: "dev.cocxy.mobile.events.client.\(descriptor)")
     }
 
-    func enqueue(_ data: Data) {
+    func enqueue(
+        _ data: Data,
+        completion: (@Sendable (Bool) -> Void)? = nil
+    ) {
         lock.lock()
         guard !stopped,
               pendingBytes <= Self.maximumPendingBytes - data.count else {
@@ -185,12 +217,19 @@ private final class MobileMirrorEventClientWriter: @unchecked Sendable {
             let shouldFinish = !finishScheduled
             finishScheduled = true
             lock.unlock()
+            completion?(false)
             if shouldFinish { finishOnQueue() }
             return
         }
         pendingBytes += data.count
         lock.unlock()
-        queue.async { [weak self] in self?.send(data) }
+        queue.async { [weak self] in
+            guard let self else {
+                completion?(false)
+                return
+            }
+            self.send(data, completion: completion)
+        }
     }
 
     func stop() {
@@ -206,11 +245,18 @@ private final class MobileMirrorEventClientWriter: @unchecked Sendable {
         if shouldFinish { finishOnQueue() }
     }
 
-    private func send(_ data: Data) {
+    private func send(
+        _ data: Data,
+        completion: (@Sendable (Bool) -> Void)?
+    ) {
         lock.lock()
         let shouldSend = !stopped
+        if !shouldSend { pendingBytes -= data.count }
         lock.unlock()
-        guard shouldSend else { return }
+        guard shouldSend else {
+            completion?(false)
+            return
+        }
 
         let succeeded = sender(data, descriptor)
         lock.lock()
@@ -219,6 +265,7 @@ private final class MobileMirrorEventClientWriter: @unchecked Sendable {
         let shouldFinish = !succeeded && !finishScheduled
         if shouldFinish { finishScheduled = true }
         lock.unlock()
+        completion?(succeeded)
         if shouldFinish { finish() }
     }
 

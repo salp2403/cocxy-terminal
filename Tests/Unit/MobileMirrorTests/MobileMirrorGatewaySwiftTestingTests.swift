@@ -61,6 +61,24 @@ struct MobileMirrorGatewaySwiftTestingTests {
         #expect(Self.eventName(in: capture.payloads(for: 53)[0]) == "state")
     }
 
+    @Test("revocation delivery is attempted before event clients stop")
+    func revocationDeliveryDrains() throws {
+        let capture = MobileMirrorEventCapture()
+        let hub = MobileMirrorEventHub { data, descriptor in
+            capture.append(data, descriptor: descriptor)
+            return true
+        }
+        hub.add(descriptor: 61, close: {})
+        try capture.wait(for: 1, descriptor: 61)
+
+        #expect(hub.publishAndWait(event: "revoked", data: "{}"))
+        hub.stop()
+
+        let payloads = capture.payloads(for: 61)
+        try #require(payloads.count == 2)
+        #expect(Self.eventName(in: payloads[1]) == "revoked")
+    }
+
     private static func eventID(in data: Data) -> UInt64? {
         String(decoding: data, as: UTF8.self)
             .split(separator: "\n")

@@ -498,9 +498,10 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         let status: Int
         switch error {
         case MobileMirrorError.invalidPairingToken,
-             MobileMirrorError.invalidSignature,
-             MobileMirrorError.replayDetected:
+             MobileMirrorError.invalidSignature:
             status = 403
+        case MobileMirrorError.replayDetected:
+            status = 409
         case MobileMirrorError.pairingExpired,
              MobileMirrorError.sessionExpired:
             status = 401
@@ -514,8 +515,15 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         default:
             status = 503
         }
-        let response = MobileMirrorHTTPResponse.error(error.localizedDescription, status: status)
-        if authenticationFailure, let identity {
+        let responseCode = error as? MobileMirrorError == .replayDetected
+            ? "replay-detected"
+            : nil
+        let response = MobileMirrorHTTPResponse.error(
+            error.localizedDescription,
+            status: status,
+            code: responseCode
+        )
+        if authenticationFailure, responseCode == nil, let identity {
             return rejected(response, identity: identity)
         }
         return .response(response)

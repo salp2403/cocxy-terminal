@@ -184,8 +184,8 @@ struct MobileMirrorHTTPResponse: Equatable, Sendable {
         )
     }
 
-    static func error(_ message: String, status: Int) -> Self {
-        json(MobileMirrorActionResponse.failure(message), status: status)
+    static func error(_ message: String, status: Int, code: String? = nil) -> Self {
+        json(MobileMirrorActionResponse.failure(message, code: code), status: status)
     }
 
     func encoded() -> Data {

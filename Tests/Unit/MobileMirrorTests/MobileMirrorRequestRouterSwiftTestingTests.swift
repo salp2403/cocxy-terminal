@@ -175,7 +175,18 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(await actionRecorder.values == [action])
 
         let replayResult = await router.route(request: signedRequest, identity: identity)
-        #expect(try response(from: replayResult).status == 403)
+        let replayResponse = try response(from: replayResult)
+        #expect(replayResponse.status == 409)
+        let replayPayload = try JSONDecoder().decode(
+            MobileMirrorActionResponse.self,
+            from: replayResponse.body
+        )
+        #expect(replayPayload.code == "replay-detected")
+        for _ in 0..<12 {
+            #expect(try response(
+                from: await router.route(request: signedRequest, identity: identity)
+            ).status == 409)
+        }
         #expect(await actionRecorder.values == [action])
 
         var invalidSignatureHeaders = MobileMirrorEncryptedActionTestSupport.signedHeaders(
@@ -234,12 +245,13 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(try response(
             from: await router.route(request: malformedRequest, identity: identity)
         ).status == 400)
-        #expect(await rejectionRecorder.reasons == [
-            .replayDetected,
-            .invalidSignature,
-            .invalidEnvelope,
-            .malformedAction,
-        ])
+        #expect(await rejectionRecorder.reasons == (
+            Array(repeating: .replayDetected, count: 13) + [
+                .invalidSignature,
+                .invalidEnvelope,
+                .malformedAction,
+            ]
+        ))
 
         let terminalAction = MobileMirrorAction(
             kind: .terminalControl,
