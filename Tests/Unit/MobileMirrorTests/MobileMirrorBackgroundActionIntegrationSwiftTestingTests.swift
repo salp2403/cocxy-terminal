@@ -41,6 +41,47 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         ) == false)
     }
 
+    @Test("rollback failure preserves the pairing error and replacement directory")
+    func rollbackFailurePreservesOriginalError() async throws {
+        let sandbox = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let gate = MobileMirrorActionGate()
+        let service = SuspendedPublishedProjectService(
+            gate: gate,
+            replacePublicationBeforeReturn: true
+        )
+        let context = makeCoordinator(sandbox: sandbox, projectService: service)
+        defer { context.stop() }
+        let session = try activatePairing(
+            authority: context.coordinator.authority,
+            coordinator: context.coordinator
+        )
+        let operation = try preparedProjectCreation(
+            name: "Replaced Pairing",
+            context: context,
+            session: session
+        )
+        let task = Task { @MainActor in try await operation() }
+
+        await gate.waitUntilSuspended()
+        _ = context.coordinator.authority.revoke()
+        await gate.release()
+
+        await #expect(throws: MobileMirrorError.sessionExpired) {
+            try await task.value
+        }
+        let replacement = sandbox.appendingPathComponent(
+            "projects/Replaced Pairing/owner.txt"
+        )
+        #expect(try String(contentsOf: replacement, encoding: .utf8) == "keep")
+        #expect(FileManager.default.fileExists(
+            atPath: sandbox.appendingPathComponent(
+                "projects/Replaced Pairing-original/.git",
+                isDirectory: true
+            ).path
+        ))
+    }
+
     @Test("project publication observes cancellation before activation")
     func projectPublicationObservesCancellation() async throws {
         let sandbox = try makeTemporaryDirectory()
@@ -377,9 +418,14 @@ private actor MobileMirrorActionGate {
 
 private final class SuspendedPublishedProjectService: MobileMirrorProjectCreating, @unchecked Sendable {
     private let gate: MobileMirrorActionGate
+    private let replacePublicationBeforeReturn: Bool
 
-    init(gate: MobileMirrorActionGate) {
+    init(
+        gate: MobileMirrorActionGate,
+        replacePublicationBeforeReturn: Bool = false
+    ) {
         self.gate = gate
+        self.replacePublicationBeforeReturn = replacePublicationBeforeReturn
     }
 
     func createProject(
@@ -393,6 +439,23 @@ private final class SuspendedPublishedProjectService: MobileMirrorProjectCreatin
             )
         }
         let publication = try await publicationTask.value
+        if replacePublicationBeforeReturn {
+            let published = try publication.verifiedURL()
+            let moved = published.deletingLastPathComponent().appendingPathComponent(
+                "\(name)-original",
+                isDirectory: true
+            )
+            try FileManager.default.moveItem(at: published, to: moved)
+            try FileManager.default.createDirectory(
+                at: published,
+                withIntermediateDirectories: false
+            )
+            try "keep".write(
+                to: published.appendingPathComponent("owner.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
         await gate.suspend()
         return publication
     }

@@ -132,7 +132,6 @@ struct MobileMirrorProjectService: MobileMirrorProjectCreating, Sendable {
             try transaction.verifyRepositoryMetadata()
             try Task.checkCancellation()
             let publication = try transaction.publish()
-            _ = try publication.verifiedURL()
             return publication
         } catch let originalError {
             do {

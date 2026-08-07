@@ -3,6 +3,12 @@
 
 import AppKit
 import Foundation
+import os.log
+
+private let mobileMirrorProjectLogger = Logger(
+    subsystem: "dev.cocxy.terminal",
+    category: "MobileProject"
+)
 
 extension MobileMirrorCoordinator {
     func prepareProjectCreation(
@@ -102,13 +108,19 @@ extension MobileMirrorCoordinator {
             }
             try projectRegistry.recordOpen(descriptor, incrementOpenCount: false)
             appDelegate.windowEventBus?.broadcast(.custom(name: "project.changed", payload: [:]))
-        } catch {
+        } catch let originalError {
             if let activatedTab {
                 activatedTab.delegate.controllerContainingTab(activatedTab.id)?
                     .performCloseTab(activatedTab.id)
             }
-            try publication.rollback()
-            throw error
+            do {
+                try publication.rollback()
+            } catch {
+                mobileMirrorProjectLogger.error(
+                    "Mobile project rollback failed: \(String(describing: error), privacy: .private)"
+                )
+            }
+            throw originalError
         }
     }
 

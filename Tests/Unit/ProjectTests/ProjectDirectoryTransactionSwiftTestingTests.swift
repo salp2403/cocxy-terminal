@@ -244,6 +244,29 @@ struct ProjectDirectoryTransactionSwiftTestingTests {
         ))
     }
 
+    @Test("post-publication validation failure rolls back the verified destination")
+    func postPublicationFailureRollsBackVerifiedDestination() throws {
+        let rootURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        let hooks = ProjectDirectoryTransactionHooks(afterPublish: { _ in
+            throw PostPublicationFailure.injected
+        })
+        let transaction = try ProjectDirectoryTransaction.begin(
+            in: ProjectDirectoryRoot.open(rootURL),
+            destinationName: "Demo",
+            hooks: hooks
+        )
+        try createGitDirectory(in: transaction)
+
+        #expect(throws: PostPublicationFailure.injected) {
+            try transaction.publish()
+        }
+        #expect(!FileManager.default.fileExists(
+            atPath: rootURL.appendingPathComponent("Demo", isDirectory: true).path
+        ))
+        #expect(try stagingEntries(in: rootURL).isEmpty)
+    }
+
     @Test("opened publication remains bound when its pathname is replaced")
     func openedPublicationRetainsExactDirectory() throws {
         let rootURL = try temporaryDirectory()
@@ -318,4 +341,8 @@ struct ProjectDirectoryTransactionSwiftTestingTests {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
         return url.standardizedFileURL
     }
+}
+
+private enum PostPublicationFailure: Error {
+    case injected
 }

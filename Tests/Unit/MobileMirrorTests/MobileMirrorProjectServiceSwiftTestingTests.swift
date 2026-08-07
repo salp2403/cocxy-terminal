@@ -47,6 +47,30 @@ struct MobileMirrorProjectServiceSwiftTestingTests {
         #expect(FileManager.default.fileExists(atPath: sibling.path))
     }
 
+    @Test("rollback rejects a replaced publication without deleting user data")
+    func rollbackRejectsReplacedPublication() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let published = root.appendingPathComponent("Rollback", isDirectory: true)
+        let moved = root.appendingPathComponent("Original", isDirectory: true)
+        let publication = try await MobileMirrorProjectService().createProject(
+            named: "Rollback",
+            in: root
+        )
+        try FileManager.default.moveItem(at: published, to: moved)
+        try FileManager.default.createDirectory(at: published, withIntermediateDirectories: false)
+        let ownerFile = published.appendingPathComponent("owner.txt")
+        try "keep".write(to: ownerFile, atomically: true, encoding: .utf8)
+
+        #expect(throws: ProjectDirectoryError.self) {
+            try publication.rollback()
+        }
+        #expect(try String(contentsOf: ownerFile, encoding: .utf8) == "keep")
+        #expect(FileManager.default.fileExists(
+            atPath: moved.appendingPathComponent(".git", isDirectory: true).path
+        ))
+    }
+
     @Test("rejects traversal hidden names and existing destinations")
     func rejectsUnsafeNamesAndCollisions() async throws {
         let root = try temporaryDirectory()

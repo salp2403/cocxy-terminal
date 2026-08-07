@@ -3,6 +3,7 @@
 
 import Darwin
 import Foundation
+import os.log
 
 struct ProjectDirectoryTransactionContext: Sendable {
     let rootURL: URL
@@ -101,6 +102,10 @@ struct ProjectDirectoryPublication: Sendable {
 
 final class ProjectDirectoryTransaction {
     private static let directoryOpenFlags = O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
+    private static let logger = Logger(
+        subsystem: "dev.cocxy.terminal",
+        category: "ProjectPublication"
+    )
 
     private let root: ProjectDirectoryRoot
     private let destinationName: String
@@ -269,17 +274,29 @@ final class ProjectDirectoryTransaction {
             )
         }
         wasPublished = true
-        try hooks.afterPublish?(context())
-        try verifyPublishedLink()
-        try verifyRepositoryMetadata()
-        try root.synchronize()
-        try verifyPublishedLink()
-        try verifyRepositoryMetadata()
-        return ProjectDirectoryPublication(
+        let publication = ProjectDirectoryPublication(
             root: root,
             destinationName: destinationName,
             identity: stagingIdentity
         )
+        do {
+            try hooks.afterPublish?(context())
+            try verifyPublishedLink()
+            try verifyRepositoryMetadata()
+            try root.synchronize()
+            try verifyPublishedLink()
+            try verifyRepositoryMetadata()
+            return publication
+        } catch let originalError {
+            do {
+                try publication.rollback()
+            } catch {
+                Self.logger.error(
+                    "Project publication rollback failed: \(String(describing: error), privacy: .private)"
+                )
+            }
+            throw originalError
+        }
     }
 
     func cleanup() throws {
