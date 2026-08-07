@@ -15,12 +15,11 @@ enum MobileMirrorTLSIdentityError: Error, Equatable {
     case certificateCreationFailed
     case certificateStorageFailed(OSStatus)
     case identityCreationFailed(OSStatus)
+    case bootSessionUnavailable
 }
 
 final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
     private static let keychainLock = NSLock()
-    private static let keyTagPrefix = "dev.cocxy.mobile.tls."
-    private static let ownedKeyTagVersion = "v2"
     private static let certificateLabelPrefix = "Cocxy Mobile Pairing "
 
     let identity: SecIdentity
@@ -51,7 +50,8 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
         validFor: TimeInterval = MobileMirrorPairingAuthority.sessionTTL + 600,
         now: Date = Date(),
         keychain: SecKeychain? = nil,
-        ownerProcessIdentifier: pid_t = getpid()
+        ownerProcessIdentifier: pid_t = getpid(),
+        bootSessionIdentifier: String? = MobileMirrorTLSKeychainOwnership.currentBootSessionIdentifier()
     ) throws -> MobileMirrorEphemeralTLSIdentity {
         keychainLock.lock()
         defer { keychainLock.unlock() }
@@ -60,7 +60,8 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
             validFor: validFor,
             now: now,
             keychain: keychain,
-            ownerProcessIdentifier: ownerProcessIdentifier
+            ownerProcessIdentifier: ownerProcessIdentifier,
+            bootSessionIdentifier: bootSessionIdentifier
         )
     }
 
@@ -69,14 +70,19 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
         validFor: TimeInterval,
         now: Date,
         keychain: SecKeychain?,
-        ownerProcessIdentifier: pid_t
+        ownerProcessIdentifier: pid_t,
+        bootSessionIdentifier: String?
     ) throws -> MobileMirrorEphemeralTLSIdentity {
         let addressBytes = try ipv4Bytes(bindAddress)
-        let identifier = storageIdentifier(
+        guard let bootSessionIdentifier,
+              let identifier = MobileMirrorTLSKeychainOwnership.storageIdentifier(
+            bootSessionIdentifier: bootSessionIdentifier,
             ownerProcessIdentifier: ownerProcessIdentifier,
             identityIdentifier: UUID()
-        )
-        let keyTag = Data("\(keyTagPrefix)\(identifier)".utf8)
+        ) else {
+            throw MobileMirrorTLSIdentityError.bootSessionUnavailable
+        }
+        let keyTag = Data("\(MobileMirrorTLSKeychainOwnership.keyTagPrefix)\(identifier)".utf8)
         let label = "\(certificateLabelPrefix)\(identifier)"
         let privateKey = try makePrivateKey(
             tag: keyTag,
@@ -173,6 +179,7 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
 
     static func removeStaleKeychainItems(
         keychain: SecKeychain? = nil,
+        bootSessionIdentifier: String? = MobileMirrorTLSKeychainOwnership.currentBootSessionIdentifier(),
         processIsAlive: (pid_t) -> Bool = processIsAlive
     ) {
         keychainLock.lock()
@@ -185,8 +192,12 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
                       let certificatePublicKeyHash = attributes[
                           kSecAttrApplicationLabel as String
                       ] as? Data,
-                      let ownerProcessIdentifier = ownerProcessIdentifier(from: value),
-                      !processIsAlive(ownerProcessIdentifier) else {
+                      let owner = MobileMirrorTLSKeychainOwnership.owner(from: value),
+                      MobileMirrorTLSKeychainOwnership.shouldRemove(
+                          owner: owner,
+                          currentBootSessionIdentifier: bootSessionIdentifier,
+                          processIsAlive: processIsAlive
+                      ) else {
                     return nil
                 }
                 return (
@@ -222,7 +233,6 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
                 kSecAttrIsPermanent as String: true,
                 kSecAttrApplicationTag as String: tag,
                 kSecAttrLabel as String: label,
-                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
             ],
         ]
         if let keychain {
@@ -347,26 +357,6 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
             throw MobileMirrorTLSIdentityError.invalidAddress
         }
         return withUnsafeBytes(of: value.s_addr) { Data($0) }
-    }
-
-    private static func storageIdentifier(
-        ownerProcessIdentifier: pid_t,
-        identityIdentifier: UUID
-    ) -> String {
-        "\(ownedKeyTagVersion).\(ownerProcessIdentifier).\(identityIdentifier.uuidString.lowercased())"
-    }
-
-    private static func ownerProcessIdentifier(from tag: String) -> pid_t? {
-        guard tag.hasPrefix(keyTagPrefix) else { return nil }
-        let components = tag.dropFirst(keyTagPrefix.count).split(separator: ".")
-        guard components.count == 3,
-              components[0] == Substring(ownedKeyTagVersion),
-              let owner = pid_t(components[1]),
-              owner > 0,
-              UUID(uuidString: String(components[2])) != nil else {
-            return nil
-        }
-        return owner
     }
 
     private static func processIsAlive(_ processIdentifier: pid_t) -> Bool {

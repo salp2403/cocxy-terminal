@@ -40,13 +40,21 @@ final class MobileMirrorPinnedTLSDelegate: NSObject, URLSessionDelegate,
 }
 
 final class TemporaryMobileMirrorKeychain {
-    let reference: SecKeychain
+    private static let lock = NSLock()
+    private static let filePrefix = "cocxy-mobile-tests-"
+    private static let currentFileVersion = "v2"
 
-    private let fileURL: URL
+    let reference: SecKeychain
+    let fileURL: URL
 
     init() throws {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        Self.removeStaleFiles()
         let temporaryURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cocxy-mobile-tests-\(UUID().uuidString).keychain-db")
+            .appendingPathComponent(
+                "\(Self.filePrefix)\(Self.currentFileVersion).\(getpid()).\(UUID().uuidString).keychain-db"
+            )
         let password = UUID().uuidString
         var created: SecKeychain?
         let status = password.withCString { pointer in
@@ -62,13 +70,108 @@ final class TemporaryMobileMirrorKeychain {
         guard status == errSecSuccess, let created else {
             throw CocoaError(.fileWriteUnknown)
         }
+        let searchListStatus = Self.removeFromDefaultSearchList(created)
+        guard searchListStatus == errSecSuccess else {
+            SecKeychainDelete(created)
+            try? FileManager.default.removeItem(at: temporaryURL)
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(searchListStatus))
+        }
         fileURL = temporaryURL
         reference = created
     }
 
     deinit {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        _ = Self.removeFromDefaultSearchList(reference)
         SecKeychainDelete(reference)
         try? FileManager.default.removeItem(at: fileURL)
+    }
+
+    static func defaultSearchListPaths() -> Set<String> {
+        var searchList: CFArray?
+        guard SecKeychainCopySearchList(&searchList) == errSecSuccess,
+              let keychains = searchList as? [SecKeychain] else {
+            return []
+        }
+        return Set(keychains.compactMap(keychainPath))
+    }
+
+    private static func removeFromDefaultSearchList(_ keychain: SecKeychain) -> OSStatus {
+        guard let keychainPath = keychainPath(keychain) else { return errSecParam }
+        var searchList: CFArray?
+        let copyStatus = SecKeychainCopySearchList(&searchList)
+        guard copyStatus == errSecSuccess,
+              let keychains = searchList as? [SecKeychain] else {
+            return copyStatus == errSecSuccess ? errSecDecode : copyStatus
+        }
+        let filtered = keychains.filter { candidate in
+            Self.keychainPath(candidate) != keychainPath
+        }
+        guard filtered.count != keychains.count else { return errSecSuccess }
+        return SecKeychainSetSearchList(filtered as CFArray)
+    }
+
+    private static func removeStaleFiles() {
+        let directory = FileManager.default.temporaryDirectory
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        for entry in entries where entry.lastPathComponent.hasPrefix(filePrefix) {
+            guard shouldRemove(entry) else { continue }
+            removePathFromDefaultSearchList(entry.path)
+            try? FileManager.default.removeItem(at: entry)
+        }
+    }
+
+    private static func shouldRemove(_ fileURL: URL) -> Bool {
+        let name = fileURL.lastPathComponent
+        let currentPrefix = "\(filePrefix)\(currentFileVersion)."
+        if name.hasPrefix(currentPrefix) {
+            let components = name.dropFirst(currentPrefix.count).split(separator: ".")
+            guard let processIdentifier = components.first.flatMap({ pid_t($0) }) else {
+                return true
+            }
+            return !processIsAlive(processIdentifier)
+        }
+        let values = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey])
+        let modificationDate = values?.contentModificationDate ?? .distantPast
+        return modificationDate < Date().addingTimeInterval(-3_600)
+    }
+
+    private static func processIsAlive(_ processIdentifier: pid_t) -> Bool {
+        guard processIdentifier > 0 else { return false }
+        if kill(processIdentifier, 0) == 0 { return true }
+        return errno == EPERM
+    }
+
+    private static func removePathFromDefaultSearchList(_ path: String) {
+        let canonicalPath = ProjectPathCanonicalizer.canonicalURL(
+            URL(fileURLWithPath: path)
+        ).path
+        var searchList: CFArray?
+        guard SecKeychainCopySearchList(&searchList) == errSecSuccess,
+              let keychains = searchList as? [SecKeychain] else {
+            return
+        }
+        let filtered = keychains.filter { keychainPath($0) != canonicalPath }
+        if filtered.count != keychains.count {
+            SecKeychainSetSearchList(filtered as CFArray)
+        }
+    }
+
+    private static func keychainPath(_ keychain: SecKeychain) -> String? {
+        var length = UInt32(PATH_MAX)
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        let status = buffer.withUnsafeMutableBufferPointer { storage in
+            SecKeychainGetPath(keychain, &length, storage.baseAddress!)
+        }
+        guard status == errSecSuccess else { return nil }
+        return ProjectPathCanonicalizer.canonicalURL(
+            URL(fileURLWithPath: String(cString: buffer))
+        ).path
     }
 }
 

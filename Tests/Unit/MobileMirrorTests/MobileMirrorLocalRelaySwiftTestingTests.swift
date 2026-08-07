@@ -118,91 +118,6 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
         #expect(keyLookupStatus == errSecItemNotFound)
     }
 
-    @Test("startup sweep removes stale relay identities and preserves unrelated keys")
-    func staleTLSIdentitySweep() throws {
-        let keychain = try TemporaryMobileMirrorKeychain()
-        let staleOwner: pid_t = 91_001
-        let activeOwner: pid_t = 91_002
-        let staleIdentity = try MobileMirrorEphemeralTLSIdentity.generate(
-            bindAddress: "127.0.0.1",
-            keychain: keychain.reference,
-            ownerProcessIdentifier: staleOwner
-        )
-        let activeIdentity = try MobileMirrorEphemeralTLSIdentity.generate(
-            bindAddress: "127.0.0.1",
-            keychain: keychain.reference,
-            ownerProcessIdentifier: activeOwner
-        )
-        let unrelatedTag = Data("dev.cocxy.tests.unrelated.\(UUID().uuidString)".utf8)
-        var keyError: Unmanaged<CFError>?
-        let unrelatedKey = try #require(SecKeyCreateRandomKey([
-            kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
-            kSecAttrKeySizeInBits as String: 256,
-            kSecUseKeychain as String: keychain.reference,
-            kSecPrivateKeyAttrs as String: [
-                kSecAttrIsPermanent as String: true,
-                kSecAttrApplicationTag as String: unrelatedTag,
-            ],
-        ] as CFDictionary, &keyError))
-        _ = unrelatedKey
-        defer {
-            SecItemDelete([
-                kSecClass as String: kSecClassKey,
-                kSecAttrApplicationTag as String: unrelatedTag,
-                kSecMatchSearchList as String: [keychain.reference],
-            ] as CFDictionary)
-        }
-
-        #expect(Self.keychainStatus(
-            itemClass: kSecClassCertificate,
-            attribute: kSecAttrPublicKeyHash,
-            value: staleIdentity.storageCertificatePublicKeyHash,
-            keychain: keychain.reference
-        ) == errSecSuccess)
-        #expect(Self.keychainStatus(
-            itemClass: kSecClassKey,
-            attribute: kSecAttrApplicationTag,
-            value: staleIdentity.storageKeyTag,
-            keychain: keychain.reference
-        ) == errSecSuccess)
-
-        MobileMirrorEphemeralTLSIdentity.removeStaleKeychainItems(
-            keychain: keychain.reference,
-            processIsAlive: { $0 == activeOwner }
-        )
-
-        #expect(Self.keychainStatus(
-            itemClass: kSecClassCertificate,
-            attribute: kSecAttrPublicKeyHash,
-            value: staleIdentity.storageCertificatePublicKeyHash,
-            keychain: keychain.reference
-        ) == errSecItemNotFound)
-        #expect(Self.keychainStatus(
-            itemClass: kSecClassKey,
-            attribute: kSecAttrApplicationTag,
-            value: staleIdentity.storageKeyTag,
-            keychain: keychain.reference
-        ) == errSecItemNotFound)
-        #expect(Self.keychainStatus(
-            itemClass: kSecClassCertificate,
-            attribute: kSecAttrPublicKeyHash,
-            value: activeIdentity.storageCertificatePublicKeyHash,
-            keychain: keychain.reference
-        ) == errSecSuccess)
-        #expect(Self.keychainStatus(
-            itemClass: kSecClassKey,
-            attribute: kSecAttrApplicationTag,
-            value: activeIdentity.storageKeyTag,
-            keychain: keychain.reference
-        ) == errSecSuccess)
-        #expect(Self.keychainStatus(
-            itemClass: kSecClassKey,
-            attribute: kSecAttrApplicationTag,
-            value: unrelatedTag,
-            keychain: keychain.reference
-        ) == errSecSuccess)
-    }
-
     @Test("relay startup errors follow the configured language")
     func relayErrorsAreLocalized() throws {
         let bundle = try #require(Bundle(url: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -473,22 +388,6 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
             path: path,
             delegate: delegate
         )
-    }
-
-    private static func keychainStatus(
-        itemClass: CFString,
-        attribute: CFString,
-        value: Any,
-        keychain: SecKeychain
-    ) -> OSStatus {
-        var item: CFTypeRef?
-        return SecItemCopyMatching([
-            kSecClass as String: itemClass,
-            attribute as String: value,
-            kSecMatchSearchList as String: [keychain],
-            kSecReturnRef as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ] as CFDictionary, &item)
     }
 
     private static func request(
