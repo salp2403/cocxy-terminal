@@ -118,7 +118,7 @@ struct AuroraNotesIntegrationSwiftTestingTests {
                 branch: nil,
                 isCollapsed: false,
                 sessions: [],
-                notesWorkspaceID: "id-alpha"
+                notesWorkspaceIDs: ["id-alpha"]
             )
         ]
         // Pre-populate the full hook surface to make the clearing observable.

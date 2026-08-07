@@ -440,26 +440,21 @@ extension Design {
             }
         }
 
-        /// Renders the per-workspace notes section under the session
-        /// list when the workspace has both a resolvable
-        /// `notesWorkspaceID` and a non-empty summary published by the
-        /// chrome controller. The section stays hidden otherwise so
-        /// disabling notes (or hosts that never wire `onOpenNote`)
-        /// keeps the sidebar's classic layout untouched.
+        /// Renders one notes section for all session-level note roots in
+        /// the visual workspace. Rows retain their source workspace ID so
+        /// opening a note still focuses the owning tab.
         @ViewBuilder
         private func notesSection(for workspace: AuroraWorkspace) -> some View {
-            if let workspaceID = workspace.notesWorkspaceID,
-               let summary = notesByWorkspace[workspaceID],
-               summary.count > 0,
+            if let summary = workspace.aggregatedNotesSummary(from: notesByWorkspace),
                let onOpenNote {
                 NotesSectionView(
                     summary: summary,
-                    isExpanded: notesExpansion[workspaceID] ?? false,
+                    isExpanded: notesExpansion[workspace.id] ?? false,
                     onToggleExpansion: {
-                        let current = notesExpansion[workspaceID] ?? false
-                        notesExpansion[workspaceID] = !current
+                        let current = notesExpansion[workspace.id] ?? false
+                        notesExpansion[workspace.id] = !current
                     },
-                    onOpenNote: { noteID in
+                    onOpenNote: { workspaceID, noteID in
                         onOpenNote(workspaceID, noteID)
                     },
                     localizer: localizer
@@ -1388,10 +1383,10 @@ extension Design {
         static let countBadgeMinimumWidth: CGFloat = 18
         static let noteRowMinimumHitHeight: CGFloat = 28
 
-        let summary: AuroraWorkspaceNotesSummary
+        let summary: AuroraNotesSectionSummary
         let isExpanded: Bool
         let onToggleExpansion: () -> Void
-        let onOpenNote: (String) -> Void
+        let onOpenNote: (String, String) -> Void
         var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
         @Environment(\.designThemePalette) private var palette
@@ -1458,7 +1453,7 @@ extension Design {
 
         private func noteRow(_ row: AuroraNoteRow) -> some View {
             Button {
-                onOpenNote(row.id)
+                onOpenNote(row.workspaceID, row.id)
             } label: {
                 HStack(alignment: .center, spacing: 6) {
                     Image(systemName: "doc.text")

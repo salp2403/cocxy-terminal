@@ -201,6 +201,7 @@ final class CachedProjectResolver: ProjectResolving {
     private let knownProjectRoots: () -> [URL]
     private let cacheTTL: TimeInterval
     private let maximumEntryCount: Int
+    private let homeDirectory: URL
     private let clock: () -> Date
     private var cache: [String: CacheEntry] = [:]
     private var accessSequence: UInt64 = 0
@@ -211,6 +212,7 @@ final class CachedProjectResolver: ProjectResolving {
         knownProjectRoots: @escaping () -> [URL] = { [] },
         cacheTTL: TimeInterval = 2,
         maximumEntryCount: Int = 256,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         clock: @escaping () -> Date = Date.init
     ) {
         precondition(cacheTTL >= 0)
@@ -219,6 +221,7 @@ final class CachedProjectResolver: ProjectResolving {
         self.knownProjectRoots = knownProjectRoots
         self.cacheTTL = cacheTTL
         self.maximumEntryCount = maximumEntryCount
+        self.homeDirectory = ProjectPathCanonicalizer.canonicalURL(homeDirectory)
         self.clock = clock
     }
 
@@ -227,6 +230,7 @@ final class CachedProjectResolver: ProjectResolving {
         rootResolver: any AuroraWorkspaceRootResolver = GitAncestorWorkspaceRootResolver(),
         cacheTTL: TimeInterval = 2,
         maximumEntryCount: Int = 256,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         clock: @escaping () -> Date = Date.init
     ) {
         self.init(
@@ -238,6 +242,7 @@ final class CachedProjectResolver: ProjectResolving {
             },
             cacheTTL: cacheTTL,
             maximumEntryCount: maximumEntryCount,
+            homeDirectory: homeDirectory,
             clock: clock
         )
         projectRegistry.recordsWillPublish = { [weak self] records in
@@ -315,9 +320,20 @@ final class CachedProjectResolver: ProjectResolving {
     }
 
     private func deepestKnownProjectRoot(containing directory: URL) -> URL? {
-        (knownProjectRootsSnapshot ?? knownProjectRoots().map(ProjectPathCanonicalizer.canonicalURL))
+        let directoryPath = directory.path
+        let homePath = homeDirectory.path
+        let directoryIsWithinHome = Self.path(
+            directoryPath,
+            isEqualToOrDescendantOf: homePath
+        )
+        return (knownProjectRootsSnapshot ?? knownProjectRoots().map(ProjectPathCanonicalizer.canonicalURL))
             .filter {
-                Self.path(directory.path, isEqualToOrDescendantOf: $0.path)
+                guard Self.path(directoryPath, isEqualToOrDescendantOf: $0.path) else {
+                    return false
+                }
+                guard directoryIsWithinHome else { return true }
+                return $0.path != homePath
+                    && Self.path($0.path, isEqualToOrDescendantOf: homePath)
             }
             .max { lhs, rhs in
                 lhs.pathComponents.count < rhs.pathComponents.count

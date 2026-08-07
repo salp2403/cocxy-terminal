@@ -79,6 +79,8 @@ extension Design {
         let workingDirectory: String?
         let foregroundProcessName: String?
         let lastCommandSummary: String?
+        /// Raw `NoteWorkspaceID` for this tab's filesystem-derived notes root.
+        let notesWorkspaceID: String?
         /// Whether the underlying tab is attached to a cocxy-managed git
         /// worktree. Drives the sidebar worktree badge in
         /// `AuroraSidebarView`; wired from
@@ -97,6 +99,7 @@ extension Design {
             workingDirectory: String? = nil,
             foregroundProcessName: String? = nil,
             lastCommandSummary: String? = nil,
+            notesWorkspaceID: String? = nil,
             hasWorktree: Bool = false
         ) {
             self.id = id
@@ -109,6 +112,7 @@ extension Design {
             self.workingDirectory = workingDirectory
             self.foregroundProcessName = foregroundProcessName
             self.lastCommandSummary = lastCommandSummary
+            self.notesWorkspaceID = notesWorkspaceID
             self.hasWorktree = hasWorktree
         }
 
@@ -373,14 +377,10 @@ extension Design {
         let branch: String?
         var isCollapsed: Bool
         let sessions: [AuroraSession]
-        /// Raw value of the `NoteWorkspaceID` for this workspace, when
-        /// resolvable. Computed by the adapter from the workspace root
-        /// path so the Aurora sidebar can show a per-workspace notes
-        /// section. Stays optional (`nil`) for tabs whose path is not
-        /// resolvable — SSH sessions, detached tabs, fallback shells —
-        /// so the sidebar simply omits the notes block instead of
-        /// surfacing a non-functional affordance.
-        let notesWorkspaceID: String?
+        /// Distinct filesystem-derived note roots represented by the
+        /// sessions in this visual workspace. A registered project can
+        /// widen presentation grouping without changing either identity.
+        let notesWorkspaceIDs: [String]
 
         init(
             id: String,
@@ -388,14 +388,16 @@ extension Design {
             branch: String?,
             isCollapsed: Bool,
             sessions: [AuroraSession],
-            notesWorkspaceID: String? = nil
+            notesWorkspaceIDs: [String]? = nil
         ) {
             self.id = id
             self.name = name
             self.branch = branch
             self.isCollapsed = isCollapsed
             self.sessions = sessions
-            self.notesWorkspaceID = notesWorkspaceID
+            self.notesWorkspaceIDs = Self.uniqueNotesWorkspaceIDs(
+                notesWorkspaceIDs ?? sessions.compactMap(\.notesWorkspaceID)
+            )
         }
 
         /// Filters the session list by case-insensitive tokens across
@@ -419,8 +421,33 @@ extension Design {
                 branch: branch,
                 isCollapsed: isCollapsed,
                 sessions: filtered,
-                notesWorkspaceID: notesWorkspaceID
+                notesWorkspaceIDs: notesWorkspaceIDs
             )
+        }
+
+        func aggregatedNotesSummary(
+            from summaries: [String: AuroraWorkspaceNotesSummary],
+            recentLimit: Int = 5
+        ) -> AuroraNotesSectionSummary? {
+            let relevant = notesWorkspaceIDs.compactMap { summaries[$0] }
+            let count = relevant.reduce(0) { $0 + $1.count }
+            guard count > 0 else { return nil }
+            let recent = relevant
+                .flatMap(\.recentNotes)
+                .sorted {
+                    if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+                    if $0.workspaceID != $1.workspaceID { return $0.workspaceID < $1.workspaceID }
+                    return $0.id < $1.id
+                }
+            return AuroraNotesSectionSummary(
+                count: count,
+                recentNotes: Array(recent.prefix(max(0, recentLimit)))
+            )
+        }
+
+        private static func uniqueNotesWorkspaceIDs(_ ids: [String]) -> [String] {
+            var seen: Set<String> = []
+            return ids.filter { !$0.isEmpty && seen.insert($0).inserted }
         }
     }
 
@@ -435,14 +462,21 @@ extension Design {
     /// the `UUID` type into the design module.
     struct AuroraNoteRow: Identifiable, Equatable, Hashable, Sendable {
         let id: String
+        let workspaceID: String
         let title: String
         let updatedAt: Date
 
-        init(id: String, title: String, updatedAt: Date) {
+        init(id: String, workspaceID: String, title: String, updatedAt: Date) {
             self.id = id
+            self.workspaceID = workspaceID
             self.title = title
             self.updatedAt = updatedAt
         }
+    }
+
+    struct AuroraNotesSectionSummary: Equatable, Hashable, Sendable {
+        let count: Int
+        let recentNotes: [AuroraNoteRow]
     }
 
     /// Aggregated notes state for a single workspace.

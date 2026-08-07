@@ -31,7 +31,8 @@ struct AuroraNotesSectionSwiftTestingTests {
         let expected = NoteWorkspaceID(
             workspaceRoot: URL(fileURLWithPath: path, isDirectory: true)
         ).rawValue
-        #expect(workspaces.first?.notesWorkspaceID == expected)
+        #expect(workspaces.first?.sessions.first?.notesWorkspaceID == expected)
+        #expect(workspaces.first?.notesWorkspaceIDs == [expected])
     }
 
     @Test("workspace resolves symlinks before hashing its notes identifier")
@@ -62,7 +63,8 @@ struct AuroraNotesSectionSwiftTestingTests {
             workspaceRoot: URL(fileURLWithPath: physicalPath, isDirectory: true)
         ).rawValue
 
-        #expect(workspace.notesWorkspaceID == expected)
+        #expect(workspace.sessions.first?.notesWorkspaceID == expected)
+        #expect(workspace.notesWorkspaceIDs == [expected])
         #expect(NoteWorkspaceID(workspaceRoot: alias) != NoteWorkspaceID(workspaceRoot: physical))
     }
 
@@ -84,7 +86,8 @@ struct AuroraNotesSectionSwiftTestingTests {
         let expected = NoteWorkspaceID(
             workspaceRoot: URL(fileURLWithPath: root, isDirectory: true)
         ).rawValue
-        #expect(workspaces.first?.notesWorkspaceID == expected)
+        #expect(workspaces.first?.sessions.first?.notesWorkspaceID == expected)
+        #expect(workspaces.first?.notesWorkspaceIDs == [expected])
     }
 
     @Test("workspace falls back to workingDirectory when the rootPath is missing so non-git tabs still get a stable notes identifier")
@@ -104,7 +107,8 @@ struct AuroraNotesSectionSwiftTestingTests {
         let expected = NoteWorkspaceID(
             workspaceRoot: URL(fileURLWithPath: "/private/tmp/scratch", isDirectory: true)
         ).rawValue
-        #expect(workspaces.first?.notesWorkspaceID == expected)
+        #expect(workspaces.first?.sessions.first?.notesWorkspaceID == expected)
+        #expect(workspaces.first?.notesWorkspaceIDs == [expected])
     }
 
     @Test("workspace omits notesWorkspaceID when no path is resolvable so SSH and detached tabs do not surface a non-functional notes section")
@@ -120,7 +124,8 @@ struct AuroraNotesSectionSwiftTestingTests {
 
         let workspaces = Design.AuroraWorkspaceAdapter.workspaces(from: [tab])
 
-        #expect(workspaces.first?.notesWorkspaceID == nil)
+        #expect(workspaces.first?.sessions.first?.notesWorkspaceID == nil)
+        #expect(workspaces.first?.notesWorkspaceIDs.isEmpty == true)
     }
 
     @Test("filteringSessions preserves the notes identifier so search filtering does not drop the per-workspace notes section")
@@ -136,16 +141,75 @@ struct AuroraNotesSectionSwiftTestingTests {
                     name: "session",
                     agent: .claude,
                     state: .working,
-                    panes: []
+                    panes: [],
+                    notesWorkspaceID: "abc123def456"
                 )
-            ],
-            notesWorkspaceID: "abc123def456"
+            ]
         )
 
         let filtered = workspace.filteringSessions(by: "no-match")
 
-        #expect(filtered.notesWorkspaceID == "abc123def456")
+        #expect(filtered.notesWorkspaceIDs == ["abc123def456"])
         #expect(filtered.sessions.isEmpty)
+    }
+
+    @Test("one visual workspace aggregates note counts and routes rows for every session root")
+    func workspaceAggregatesSessionNotes() throws {
+        let workspace = Design.AuroraWorkspace(
+            id: "registered-root",
+            name: "registered-root",
+            branch: nil,
+            isCollapsed: false,
+            sessions: [
+                Design.AuroraSession(
+                    id: "a",
+                    name: "a",
+                    agent: .shell,
+                    state: .idle,
+                    panes: [],
+                    notesWorkspaceID: "notes-a"
+                ),
+                Design.AuroraSession(
+                    id: "b",
+                    name: "b",
+                    agent: .shell,
+                    state: .idle,
+                    panes: [],
+                    notesWorkspaceID: "notes-b"
+                ),
+            ]
+        )
+        let older = Date(timeIntervalSince1970: 100)
+        let newer = Date(timeIntervalSince1970: 200)
+        let summaries = [
+            "notes-a": Design.AuroraWorkspaceNotesSummary(
+                workspaceID: "notes-a",
+                count: 2,
+                recentNotes: [Design.AuroraNoteRow(
+                    id: "note-a",
+                    workspaceID: "notes-a",
+                    title: "A",
+                    updatedAt: older
+                )]
+            ),
+            "notes-b": Design.AuroraWorkspaceNotesSummary(
+                workspaceID: "notes-b",
+                count: 3,
+                recentNotes: [Design.AuroraNoteRow(
+                    id: "note-b",
+                    workspaceID: "notes-b",
+                    title: "B",
+                    updatedAt: newer
+                )]
+            ),
+        ]
+
+        let aggregate = try #require(workspace.aggregatedNotesSummary(from: summaries))
+
+        #expect(workspace.notesWorkspaceIDs == ["notes-a", "notes-b"])
+        #expect(aggregate.count == 5)
+        #expect(aggregate.recentNotes.map(\.id) == ["note-b", "note-a"])
+        #expect(aggregate.recentNotes.map(\.workspaceID) == ["notes-b", "notes-a"])
     }
 
     @Test("sidebar notes rows and count badges keep usable hit and visibility bounds")
@@ -181,7 +245,7 @@ struct AuroraNotesSectionSwiftTestingTests {
                 branch: nil,
                 isCollapsed: false,
                 sessions: [],
-                notesWorkspaceID: "id-alpha"
+                notesWorkspaceIDs: ["id-alpha"]
             )
         ]
         controller.notesSummariesProvider = { _ in
@@ -220,7 +284,7 @@ struct AuroraNotesSectionSwiftTestingTests {
                 branch: nil,
                 isCollapsed: false,
                 sessions: [],
-                notesWorkspaceID: "id-alpha"
+                notesWorkspaceIDs: ["id-alpha"]
             ),
             Design.AuroraWorkspace(
                 id: "beta",
@@ -228,7 +292,7 @@ struct AuroraNotesSectionSwiftTestingTests {
                 branch: nil,
                 isCollapsed: false,
                 sessions: [],
-                notesWorkspaceID: "id-beta"
+                notesWorkspaceIDs: ["id-beta"]
             ),
             Design.AuroraWorkspace(
                 id: "gamma",
@@ -236,7 +300,7 @@ struct AuroraNotesSectionSwiftTestingTests {
                 branch: nil,
                 isCollapsed: false,
                 sessions: [],
-                notesWorkspaceID: nil  // missing path → omitted from query
+                notesWorkspaceIDs: []  // missing path -> omitted from query
             ),
         ]
         let recorded = ProviderRecorder()
@@ -276,11 +340,12 @@ struct AuroraNotesSectionSwiftTestingTests {
                 branch: nil,
                 isCollapsed: false,
                 sessions: [],
-                notesWorkspaceID: "id-alpha"
+                notesWorkspaceIDs: ["id-alpha"]
             )
         ]
         let row = Design.AuroraNoteRow(
             id: UUID().uuidString,
+            workspaceID: "id-alpha",
             title: "First",
             updatedAt: Date()
         )
@@ -312,7 +377,7 @@ struct AuroraNotesSectionSwiftTestingTests {
                 branch: nil,
                 isCollapsed: false,
                 sessions: [],
-                notesWorkspaceID: "id-alpha"
+                notesWorkspaceIDs: ["id-alpha"]
             )
         ]
         controller.notesSummariesProvider = { _ in

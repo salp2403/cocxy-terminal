@@ -98,15 +98,15 @@ struct AuroraWorkspaceModelTests {
             ],
             workingDirectory: "/Users/test/code/cocxy-core",
             foregroundProcessName: "swift-test",
-            lastCommandSummary: "Command: swift test --filter Aurora"
+            lastCommandSummary: "Command: swift test --filter Aurora",
+            notesWorkspaceID: "notes-rich"
         )
         let workspace = Design.AuroraWorkspace(
             id: "ws-rich",
             name: "terminal-rebuild",
             branch: "feature/vertical-tabs",
             isCollapsed: false,
-            sessions: [session],
-            notesWorkspaceID: "notes-rich"
+            sessions: [session]
         )
 
         #expect(workspace.filteringSessions(by: "cocxy-core").sessions.map(\.id) == ["s-rich"])

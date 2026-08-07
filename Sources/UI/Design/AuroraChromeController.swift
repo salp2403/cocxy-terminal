@@ -346,7 +346,7 @@ final class AuroraChromeController: ObservableObject {
     /// previous in-flight task is cancelled so the latest input wins.
     @discardableResult
     func refreshNotesSummaries() -> Task<Void, Never>? {
-        let ids = Set(workspaces.compactMap(\.notesWorkspaceID))
+        let ids = Set(workspaces.flatMap(\.notesWorkspaceIDs))
         return fetchNotesSummaries(for: ids)
     }
 
@@ -356,7 +356,7 @@ final class AuroraChromeController: ObservableObject {
     /// added/removed tabs without forcing a refetch on every render
     /// (agent state churn, surface lifecycle, palette toggles).
     private func refreshNotesSummariesIfWorkspacesChanged() {
-        let ids = Set(workspaces.compactMap(\.notesWorkspaceID))
+        let ids = Set(workspaces.flatMap(\.notesWorkspaceIDs))
         if ids == lastRequestedNotesWorkspaceIDs { return }
         _ = fetchNotesSummaries(for: ids)
     }

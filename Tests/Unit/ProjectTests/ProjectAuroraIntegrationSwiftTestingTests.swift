@@ -127,7 +127,8 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         #expect(project.name == "Current Product")
         #expect(project.branch == "main")
         #expect(project.sessions[0].branch == "feature/search")
-        #expect(project.notesWorkspaceID == originID.storageKey)
+        #expect(project.sessions[0].notesWorkspaceID == originID.storageKey)
+        #expect(project.notesWorkspaceIDs == [originID.storageKey])
 
         let tabManager = TabManager(gitInfoProvider: git)
         let liveTabID = tabManager.tabs[0].id
@@ -312,6 +313,91 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         #expect(afterSource.workspaceRootPath == beforeSource.workspaceRootPath)
         #expect(viewModel.workspace?.workspaceID == workspaceID)
         #expect(viewModel.notes.map(\.id) == [note.id])
+    }
+
+    @Test("two non-git tabs under one registered root expose both notes collections in one sidebar section")
+    func registeredRootAggregatesNotesFromEveryTab() async throws {
+        let sandbox = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjectNotesAggregation-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let home = sandbox.appendingPathComponent("home", isDirectory: true)
+        let registeredRoot = home.appendingPathComponent("Documents/work", isDirectory: true)
+        let firstRoot = registeredRoot.appendingPathComponent("notes-a", isDirectory: true)
+        let secondRoot = registeredRoot.appendingPathComponent("notes-b", isDirectory: true)
+        let storageRoot = sandbox.appendingPathComponent("notes", isDirectory: true)
+        let registryURL = sandbox.appendingPathComponent("projects.json")
+        try FileManager.default.createDirectory(at: firstRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secondRoot, withIntermediateDirectories: true)
+
+        let registry = ProjectRegistry(store: ProjectRegistryStore(fileURL: registryURL))
+        let registeredID = ProjectID(rootURL: registeredRoot)
+        let registeredName = ProjectDescriptor.automaticName(for: registeredRoot)
+        try registry.recordOpen(ProjectDescriptor(
+            id: registeredID,
+            rootURL: ProjectPathCanonicalizer.canonicalURL(registeredRoot),
+            automaticName: registeredName,
+            displayName: registeredName,
+            parent: nil
+        ))
+        let resolver = CachedProjectResolver(
+            projectRegistry: registry,
+            homeDirectory: home
+        )
+        let tabManager = TabManager()
+        let firstTabID = try #require(tabManager.tabs.first?.id)
+        tabManager.updateTab(id: firstTabID) { tab in
+            tab.workingDirectory = firstRoot
+        }
+        let secondTab = tabManager.addTab(workingDirectory: secondRoot)
+
+        let provider = InMemoryConfigProvider(content: """
+        [notes]
+        enabled = true
+        storage-dir = "\(storageRoot.path)"
+        format = "markdown"
+        """)
+        let configService = ConfigService(fileProvider: provider)
+        try configService.reload()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            tabManager: tabManager,
+            projectRegistry: registry,
+            projectResolver: resolver
+        )
+        let firstID = NoteWorkspaceID(workspaceRoot: firstRoot)
+        let secondID = NoteWorkspaceID(workspaceRoot: secondRoot)
+        let store = NoteStore(storageRoot: storageRoot, format: .markdown)
+        let firstNote = try await store.create(in: firstID, body: "# First root")
+        let secondNote = try await store.create(in: secondID, body: "# Second root")
+
+        let sources = AuroraSourceBuilder.buildSources(
+            tabs: tabManager.tabs,
+            surfaceIDsByTab: [:],
+            store: AgentStatePerSurfaceStore(),
+            projectResolver: resolver
+        )
+        let workspaces = Design.AuroraWorkspaceAdapter.workspaces(from: sources)
+        let workspace = try #require(workspaces.first)
+        let summaries = await controller.fetchAuroraNotesSummaries(
+            for: Set(workspace.notesWorkspaceIDs)
+        )
+        let aggregate = try #require(workspace.aggregatedNotesSummary(from: summaries))
+
+        #expect(workspaces.count == 1)
+        #expect(workspace.id == registeredID.rawValue)
+        #expect(Set(workspace.notesWorkspaceIDs) == Set([firstID.rawValue, secondID.rawValue]))
+        #expect(aggregate.count == 2)
+        #expect(Set(aggregate.recentNotes.map { $0.id }) == Set([
+            firstNote.id.uuidString,
+            secondNote.id.uuidString,
+        ]))
+        #expect(Set(aggregate.recentNotes.map { $0.workspaceID }) == Set([
+            firstID.rawValue,
+            secondID.rawValue,
+        ]))
+        #expect(controller.tabForNotesWorkspace(rawID: firstID.rawValue)?.id == firstTabID)
+        #expect(controller.tabForNotesWorkspace(rawID: secondID.rawValue)?.id == secondTab.id)
     }
 
     @Test("a symlinked non-worktree migrates when one legacy identity is already canonical")

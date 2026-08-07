@@ -109,6 +109,30 @@ struct ProjectIdentitySwiftTestingTests {
         #expect(descriptor.rootURL == expectedRoot)
     }
 
+    @Test("registered roots below home group descendants without allowing home to swallow unrelated tabs")
+    func registeredRootsRespectHomeBoundary() throws {
+        let sandbox = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjectHomeBoundary-\(UUID().uuidString)", isDirectory: true)
+        let home = sandbox.appendingPathComponent("home", isDirectory: true)
+        let registered = home.appendingPathComponent("Documents/work", isDirectory: true)
+        let groupedChild = registered.appendingPathComponent("alpha", isDirectory: true)
+        let unrelated = home.appendingPathComponent("Downloads/scratch", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        try FileManager.default.createDirectory(at: groupedChild, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: unrelated, withIntermediateDirectories: true)
+        let resolver = CachedProjectResolver(
+            rootResolver: CountingRootResolver(),
+            knownProjectRoots: { [home, registered] },
+            homeDirectory: home
+        )
+
+        let grouped = resolver.resolveProject(for: groupedChild)
+        let standalone = resolver.resolveProject(for: unrelated)
+
+        #expect(grouped.rootURL == ProjectPathCanonicalizer.canonicalURL(registered))
+        #expect(standalone.rootURL == ProjectPathCanonicalizer.canonicalURL(unrelated))
+    }
+
     @Test("descriptor-bound standalone projects preserve canonical root identity")
     func verifiedStandaloneCanonicalizesTrustedRootAliases() throws {
         let directory = FileManager.default.temporaryDirectory

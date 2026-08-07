@@ -169,7 +169,6 @@ extension Design {
                 let branch = tabs.lazy.compactMap(\.workspaceBranch).first
                     ?? tabs.lazy.compactMap(\.branch).first
                 let sessions = tabs.map(session(from:))
-                let notesWorkspaceID = notesWorkspaceID(forTabs: tabs)
                 let workspaceName = tabs.lazy
                     .compactMap { cleaned($0.workspaceTitle) }
                     .first
@@ -180,8 +179,7 @@ extension Design {
                     name: workspaceName,
                     branch: branch,
                     isCollapsed: collapsedWorkspaceIDs.contains(group),
-                    sessions: sessions,
-                    notesWorkspaceID: notesWorkspaceID
+                    sessions: sessions
                 )
             }
         }
@@ -194,37 +192,16 @@ extension Design {
             return trimmed
         }
 
-        /// Computes the per-workspace `NoteWorkspaceID` raw value used
-        /// by the Aurora sidebar's notes section. Picks the first tab
-        /// in the group that exposes a resolvable workspace root path,
-        /// falls back to the first tab's `workingDirectory`, and
-        /// returns `nil` when neither is available so the sidebar can
-        /// hide the section instead of binding to a broken identifier.
-        ///
-        /// Pure helper — kept `static` so tests can pin the contract
-        /// without instantiating the adapter and so the implementation
-        /// stays trivially diff-able with the resolver used by the
-        /// Notes module on disk (`NoteWorkspaceID(workspaceRoot:)`).
-        static func notesWorkspaceID(forTabs tabs: [AuroraSourceTab]) -> String? {
-            for tab in tabs {
-                if let path = tab.workspaceRootPath, !path.isEmpty {
-                    return NoteWorkspaceID(
-                        workspaceRoot: ProjectPathCanonicalizer.canonicalURL(
-                            URL(fileURLWithPath: path, isDirectory: true)
-                        )
-                    ).rawValue
-                }
-            }
-            for tab in tabs {
-                if let path = tab.workingDirectory, !path.isEmpty {
-                    return NoteWorkspaceID(
-                        workspaceRoot: ProjectPathCanonicalizer.canonicalURL(
-                            URL(fileURLWithPath: path, isDirectory: true)
-                        )
-                    ).rawValue
-                }
-            }
-            return nil
+        /// Computes the filesystem-derived notes identity for one tab.
+        /// Presentation grouping may combine several of these identities.
+        static func notesWorkspaceID(for tab: AuroraSourceTab) -> String? {
+            let path = cleaned(tab.workspaceRootPath) ?? cleaned(tab.workingDirectory)
+            guard let path else { return nil }
+            return NoteWorkspaceID(
+                workspaceRoot: ProjectPathCanonicalizer.canonicalURL(
+                    URL(fileURLWithPath: path, isDirectory: true)
+                )
+            ).rawValue
         }
 
         /// Builds a session from a source tab, deriving the primary
@@ -244,6 +221,7 @@ extension Design {
                 workingDirectory: tab.workingDirectory,
                 foregroundProcessName: tab.foregroundProcessName,
                 lastCommandSummary: tab.lastCommandSummary,
+                notesWorkspaceID: notesWorkspaceID(for: tab),
                 hasWorktree: tab.hasWorktree
             )
         }

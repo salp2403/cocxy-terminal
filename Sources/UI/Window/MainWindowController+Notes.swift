@@ -286,6 +286,7 @@ extension MainWindowController {
             let rows = summary.recent.map { note in
                 Design.AuroraNoteRow(
                     id: note.id.uuidString,
+                    workspaceID: id.rawValue,
                     title: note.derivedTitle,
                     updatedAt: note.updatedAt
                 )
