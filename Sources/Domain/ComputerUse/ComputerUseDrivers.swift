@@ -164,7 +164,7 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
                 preferred: sample.modePixelHeight,
                 fallback: sample.fallbackPixelHeight
             ),
-            pointWidth: validPointWidth(sample.pointWidth)
+            pointWidth: sample.pointWidth
         )
     }
 
@@ -220,11 +220,6 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
             fallbackPixelHeight: CGDisplayPixelsHigh(displayID),
             pointWidth: Double(CGDisplayBounds(displayID).width)
         )
-    }
-
-    private static func validPointWidth(_ pointWidth: Double) -> Double {
-        guard pointWidth.isFinite, pointWidth > 0 else { return 1 }
-        return pointWidth
     }
 
     private static func fileTimestamp() -> String {

@@ -254,6 +254,26 @@ struct ComputerUseSwiftTestingTests {
         #expect(plan.pixelWidth == 1_920)
         #expect(plan.pixelHeight == 1_080)
         #expect(plan.pointWidth == 1_280)
+
+        let invalidPointWidths: [Double] = [0, .nan]
+        for pointWidth in invalidPointWidths {
+            let invalidPointPlan = ScreenCaptureKitComputerUseScreenshotCapture.capturePlan(from: .init(
+                modePixelWidth: 3_456,
+                modePixelHeight: 2_234,
+                fallbackPixelWidth: 1_728,
+                fallbackPixelHeight: 1_117,
+                pointWidth: pointWidth
+            ))
+            if pointWidth.isNaN {
+                #expect(invalidPointPlan.pointWidth.isNaN)
+            } else {
+                #expect(invalidPointPlan.pointWidth == pointWidth)
+            }
+            #expect(ScreenCaptureKitComputerUseScreenshotCapture.scale(
+                pixelWidth: invalidPointPlan.pixelWidth,
+                pointWidth: invalidPointPlan.pointWidth
+            ) == 1)
+        }
     }
 
     @Test("physical display dimensions reject invalid mode values")
