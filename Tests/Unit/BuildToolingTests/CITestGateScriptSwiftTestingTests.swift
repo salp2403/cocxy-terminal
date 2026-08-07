@@ -37,6 +37,10 @@ struct CITestGateScriptSwiftTestingTests {
             contentsOf: root.appendingPathComponent(".github/PULL_REQUEST_TEMPLATE.md"),
             encoding: .utf8
         )
+        let verifySite = try String(
+            contentsOf: root.appendingPathComponent("web/scripts/verify-site.mjs"),
+            encoding: .utf8
+        )
 
         #expect(script.contains("set -euo pipefail"))
         #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
@@ -45,7 +49,11 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("./scripts/run-swift-testing-serial.sh"))
         #expect(serialScript.contains("--disable-automatic-resolution"))
         #expect(script.contains("web/scripts/build-site.mjs"))
+        #expect(script.contains("web/scripts/verify-site.mjs"))
         #expect(script.contains("Node.js 18+ is required to generate public website test fixtures"))
+        #expect(verifySite.contains("for (const failure of verifyMacOSFloor({"))
+        #expect(verifySite.contains("const swiftAgents = readUTF8("))
+        #expect(verifySite.contains("const server = readUTF8("))
         #expect(serialScript.contains("swift-testing-serial-profraw"))
         #expect(serialScript.contains("xcrun llvm-profdata merge -sparse"))
         #expect(serialScript.contains("xcrun llvm-cov export -format=text"))

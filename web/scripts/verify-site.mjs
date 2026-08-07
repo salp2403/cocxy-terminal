@@ -324,9 +324,9 @@ for (const name of agentNames) {
   if (!agentsPage.includes(name)) fail(`Agent page missing ${name}`);
 }
 
-const swiftAgents = fs.readFileSync(
+const swiftAgents = readUTF8(
   path.join(repoRoot, 'Sources/Domain/Vault/VaultBuiltInAgents.swift'),
-  'utf8'
+  'Sources/Domain/Vault/VaultBuiltInAgents.swift'
 );
 for (const name of agentNames) {
   if (!swiftAgents.includes(name)) fail(`Swift source missing expected agent ${name}`);
@@ -346,7 +346,7 @@ for (const page of requiredPages.filter((page) => page.endsWith('.html'))) {
 verifyRSSFeed('feed.xml');
 verifyRSSFeed('releases.xml');
 
-const server = fs.readFileSync(path.join(webRoot, 'server.js'), 'utf8');
+const server = readUTF8(path.join(webRoot, 'server.js'), 'web/server.js');
 for (const needle of [
   '"/getting-started.html"',
   '"/docs/first-run.html"',

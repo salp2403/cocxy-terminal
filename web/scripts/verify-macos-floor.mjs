@@ -3,6 +3,70 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+const macOSReleaseNames = new Map([
+  [12, 'Monterey'],
+  [13, 'Ventura'],
+  [14, 'Sonoma'],
+  [15, 'Sequoia'],
+  [16, 'Tahoe'],
+]);
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function parseDeclaredFloor(packageManifest, failures) {
+  const declarations = [...packageManifest.matchAll(/\.macOS\("(\d+)\.(\d+)"\)/g)];
+  if (declarations.length !== 1) {
+    failures.push(
+      `Package.swift macOS deployment target expected 1 declaration, found ${declarations.length}`
+    );
+    return null;
+  }
+
+  const major = Number(declarations[0][1]);
+  const minor = Number(declarations[0][2]);
+  const releaseName = macOSReleaseNames.get(major);
+  if (!releaseName) {
+    failures.push(`Package.swift declares macOS ${major}.${minor}, but its release name is not registered`);
+    return null;
+  }
+
+  return {
+    major,
+    minor,
+    version: `${major}.${minor}`,
+    releaseName,
+    caskName: releaseName.toLowerCase(),
+  };
+}
+
+function isVersionOlder(candidateMajor, candidateMinor, floor) {
+  return candidateMajor < floor.major
+    || (candidateMajor === floor.major && candidateMinor < floor.minor);
+}
+
+function rejectStaleFloorReferences(failures, surfaces, floor) {
+  for (const { label, content } of surfaces) {
+    const staleVersions = new Set();
+    for (const match of content.matchAll(/\bmacOS\s+(\d+)(?:\.(\d+))?\+?/gi)) {
+      const major = Number(match[1]);
+      const minor = Number(match[2] ?? 0);
+      if (isVersionOlder(major, minor, floor)) staleVersions.add(match[0]);
+    }
+    for (const staleVersion of staleVersions) {
+      failures.push(`${label} contains stale floor reference: ${staleVersion}`);
+    }
+
+    for (const [major, releaseName] of macOSReleaseNames) {
+      if (major >= floor.major) continue;
+      if (new RegExp(`\\b${escapeRegExp(releaseName)}\\b`, 'i').test(content)) {
+        failures.push(`${label} contains stale floor release name: ${releaseName}`);
+      }
+    }
+  }
+}
+
 export function verifyMacOSFloor({ repoRoot, webRoot, homeContent, spanishHomeContent }) {
   const failures = [];
   const publicRoot = path.join(webRoot, 'public');
@@ -35,197 +99,234 @@ export function verifyMacOSFloor({ repoRoot, webRoot, homeContent, spanishHomeCo
     }
   }
 
-  const packageManifest = readUTF8(path.join(repoRoot, 'Package.swift'), 'Package.swift');
-  const infoPlist = readUTF8(path.join(repoRoot, 'Resources/Info.plist'), 'Resources/Info.plist');
-  const projectManifest = readUTF8(path.join(repoRoot, 'project.yml'), 'project.yml');
-  const releaseWorkflow = readUTF8(
-    path.join(repoRoot, '.github/workflows/release.yml'),
-    '.github/workflows/release.yml'
-  );
-  const buildSite = readUTF8(
-    path.join(webRoot, 'scripts/build-site.mjs'),
-    'web/scripts/build-site.mjs'
-  );
-  const releasePageGenerator = readUTF8(
-    path.join(webRoot, 'scripts/generate-releases-page.mjs'),
-    'web/scripts/generate-releases-page.mjs'
-  );
-  const preview = readUTF8(
-    path.join(webRoot, 'preview/components.html'),
-    'web/preview/components.html'
-  );
-  const generatedReleases = readUTF8(
-    path.join(publicRoot, 'releases.html'),
-    'web/public/releases.html'
-  );
-  const generatedSpanishReleases = readUTF8(
-    path.join(publicRoot, 'es/releases.html'),
-    'web/public/es/releases.html'
-  );
-  const generatedPress = readUTF8(
-    path.join(publicRoot, 'press.html'),
-    'web/public/press.html'
-  );
-  const generatedSpanishPress = readUTF8(
-    path.join(publicRoot, 'es/press.html'),
-    'web/public/es/press.html'
-  );
-  const generatedLLMs = readUTF8(
-    path.join(publicRoot, 'llms.txt'),
-    'web/public/llms.txt'
+  const surfaces = [
+    ['Package.swift', path.join(repoRoot, 'Package.swift')],
+    ['Resources/Info.plist', path.join(repoRoot, 'Resources/Info.plist')],
+    ['project.yml', path.join(repoRoot, 'project.yml')],
+    ['.github/workflows/release.yml', path.join(repoRoot, '.github/workflows/release.yml')],
+    ['.github/workflows/nightly.yml', path.join(repoRoot, '.github/workflows/nightly.yml')],
+    ['.github/workflows/preview.yml', path.join(repoRoot, '.github/workflows/preview.yml')],
+    ['Distribution/Info.plist', path.join(repoRoot, 'Distribution/Info.plist')],
+    ['Distribution/Makefile', path.join(repoRoot, 'Distribution/Makefile')],
+    ['Distribution/cocxy-terminal.rb', path.join(repoRoot, 'Distribution/cocxy-terminal.rb')],
+    ['scripts/embed-pty-daemon-helper.sh', path.join(repoRoot, 'scripts/embed-pty-daemon-helper.sh')],
+    ['web/scripts/build-site.mjs', path.join(webRoot, 'scripts/build-site.mjs')],
+    ['web/scripts/generate-releases-page.mjs', path.join(webRoot, 'scripts/generate-releases-page.mjs')],
+    ['web/preview/components.html', path.join(webRoot, 'preview/components.html')],
+    ['web/public/releases.html', path.join(publicRoot, 'releases.html')],
+    ['web/public/es/releases.html', path.join(publicRoot, 'es/releases.html')],
+    ['web/public/press.html', path.join(publicRoot, 'press.html')],
+    ['web/public/es/press.html', path.join(publicRoot, 'es/press.html')],
+    ['web/public/llms.txt', path.join(publicRoot, 'llms.txt')],
+  ].map(([label, filePath]) => ({ label, content: readUTF8(filePath, label) }));
+  const content = Object.fromEntries(surfaces.map((surface) => [surface.label, surface.content]));
+  const floor = parseDeclaredFloor(content['Package.swift'], failures);
+  if (!floor) return failures;
+
+  const escapedVersion = escapeRegExp(floor.version);
+  const infoPlistFloorPattern = new RegExp(
+    `<key>LSMinimumSystemVersion<\\/key>\\s*<string>${escapedVersion}<\\/string>`,
+    'g'
   );
 
   expectPatternCount(
-    'Package.swift macOS deployment target',
-    packageManifest,
-    /\.macOS\("15\.0"\)/g,
-    1
-  );
-  expectPatternCount(
-    'Package.swift macOS deployment target declarations',
-    packageManifest,
-    /\.macOS\("\d+\.\d+"\)/g,
-    1
-  );
-  expectPatternCount(
     'Resources/Info.plist minimum system version',
-    infoPlist,
-    /<key>LSMinimumSystemVersion<\/key>\s*<string>15\.0<\/string>/g,
+    content['Resources/Info.plist'],
+    infoPlistFloorPattern,
     1
   );
   expectPatternCount(
     'Resources/Info.plist minimum system version declarations',
-    infoPlist,
+    content['Resources/Info.plist'],
     /<key>LSMinimumSystemVersion<\/key>\s*<string>\d+\.\d+<\/string>/g,
     1
   );
   expectPatternCount(
     'project.yml global deployment target',
-    projectManifest,
-    /^  deploymentTarget:\n    macOS: "15\.0"$/gm,
+    content['project.yml'],
+    new RegExp(`^  deploymentTarget:\\n    macOS: "${escapedVersion}"$`, 'gm'),
     1
   );
   expectPatternCount(
     'project.yml global deployment target declarations',
-    projectManifest,
+    content['project.yml'],
     /^  deploymentTarget:\n    macOS: "\d+\.\d+"$/gm,
     1
   );
   expectPatternCount(
     'project.yml target deployment target',
-    projectManifest,
-    /^    deploymentTarget: "15\.0"$/gm,
+    content['project.yml'],
+    new RegExp(`^    deploymentTarget: "${escapedVersion}"$`, 'gm'),
     1
   );
   expectPatternCount(
     'project.yml target deployment target declarations',
-    projectManifest,
+    content['project.yml'],
     /^    deploymentTarget: "\d+\.\d+"$/gm,
     1
   );
   expectPatternCount(
     'project.yml build setting deployment target',
-    projectManifest,
-    /^        MACOSX_DEPLOYMENT_TARGET: 15\.0$/gm,
+    content['project.yml'],
+    new RegExp(`^        MACOSX_DEPLOYMENT_TARGET: ${escapedVersion}$`, 'gm'),
     1
   );
   expectPatternCount(
     'project.yml build setting deployment target declarations',
-    projectManifest,
+    content['project.yml'],
     /^        MACOSX_DEPLOYMENT_TARGET: \d+\.\d+$/gm,
     1
   );
 
-  expectTextCount(
-    'release workflow Sparkle minimum',
-    releaseWorkflow,
-    '<sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>',
-    1
-  );
-  expectPatternCount(
-    'release workflow Sparkle minimum declarations',
-    releaseWorkflow,
-    /<sparkle:minimumSystemVersion>\d+\.\d+<\/sparkle:minimumSystemVersion>/g,
-    1
-  );
+  const workflowExpectations = [
+    ['release', content['.github/workflows/release.yml']],
+    ['nightly', content['.github/workflows/nightly.yml']],
+    ['preview', content['.github/workflows/preview.yml']],
+  ];
+  for (const [channel, workflow] of workflowExpectations) {
+    expectTextCount(
+      `${channel} workflow Sparkle minimum`,
+      workflow,
+      `<sparkle:minimumSystemVersion>${floor.version}</sparkle:minimumSystemVersion>`,
+      1
+    );
+    expectPatternCount(
+      `${channel} workflow Sparkle minimum declarations`,
+      workflow,
+      /<sparkle:minimumSystemVersion>\d+\.\d+<\/sparkle:minimumSystemVersion>/g,
+      1
+    );
+    expectTextCount(
+      `${channel} workflow cask minimum`,
+      workflow,
+      `depends_on macos: ">= :${floor.caskName}"`,
+      1
+    );
+    expectPatternCount(
+      `${channel} workflow cask minimum declarations`,
+      workflow,
+      /depends_on macos: ">= :[a-z]+"/g,
+      1
+    );
+  }
+
   expectTextCount(
     'release workflow user-facing requirement',
-    releaseWorkflow,
-    '- macOS 15.0 (Sequoia) or later',
+    content['.github/workflows/release.yml'],
+    `- macOS ${floor.version} (${floor.releaseName}) or later`,
     1
   );
   expectPatternCount(
     'release workflow user-facing requirement declarations',
-    releaseWorkflow,
+    content['.github/workflows/release.yml'],
     /- macOS \d+\.\d+ \([^)]+\) or later/g,
     1
   );
   expectTextCount(
     'release workflow JSON-LD operating system',
-    releaseWorkflow,
-    '"operatingSystem": "macOS 15.0+"',
+    content['.github/workflows/release.yml'],
+    `"operatingSystem": "macOS ${floor.version}+"`,
     2
   );
   expectPatternCount(
     'release workflow JSON-LD operating system declarations',
-    releaseWorkflow,
+    content['.github/workflows/release.yml'],
     /"operatingSystem": "macOS \d+\.\d+\+"/g,
     2
   );
-  expectTextCount(
-    'release workflow cask minimum',
-    releaseWorkflow,
-    'depends_on macos: ">= :sequoia"',
+
+  expectPatternCount(
+    'Distribution/Info.plist minimum system version',
+    content['Distribution/Info.plist'],
+    infoPlistFloorPattern,
     1
   );
   expectPatternCount(
-    'release workflow cask minimum declarations',
-    releaseWorkflow,
-    /depends_on macos: ">= :[a-z]+"/g,
+    'Distribution/Makefile minimum system version',
+    content['Distribution/Makefile'],
+    new RegExp(
+      `<key>LSMinimumSystemVersion<\\/key>\\\\?\\s*<string>${escapedVersion}<\\/string>`,
+      'g'
+    ),
     1
   );
-  expectTextCount('release workflow stale macOS 14 floor', releaseWorkflow, 'macOS 14.0', 0);
+  expectTextCount(
+    'Distribution cask minimum',
+    content['Distribution/cocxy-terminal.rb'],
+    `depends_on macos: ">= :${floor.caskName}"`,
+    1
+  );
+  expectPatternCount(
+    'embedded daemon minimum system version',
+    content['scripts/embed-pty-daemon-helper.sh'],
+    infoPlistFloorPattern,
+    1
+  );
 
-  expectTextCount('web source version floor', buildSite, 'macOS 15.0+', 3);
-  expectTextCount('web source major floor', buildSite, 'macOS 15+', 1);
-  expectTextCount('web source floor statistics', buildSite, "stat('15+', 'macOS')", 2);
+  expectTextCount('web source version floor', content['web/scripts/build-site.mjs'], `macOS ${floor.version}+`, 3);
+  expectTextCount('web source major floor', content['web/scripts/build-site.mjs'], `macOS ${floor.major}+`, 1);
+  expectTextCount(
+    'web source floor statistics',
+    content['web/scripts/build-site.mjs'],
+    `stat('${floor.major}+', 'macOS')`,
+    2
+  );
   expectTextCount(
     'release page generator operating system',
-    releasePageGenerator,
-    "operatingSystem: 'macOS 15.0+'",
+    content['web/scripts/generate-releases-page.mjs'],
+    `operatingSystem: 'macOS ${floor.version}+'`,
     2
   );
 
-  expectTextCount('English homepage version floor', homeContent, 'macOS 15.0+', 2);
-  expectTextCount(
-    'English homepage floor statistic',
-    homeContent,
-    '<strong>15+</strong><span>macOS</span>',
-    1
-  );
-  expectTextCount('Spanish homepage version floor', spanishHomeContent, 'macOS 15.0+', 2);
-  expectTextCount(
-    'Spanish homepage floor statistic',
-    spanishHomeContent,
-    '<strong>15+</strong><span>macOS</span>',
-    1
-  );
+  const homes = [
+    ['English homepage', homeContent ?? ''],
+    ['Spanish homepage', spanishHomeContent ?? ''],
+  ];
+  for (const [label, homepage] of homes) {
+    expectTextCount(`${label} version floor`, homepage, `macOS ${floor.version}+`, 2);
+    expectTextCount(
+      `${label} floor statistic`,
+      homepage,
+      `<strong>${floor.major}+</strong><span>macOS</span>`,
+      1
+    );
+  }
   expectTextCount(
     'component preview floor statistic',
-    preview,
-    '<strong>15+</strong><span>macOS</span>',
+    content['web/preview/components.html'],
+    `<strong>${floor.major}+</strong><span>macOS</span>`,
     1
   );
-  expectTextCount('English releases operating system', generatedReleases, 'macOS 15.0+', 2);
   expectTextCount(
-    'Spanish releases operating system',
-    generatedSpanishReleases,
-    'macOS 15.0+',
+    'English releases operating system',
+    content['web/public/releases.html'],
+    `macOS ${floor.version}+`,
     2
   );
-  expectTextCount('English press floor', generatedPress, 'macOS 15+', 1);
-  expectTextCount('Spanish press floor', generatedSpanishPress, 'macOS 15+', 1);
-  expectTextCount('LLM index floor', generatedLLMs, 'Platform: macOS 15.0+', 1);
+  expectTextCount(
+    'Spanish releases operating system',
+    content['web/public/es/releases.html'],
+    `macOS ${floor.version}+`,
+    2
+  );
+  expectTextCount('English press floor', content['web/public/press.html'], `macOS ${floor.major}+`, 1);
+  expectTextCount('Spanish press floor', content['web/public/es/press.html'], `macOS ${floor.major}+`, 1);
+  expectTextCount(
+    'LLM index floor',
+    content['web/public/llms.txt'],
+    `Platform: macOS ${floor.version}+`,
+    1
+  );
+
+  rejectStaleFloorReferences(
+    failures,
+    [
+      ...surfaces,
+      { label: 'web/public/index.html', content: homeContent ?? '' },
+      { label: 'web/public/es/index.html', content: spanishHomeContent ?? '' },
+    ],
+    floor
+  );
 
   return failures;
 }
