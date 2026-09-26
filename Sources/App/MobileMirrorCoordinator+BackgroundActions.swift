@@ -16,6 +16,9 @@ extension MobileMirrorCoordinator {
             do {
                 outcome = try await operation()
             } catch {
+                Self.logger.error(
+                    "Mobile action was rejected: \(String(describing: error), privacy: .private)"
+                )
                 outcome = .rejected
             }
 
@@ -28,10 +31,7 @@ extension MobileMirrorCoordinator {
                 ))
             } catch {
                 stopTransport(revoke: true)
-                state = .failed(mobileMirrorLocalizer.string(
-                    "mobile.mirror.audit.unavailable",
-                    fallback: "The local audit log is unavailable."
-                ))
+                state = .failed(.auditUnavailable)
                 return
             }
 

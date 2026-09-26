@@ -25,32 +25,25 @@ enum MobileMirrorLocalRelayError: Error, Equatable, LocalizedError {
     }
 
     func localizedDescription(using localizer: AppLocalizer) -> String {
+        let entry = localizationEntry
+        return localizer.string(entry.key, fallback: entry.fallback)
+    }
+
+    var localizationEntry: (key: String, fallback: String) {
         switch self {
         case .noPrivateNetwork:
-            return localizer.string(
-                "mobile.mirror.error.noPrivateNetwork",
-                fallback: "No private local network is available."
-            )
+            return ("mobile.mirror.error.noPrivateNetwork", "No private local network is available.")
         case .invalidGatewayPort:
-            return localizer.string(
-                "mobile.mirror.error.invalidGatewayPort",
-                fallback: "The local mobile gateway port is invalid."
-            )
+            return ("mobile.mirror.error.invalidGatewayPort", "The local mobile gateway port is invalid.")
         case .alreadyStarting:
-            return localizer.string(
-                "mobile.mirror.error.alreadyStarting",
-                fallback: "The private mobile relay is already starting."
-            )
+            return ("mobile.mirror.error.alreadyStarting", "The private mobile relay is already starting.")
         case .tlsIdentityUnavailable:
-            return localizer.string(
+            return (
                 "mobile.mirror.error.tlsIdentityUnavailable",
-                fallback: "Could not create encryption for the private mobile relay."
+                "Could not create encryption for the private mobile relay."
             )
         case .listenerUnavailable:
-            return localizer.string(
-                "mobile.mirror.error.listenerUnavailable",
-                fallback: "Could not start the private mobile relay."
-            )
+            return ("mobile.mirror.error.listenerUnavailable", "Could not start the private mobile relay.")
         }
     }
 }

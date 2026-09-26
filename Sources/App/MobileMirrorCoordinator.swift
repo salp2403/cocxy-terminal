@@ -106,11 +106,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         if usesSSHTunnel {
             guard let targetID = selectedTunnelTargetID,
                   let selected = tunnelTargets.first(where: { $0.id == targetID }) else {
-                state = .unavailable(
-                    MobileMirrorTunnelError.noConnectedTarget.localizedDescription(
-                        using: mobileMirrorLocalizer
-                    )
-                )
+                state = .unavailable(statusMessage(for: MobileMirrorTunnelError.noConnectedTarget))
                 return
             }
             target = selected
@@ -128,9 +124,7 @@ final class MobileMirrorCoordinator: ObservableObject {
             guard self.tunnelLease == nil,
                   self.tunnelController.unresolvedLease == nil else {
                 self.state = .failed(
-                    MobileMirrorTunnelError.closureUnconfirmed.localizedDescription(
-                        using: self.mobileMirrorLocalizer
-                    )
+                    self.statusMessage(for: MobileMirrorTunnelError.closureUnconfirmed)
                 )
                 return
             }
@@ -152,7 +146,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         do {
             staticAssetEndpoint = try staticAssetServer.start()
         } catch {
-            state = .failed(localizedStatusError(error))
+            state = .failed(statusMessage(for: error))
             return
         }
         let router = makePairingRouter(
@@ -213,22 +207,20 @@ final class MobileMirrorCoordinator: ObservableObject {
             gateway.stop()
             staticAssetServer.stop()
             guard generation == transportGeneration else { return }
-            state = .failed(localizedStatusError(error))
+            state = .failed(statusMessage(for: error))
         }
     }
 
     private func openLocalPairingTransport(generation: UInt64) async {
         guard let publicAddress = relayManager.privateMobileMirrorAddress() else {
-            state = .unavailable(MobileMirrorLocalRelayError.noPrivateNetwork.localizedDescription(
-                using: mobileMirrorLocalizer
-            ))
+            state = .unavailable(statusMessage(for: MobileMirrorLocalRelayError.noPrivateNetwork))
             return
         }
         let staticAssetEndpoint: MobileMirrorStaticAssetEndpoint
         do {
             staticAssetEndpoint = try staticAssetServer.start()
         } catch {
-            state = .failed(localizedStatusError(error))
+            state = .failed(statusMessage(for: error))
             return
         }
         let preambleSecret = MobileMirrorPairingAuthority.base64URL(
@@ -292,7 +284,7 @@ final class MobileMirrorCoordinator: ObservableObject {
             }
             _ = authority.revoke()
             guard generation == transportGeneration else { return }
-            state = .failed(localizedStatusError(error))
+            state = .failed(statusMessage(for: error))
         }
     }
 
@@ -300,29 +292,6 @@ final class MobileMirrorCoordinator: ObservableObject {
         configuredLocalizer
             ?? appDelegate?.appLocalizer()
             ?? AppLocalizer(languagePreference: .system)
-    }
-
-    func localizedStatusError(_ error: any Error) -> String {
-        let localizer = mobileMirrorLocalizer
-        if let relayError = error as? MobileMirrorLocalRelayError {
-            return relayError.localizedDescription(using: localizer)
-        }
-        if let tunnelError = error as? MobileMirrorTunnelError {
-            return tunnelError.localizedDescription(using: localizer)
-        }
-        if let mirrorError = error as? MobileMirrorError {
-            return mirrorError.localizedDescription(using: localizer)
-        }
-        if error is RelayAuditLogError {
-            return localizer.string(
-                "mobile.mirror.audit.unavailable",
-                fallback: "The local audit log is unavailable."
-            )
-        }
-        return localizer.string(
-            "mobile.mirror.error.unavailable",
-            fallback: "Mobile mirror is unavailable."
-        )
     }
 
     private static func gatewayLocalization(
@@ -393,7 +362,7 @@ final class MobileMirrorCoordinator: ObservableObject {
             try await tunnelController.close(lease)
             if tunnelLease == lease { tunnelLease = nil }
         } catch {
-            state = .failed(localizedStatusError(error))
+            state = .failed(statusMessage(for: error))
         }
     }
 
@@ -417,7 +386,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         } catch {
             _ = authority.revoke()
             stopTransport(revoke: false)
-            state = .failed(localizedStatusError(error))
+            state = .failed(statusMessage(for: error))
         }
     }
 
@@ -441,7 +410,7 @@ final class MobileMirrorCoordinator: ObservableObject {
             }
         } catch {
             stopTransport(revoke: true)
-            state = .failed(localizedStatusError(error))
+            state = .failed(statusMessage(for: error))
         }
     }
 
@@ -513,9 +482,7 @@ final class MobileMirrorCoordinator: ObservableObject {
                    !targets.contains(where: { $0.id == lease.profileID }) {
                     stopTransport(revoke: true)
                     state = .unavailable(
-                        MobileMirrorTunnelError.noConnectedTarget.localizedDescription(
-                            using: mobileMirrorLocalizer
-                        )
+                        statusMessage(for: MobileMirrorTunnelError.noConnectedTarget)
                     )
                 }
             }

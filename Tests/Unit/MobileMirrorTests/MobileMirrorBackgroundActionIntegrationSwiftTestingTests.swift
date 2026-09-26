@@ -285,9 +285,8 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         )
 
         #expect(await eventually {
-            context.coordinator.state == .failed(
-                "El registro de auditoría local no está disponible."
-            )
+            Self.statusText(context.coordinator.state, using: localizer)
+                == "El registro de auditoría local no está disponible."
         })
     }
 
@@ -307,9 +306,24 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
 
         context.coordinator.startPairing()
 
-        #expect(context.coordinator.state == .unavailable(
-            "Conecta un perfil SSH o usa el relay local."
-        ))
+        #expect(Self.statusText(context.coordinator.state, using: localizer)
+            == "Conecta un perfil SSH o usa el relay local.")
+        let english = AppLocalizer(
+            languagePreference: .english,
+            bundle: try #require(Bundle(url: localizationRoot))
+        )
+        #expect(Self.statusText(context.coordinator.state, using: english)
+            == "Connect an SSH profile or use the local relay.")
+    }
+
+    private static func statusText(
+        _ state: MobileMirrorServiceState,
+        using localizer: AppLocalizer
+    ) -> String? {
+        switch state {
+        case .unavailable(let message), .failed(let message): message.text(using: localizer)
+        default: nil
+        }
     }
 
     private func preparedProjectCreation(

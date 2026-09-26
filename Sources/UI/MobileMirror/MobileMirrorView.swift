@@ -430,7 +430,7 @@ struct MobileMirrorView: View {
         case .denied:
             return localizer.string("mobile.mirror.status.denied", fallback: "Pairing denied")
         case .unavailable(let message), .failed(let message):
-            return message
+            return message.text(using: localizer)
         }
     }
 }

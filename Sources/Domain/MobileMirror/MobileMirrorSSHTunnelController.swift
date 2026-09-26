@@ -38,17 +38,19 @@ enum MobileMirrorTunnelError: Error, Equatable, LocalizedError {
     }
 
     func localizedDescription(using localizer: AppLocalizer) -> String {
+        let entry = localizationEntry
+        return localizer.string(entry.key, fallback: entry.fallback)
+    }
+
+    var localizationEntry: (key: String, fallback: String) {
         switch self {
         case .noConnectedTarget:
-            return localizer.string(
+            return (
                 "mobile.mirror.transport.unavailable",
-                fallback: "Connect an SSH profile or use the local relay."
+                "Connect an SSH profile or use the local relay."
             )
         case .invalidLocalPort, .remotePortUnavailable, .closureUnconfirmed:
-            return localizer.string(
-                "mobile.mirror.error.unavailable",
-                fallback: "Mobile mirror is unavailable."
-            )
+            return ("mobile.mirror.error.unavailable", "Mobile mirror is unavailable.")
         }
     }
 }
