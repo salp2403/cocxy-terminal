@@ -76,6 +76,21 @@ struct MobileMirrorErrorContractSwiftTestingTests: MobileMirrorRouterTestSupport
         #expect(missingCookiePayload.code == "session-expired")
         #expect(missingCookiePayload.error
             == "Escanea un nuevo código QR en el Mac para volver a conectarte")
+
+        let unknownCookie = try response(from: await paired.router.route(
+            request: request(path: "/mobile/api/state", headers: ["cookie": "cocxy_mobile=forged"]),
+            identity: paired.identity
+        ))
+        #expect(unknownCookie.status == 401)
+        #expect(try Self.decode(unknownCookie).code == "session-expired")
+
+        _ = paired.authority.revoke()
+        let revoked = try response(from: await paired.router.route(
+            request: try paired.signedRequest(Self.scrollAction, sequence: 0),
+            identity: paired.identity
+        ))
+        #expect(revoked.status == 401)
+        #expect(try Self.decode(revoked).code == "session-expired")
     }
 
     @Test("a skewed phone clock gets actionable guidance instead of a replay alarm")
