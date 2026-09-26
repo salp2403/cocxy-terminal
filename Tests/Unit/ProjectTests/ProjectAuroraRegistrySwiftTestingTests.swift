@@ -144,6 +144,35 @@ struct ProjectAuroraRegistrySwiftTestingTests {
         #expect(renderedViewStrings(mountedSection.body).contains(expectedMessage))
     }
 
+    @Test("whole-document recovery is announced without a rejected-record count")
+    func wholeDocumentRecoveryMessage() throws {
+        let sandbox = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let registryURL = sandbox.appendingPathComponent("registry.json")
+        try Data("not-json".utf8).write(to: registryURL)
+        let registry = ProjectRegistry(store: ProjectRegistryStore(fileURL: registryURL))
+        let tabManager = TabManager()
+        let store = AgentStatePerSurfaceStore()
+        let controller = AuroraChromeController(
+            tabManager: tabManager,
+            store: store,
+            projectRegistry: registry
+        )
+        let localizationBundle = try #require(Bundle(url:
+            URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                .appendingPathComponent("Resources/Localization", isDirectory: true)
+        ))
+        controller.localizer = AppLocalizer(languagePreference: .spanish, bundle: localizationBundle)
+        controller.beginObservingDomain()
+
+        let diagnostic = try #require(controller.projectRegistryRecoveryDiagnostic)
+        #expect(diagnostic.recoveredWholeDocument)
+        #expect(
+            AuroraSidebarHost(controller: controller).makeSidebarView().projectRegistryRecoveryMessage
+                == "No se pudo leer la lista de proyectos. Cocxy la guardó en un archivo privado de recuperación y empezó una lista nueva."
+        )
+    }
+
     private func makeSandbox() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("ProjectAuroraRegistry-\(UUID().uuidString)", isDirectory: true)

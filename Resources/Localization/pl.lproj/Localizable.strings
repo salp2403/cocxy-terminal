@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "Odepnij projekt";
 "projectSidebar.unavailable" = "Lista projektów jest niedostępna";
 "project.registry.recovery.message" = "Nie udało się odczytać części metadanych projektu. Cocxy zapisał odrzucone rekordy (%d) w prywatnym pliku odzyskiwania.";
+"project.registry.recovery.document" = "Nie udało się odczytać listy projektów. Cocxy zapisał ją w prywatnym pliku odzyskiwania i rozpoczął nową listę.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d zadanie";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d zadań";
 "workspaceToolbar.panel.projectHome" = "Strona główna projektu";

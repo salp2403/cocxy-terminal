@@ -188,6 +188,22 @@ extension Design {
         }
 
         static func localizedRecoveryMessage(
+            for diagnostic: ProjectRegistryRecoveryDiagnostic,
+            using localizer: AppLocalizer
+        ) -> String {
+            guard diagnostic.recoveredWholeDocument else {
+                return localizedRecoveryMessage(
+                    count: diagnostic.discardedRecordCount,
+                    using: localizer
+                )
+            }
+            return localizer.string(
+                "project.registry.recovery.document",
+                fallback: "The project list could not be read. Cocxy saved it in a private recovery file and started a new list."
+            )
+        }
+
+        static func localizedRecoveryMessage(
             count: Int,
             using localizer: AppLocalizer
         ) -> String {

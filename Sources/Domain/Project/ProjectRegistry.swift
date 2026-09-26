@@ -101,7 +101,7 @@ final class ProjectRegistry: ObservableObject {
 
     private let store: ProjectRegistryStore
     private let clock: () -> Date
-    private var canPersist = true
+    private var canPersist: Bool
 
     init(
         store: ProjectRegistryStore = ProjectRegistryStore(),
@@ -109,28 +109,11 @@ final class ProjectRegistry: ObservableObject {
     ) {
         self.store = store
         self.clock = clock
-        do {
-            let report = try store.loadReport()
-            records = report.records
-            persistenceErrorDescription = nil
-            if let quarantineFileURL = report.quarantineFileURL,
-               !report.discardedRecords.isEmpty {
-                recoveryDiagnostic = ProjectRegistryRecoveryDiagnostic(
-                    discardedRecordCount: report.discardedRecordCount,
-                    discardedRecordIdentities: report.discardedRecords.map(\.identity),
-                    discardedRecordReasons: report.discardedRecords.map(\.reason),
-                    quarantineFileURL: quarantineFileURL
-                )
-            } else {
-                recoveryDiagnostic = nil
-            }
-        } catch {
-            records = []
-            persistenceErrorDescription = String(describing: error)
-            recoveryDiagnostic = nil
-            canPersist = false
-        }
-        records.sort(by: Self.sortRecords)
+        let outcome = Self.loadOutcome(from: store)
+        records = outcome.records
+        persistenceErrorDescription = outcome.persistenceErrorDescription
+        recoveryDiagnostic = outcome.recoveryDiagnostic
+        canPersist = outcome.canPersist
     }
 
     var pinned: [ProjectRecord] {
@@ -208,6 +191,9 @@ final class ProjectRegistry: ObservableObject {
     }
 
     private func mutate(_ mutation: (inout [ProjectRecord]) -> Void) throws {
+        if !canPersist {
+            reloadAfterLoadFailure()
+        }
         guard canPersist else {
             throw ProjectRegistryError.unavailableAfterLoadFailure(
                 persistenceErrorDescription ?? "Unknown load failure"
@@ -226,6 +212,56 @@ final class ProjectRegistry: ObservableObject {
             persistenceErrorDescription = String(describing: error)
             throw error
         }
+    }
+
+    /// A registry that could not be read or repaired stays read-only
+    /// until the file loads cleanly again; each write attempt retries.
+    private func reloadAfterLoadFailure() {
+        let outcome = Self.loadOutcome(from: store)
+        guard outcome.canPersist else { return }
+        recordsWillPublish?(outcome.records)
+        records = outcome.records
+        persistenceErrorDescription = outcome.persistenceErrorDescription
+        recoveryDiagnostic = outcome.recoveryDiagnostic
+        canPersist = true
+        recordsDidChange.send(outcome.records)
+    }
+
+    private struct LoadOutcome {
+        let records: [ProjectRecord]
+        let persistenceErrorDescription: String?
+        let recoveryDiagnostic: ProjectRegistryRecoveryDiagnostic?
+        let canPersist: Bool
+    }
+
+    private static func loadOutcome(from store: ProjectRegistryStore) -> LoadOutcome {
+        let report: ProjectRegistryStoreLoadReport
+        do {
+            report = try store.loadReport()
+        } catch {
+            return LoadOutcome(
+                records: [],
+                persistenceErrorDescription: String(describing: error),
+                recoveryDiagnostic: nil,
+                canPersist: false
+            )
+        }
+        var diagnostic: ProjectRegistryRecoveryDiagnostic?
+        if let quarantineFileURL = report.quarantineFileURL, !report.discardedRecords.isEmpty {
+            diagnostic = ProjectRegistryRecoveryDiagnostic(
+                discardedRecordCount: report.discardedRecordCount,
+                discardedRecordIdentities: report.discardedRecords.map(\.identity),
+                discardedRecordReasons: report.discardedRecords.map(\.reason),
+                quarantineFileURL: quarantineFileURL,
+                recoveredWholeDocument: report.recoveredWholeDocument
+            )
+        }
+        return LoadOutcome(
+            records: report.records.sorted(by: sortRecords),
+            persistenceErrorDescription: report.repairFailure.map { String(describing: $0) },
+            recoveryDiagnostic: diagnostic,
+            canPersist: report.allowsPersistence
+        )
     }
 
     private static func sortRecords(_ lhs: ProjectRecord, _ rhs: ProjectRecord) -> Bool {

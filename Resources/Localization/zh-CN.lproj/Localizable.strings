@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "取消固定项目";
 "projectSidebar.unavailable" = "项目列表不可用";
 "project.registry.recovery.message" = "部分项目元数据无法读取。Cocxy 已将被拒绝的记录（%d 条）保存到私有恢复文件中。";
+"project.registry.recovery.document" = "无法读取项目列表。Cocxy 已将其保存到私有恢复文件中，并开始了一个新列表。";
 "projectSidebar.taskBadge.accessibility.one" = "%@，%d 个任务";
 "projectSidebar.taskBadge.accessibility.many" = "%@，%d 个任务";
 "workspaceToolbar.panel.projectHome" = "项目主页";

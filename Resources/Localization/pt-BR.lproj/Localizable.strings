@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "Desafixar projeto";
 "projectSidebar.unavailable" = "Lista de projetos indisponível";
 "project.registry.recovery.message" = "Não foi possível ler alguns metadados de projetos. O Cocxy salvou os registros rejeitados (%d) em um arquivo privado de recuperação.";
+"project.registry.recovery.document" = "Não foi possível ler a lista de projetos. O Cocxy a salvou em um arquivo privado de recuperação e iniciou uma nova lista.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d tarefa";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d tarefas";
 "workspaceToolbar.panel.projectHome" = "Início do Projeto";

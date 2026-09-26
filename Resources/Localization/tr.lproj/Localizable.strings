@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "Projenin sabitlemesini kaldır";
 "projectSidebar.unavailable" = "Proje listesi kullanılamıyor";
 "project.registry.recovery.message" = "Bazı proje meta verileri okunamadı. Cocxy reddedilen kayıtları (%d) özel bir kurtarma dosyasına kaydetti.";
+"project.registry.recovery.document" = "Proje listesi okunamadı. Cocxy listeyi özel bir kurtarma dosyasına kaydetti ve yeni bir liste başlattı.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d görev";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d görev";
 "workspaceToolbar.panel.projectHome" = "Proje Ana Sayfası";

@@ -28,8 +28,17 @@ struct ProjectRegistryStoreLoadReport: Equatable, Sendable {
     let records: [ProjectRecord]
     let discardedRecords: [ProjectRegistryDiscardedRecord]
     let quarantineFileURL: URL?
+    var recoveredWholeDocument = false
+    /// The readable records could not be written back to disk.
+    var repairFailure: ProjectRegistryStoreError?
 
     var discardedRecordCount: Int { discardedRecords.count }
+
+    /// Rejected records that were not quarantined still live only in the
+    /// unrepaired file, so saving would drop them.
+    var allowsPersistence: Bool {
+        discardedRecords.isEmpty || quarantineFileURL != nil
+    }
 }
 
 struct ProjectRegistryDiscardedRecord: Equatable, Sendable {
@@ -42,6 +51,7 @@ struct ProjectRegistryRecoveryDiagnostic: Equatable, Sendable {
     let discardedRecordIdentities: [String]
     let discardedRecordReasons: [String]
     let quarantineFileURL: URL
+    var recoveredWholeDocument = false
 }
 
 struct ProjectRegistryStore: Sendable {
@@ -73,6 +83,9 @@ struct ProjectRegistryStore: Sendable {
     }
 
     func loadReport() throws -> ProjectRegistryStoreLoadReport {
+        // A fresh URL: resource values cached by an earlier load must not
+        // hide a registry file that was repaired on disk since then.
+        let fileURL = URL(fileURLWithPath: self.fileURL.path, isDirectory: false)
         guard fileManager.fileExists(atPath: fileURL.path) else {
             return ProjectRegistryStoreLoadReport(
                 records: [],
@@ -128,28 +141,46 @@ struct ProjectRegistryStore: Sendable {
                 .compactMap { $0["id"] as? String } ?? []
             var quarantineFileURL: URL?
             if !discardedRawRecords.isEmpty {
-                quarantineFileURL = try quarantine(discardedRawRecords)
+                do {
+                    quarantineFileURL = try quarantine(discardedRawRecords)
+                } catch {
+                    return ProjectRegistryStoreLoadReport(
+                        records: migrated,
+                        discardedRecords: discardedRecords,
+                        quarantineFileURL: nil,
+                        repairFailure: Self.storeError(error)
+                    )
+                }
             }
             defer {
                 if let quarantineFileURL {
                     pruneQuarantineFiles(keeping: quarantineFileURL)
                 }
             }
+            var repairFailure: ProjectRegistryStoreError?
             if !discardedRecords.isEmpty
                 || migrated.count != records.count
                 || rawIDs != records.map(\.id.rawValue) {
-                try save(migrated)
+                do {
+                    try save(migrated)
+                } catch {
+                    repairFailure = Self.storeError(error)
+                }
             }
             return ProjectRegistryStoreLoadReport(
                 records: migrated,
                 discardedRecords: discardedRecords,
-                quarantineFileURL: quarantineFileURL
+                quarantineFileURL: quarantineFileURL,
+                repairFailure: repairFailure
             )
-        } catch let error as ProjectRegistryStoreError {
-            throw error
         } catch {
-            throw ProjectRegistryStoreError.persistenceFailed(error.localizedDescription)
+            throw Self.storeError(error)
         }
+    }
+
+    private static func storeError(_ error: any Error) -> ProjectRegistryStoreError {
+        (error as? ProjectRegistryStoreError)
+            ?? .persistenceFailed(error.localizedDescription)
     }
 
     func save(_ records: [ProjectRecord]) throws {
@@ -246,7 +277,8 @@ struct ProjectRegistryStore: Sendable {
                 identity: "registry",
                 reason: reason
             )],
-            quarantineFileURL: quarantineURL
+            quarantineFileURL: quarantineURL,
+            recoveredWholeDocument: true
         )
     }
 

@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "取消釘選專案";
 "projectSidebar.unavailable" = "無法使用專案列表";
 "project.registry.recovery.message" = "部分專案中繼資料無法讀取。Cocxy 已將遭拒的記錄（%d 筆）儲存到私人復原檔案。";
+"project.registry.recovery.document" = "無法讀取專案清單。Cocxy 已將其儲存到私人復原檔案，並開始新的清單。";
 "projectSidebar.taskBadge.accessibility.one" = "%@，%d 個任務";
 "projectSidebar.taskBadge.accessibility.many" = "%@，%d 個任務";
 "workspaceToolbar.panel.projectHome" = "專案首頁";
