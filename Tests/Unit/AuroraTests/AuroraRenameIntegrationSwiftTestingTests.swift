@@ -35,10 +35,9 @@ struct AuroraRenameIntegrationSwiftTestingTests {
             auroraWorkspaceTitleStore: titleStore
         )
         let tab = controller.tabManager.tabs[0]
-        let resolver = GitAncestorWorkspaceRootResolver()
         let workspaceID = AuroraWorkspacePlanner.descriptor(
             for: tab,
-            resolver: resolver
+            projectResolver: controller.projectResolver
         ).identity
 
         controller.applyAuroraWorkspaceRename(
