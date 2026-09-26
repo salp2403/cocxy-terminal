@@ -589,8 +589,8 @@ final class ConcurrencyEdgeCaseTests: XCTestCase {
         let exp = expectation(description: "No crash during concurrent reset")
         group.notify(queue: .global(qos: .userInteractive)) { exp.fulfill() }
         // Not background QoS: macOS may starve that class for as long as other
-        // work saturates the cores, so the test measured machine load instead
-        // of reset safety. The strict timeout keeps headroom for loaded runners.
+        // work saturates the cores, which would make this a measure of machine
+        // load rather than reset safety. The timeout is headroom, not a retry.
         waitForExpectations(timeout: 20.0)
         // No crash = pass
     }
