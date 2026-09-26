@@ -6,14 +6,15 @@ set -euo pipefail
 # Running each Swift Testing suite in its own process keeps coverage intact
 # while preventing AppKit/Dispatch-heavy suites from over-parallelizing.
 
-# Real launchd-contained notebook and workflow runs pass or fail with machine
-# load, so they stay out of this gate and run in the Bounded Process
-# Containment CI lane through run-filtered-swift-testing.sh.
+# Suites that drive real launchd containment pass or fail with machine load
+# and process churn, so they stay out of this gate and run in the Bounded
+# Process Containment CI lane through run-filtered-swift-testing.sh.
 common_args=(
   --disable-automatic-resolution
   --disable-xctest
   --skip PerformanceTests
   --skip CocxyCorePerformanceBenchmarks
+  --skip NotebookProcessRunnerSwiftTestingTests
   --skip SocketLocalExecutionIntegrationSwiftTestingTests
 )
 
