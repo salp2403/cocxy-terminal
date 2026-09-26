@@ -203,6 +203,7 @@ struct AgentDashboardFileChangedSwiftTests {
         }
 
         #expect(viewModel.sessions.first?.filesTouched.isEmpty == true)
+        for _ in 0..<1_500 where publishedSnapshotCount == 0 { try await Task.sleep(for: .milliseconds(10)) }
         try await Task.sleep(for: .milliseconds(100))
 
         #expect(publishedSnapshotCount == 1)

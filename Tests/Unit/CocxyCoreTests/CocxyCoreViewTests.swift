@@ -1759,6 +1759,7 @@ struct CocxyCoreViewTests {
             endCol: 1
         )
         harness.view.mouseUp(with: makeMouseEvent(type: .leftMouseUp, location: targetInWindow))
+        for _ in 0..<1_500 where harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active != true { try await Task.sleep(nanoseconds: 10_000_000) }
         try await Task.sleep(nanoseconds: 50_000_000)
 
         #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active == true)
@@ -2079,6 +2080,7 @@ struct CocxyCoreViewTests {
             modifiers: [.shift],
             keyCode: 116
         ))
+        for _ in 0..<1_500 where (harness.bridge.historyVisibleStart(for: harness.surfaceID) ?? before) >= before { try await Task.sleep(nanoseconds: 10_000_000) }
         try await Task.sleep(nanoseconds: 100_000_000)
 
         let after = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))

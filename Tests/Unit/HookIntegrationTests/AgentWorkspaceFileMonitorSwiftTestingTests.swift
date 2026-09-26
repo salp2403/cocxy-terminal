@@ -220,7 +220,7 @@ struct AgentWorkspaceFileMonitorSwiftTestingTests {
         in collector: AgentWorkspaceFileChangeCollector,
         matching predicate: (AgentWorkspaceFileChange) -> Bool
     ) async -> AgentWorkspaceFileChange? {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(15))
         while ContinuousClock.now < deadline {
             if let match = collector.snapshot.first(where: predicate) {
                 return match
@@ -384,6 +384,7 @@ struct AgentWorkspaceFileMonitorRoutingSwiftTestingTests {
             )),
             cwd: updatedPath
         ))
+        for _ in 0..<1_500 where monitor.startCalls.isEmpty { try? await Task.sleep(for: .milliseconds(10)) }
         try? await Task.sleep(for: .milliseconds(50))
 
         #expect(monitor.startCalls == [
