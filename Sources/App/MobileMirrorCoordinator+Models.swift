@@ -55,7 +55,8 @@ extension MobileMirrorCoordinator {
 
     /// The raw error can name local paths and hosts, so it only reaches the private log.
     func statusMessage(for error: any Error) -> MobileMirrorStatusMessage {
-        Self.logger.error(
+        Self.logger.log(
+            level: Self.isExpectedCondition(error) ? .default : .error,
             "Mobile mirror stopped: \(String(describing: error), privacy: .private)"
         )
         switch error {
@@ -69,6 +70,20 @@ extension MobileMirrorCoordinator {
             return .auditUnavailable
         default:
             return .unavailable
+        }
+    }
+
+    /// Conditions the user or the network produce in normal use, not faults.
+    private static func isExpectedCondition(_ error: any Error) -> Bool {
+        switch error {
+        case MobileMirrorTunnelError.noConnectedTarget,
+             MobileMirrorLocalRelayError.noPrivateNetwork,
+             MobileMirrorError.noPrivateNetwork,
+             MobileMirrorError.pairingExpired,
+             MobileMirrorError.pairingDenied:
+            return true
+        default:
+            return false
         }
     }
 }
