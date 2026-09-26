@@ -28,14 +28,18 @@ struct MobileMirrorFailure: Equatable, Sendable {
     let countsAsAuthenticationFailure: Bool
 
     func response(using localization: MobileMirrorWebLocalization) -> MobileMirrorHTTPResponse {
-        .error(localization.text(messageKey), status: status, code: code.rawValue)
+        .error(localization.text(messageKey), status: status, code: code)
     }
 }
 
 extension MobileMirrorFailure {
     init(_ error: any Error) {
         guard let mirrorError = error as? MobileMirrorError else {
-            self = error is CancellationError ? .timedOut : .unexpected
+            switch error {
+            case is CancellationError: self = .timedOut
+            case is RelayAuditLogError: self = .auditUnavailable
+            default: self = .unexpected
+            }
             return
         }
         self.init(mirrorError)

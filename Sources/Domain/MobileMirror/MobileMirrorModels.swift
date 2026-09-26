@@ -253,8 +253,8 @@ struct MobileMirrorActionResponse: Codable, Equatable, Sendable {
         Self(ok: true, error: nil, code: nil, snapshot: snapshot)
     }
 
-    static func failure(_ message: String, code: String? = nil) -> Self {
-        Self(ok: false, error: message, code: code, snapshot: nil)
+    static func failure(_ message: String, code: MobileMirrorResponseCode) -> Self {
+        Self(ok: false, error: message, code: code.rawValue, snapshot: nil)
     }
 }
 

@@ -24,6 +24,38 @@ struct MobileMirrorErrorContractSwiftTestingTests: MobileMirrorRouterTestSupport
         #expect(paired.authority.activePairing() != nil)
     }
 
+    @Test("a denied pairing keeps the page status and the phone contract")
+    func deniedPairingCarriesCode() async throws {
+        let authority = MobileMirrorPairingAuthority()
+        let router = MobileMirrorRequestRouter(
+            publicAddress: "127.0.0.1",
+            transport: .localTLS,
+            authority: authority,
+            routeRegistry: MobileMirrorRouteRegistry(),
+            localization: try webLocalization(.spanish),
+            snapshotProvider: { _ in .empty },
+            actionHandler: { _, _, _, _ in .empty },
+            pendingPairingHandler: { _ in }
+        )
+        router.updatePublicPort(43120)
+        let identity = MobileMirrorClientIdentity(remoteAddress: "192.168.1.45", userAgent: "Phone")
+        let pending = try authority.consumeOffer(token: authority.makeOffer().token, identity: identity)
+        _ = try authority.decide(pendingID: pending.id, approve: false)
+
+        let reply = try response(from: await router.route(
+            request: request(path: "/mobile/api/pair-status", query: ["id": pending.id.uuidString]),
+            identity: identity
+        ))
+        let payload = try #require(
+            JSONSerialization.jsonObject(with: reply.body) as? [String: Any]
+        )
+        #expect(reply.status == 403)
+        #expect(payload["status"] as? String == "denied")
+        #expect(payload["ok"] as? Bool == false)
+        #expect(payload["code"] as? String == "authorization-denied")
+        #expect(payload["error"] as? String == "Emparejamiento denegado")
+    }
+
     @Test("a vanished mirrored target never exhausts the authentication budget")
     func vanishedTargetDoesNotScore() async throws {
         let paired = try PairedMirrorRouter.make(localization: webLocalization(.spanish)) { _ in
@@ -198,6 +230,11 @@ struct MobileMirrorErrorContractSwiftTestingTests: MobileMirrorRouterTestSupport
         #expect(cancelled.status == 504)
         #expect(cancelled.code == .unavailable)
         #expect(!cancelled.countsAsAuthenticationFailure)
+        let auditFailure = MobileMirrorFailure(RelayAuditLogError.appendFailed("/Users/owner/log"))
+        #expect(auditFailure.status == 503)
+        #expect(auditFailure.code == .unavailable)
+        #expect(try Self.decode(auditFailure.response(using: spanish)).error
+            == "El registro de auditoría local no está disponible.")
         let foreign = MobileMirrorFailure(CocoaError(.fileReadNoPermission, userInfo: [
             NSFilePathErrorKey: "/Users/owner/private",
         ]))

@@ -163,7 +163,7 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         }
         eventHub.add(descriptor: 101, close: {})
         context.coordinator.gateway = MobileMirrorGateway(eventHub: eventHub) { _, _ in
-            .response(.error("Unavailable", status: 503))
+            .response(.error("Unavailable", status: 503, code: .unavailable))
         }
         let gate = MobileMirrorActionGate()
 
@@ -203,7 +203,7 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         }
         eventHub.add(descriptor: 102, close: {})
         context.coordinator.gateway = MobileMirrorGateway(eventHub: eventHub) { _, _ in
-            .response(.error("Unavailable", status: 503))
+            .response(.error("Unavailable", status: 503, code: .unavailable))
         }
 
         context.coordinator.revoke()
@@ -230,7 +230,7 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         }
         eventHub.add(descriptor: 103, close: {})
         context.coordinator.gateway = MobileMirrorGateway(eventHub: eventHub) { _, _ in
-            .response(.error("Unavailable", status: 503))
+            .response(.error("Unavailable", status: 503, code: .unavailable))
         }
         let offer = authority.makeOffer()
         context.coordinator.pendingPairing = try authority.consumeOffer(

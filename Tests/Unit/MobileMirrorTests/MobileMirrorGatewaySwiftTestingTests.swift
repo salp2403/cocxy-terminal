@@ -129,7 +129,11 @@ struct MobileMirrorGatewaySwiftTestingTests: MobileMirrorRouterTestSupport {
                 do {
                     try await Task.sleep(for: .seconds(30))
                 } catch {
-                    return .response(.error("Local request timed out.", status: 504))
+                    return .response(.error(
+                        "Local request timed out.",
+                        status: 504,
+                        code: .unavailable
+                    ))
                 }
             }
             return .response(.json(["status": "ok"]))
