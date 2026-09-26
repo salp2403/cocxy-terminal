@@ -92,8 +92,9 @@ struct ProjectDirectoryPublication: Sendable {
         )
     }
 
-    /// Removes only entries this operation created. Anything added after
-    /// publication stays in place, and so does the directory that holds it.
+    /// Removes the publication only while it holds nothing but entries this
+    /// operation created. Once anything else appears in it, the whole tree
+    /// stays, so a rollback never leaves a partly deleted repository.
     fileprivate static func rollBack(
         root: ProjectDirectoryRoot,
         destinationName: String,
@@ -101,6 +102,16 @@ struct ProjectDirectoryPublication: Sendable {
         createdEntries: Set<ProjectDirectoryFileIdentity>
     ) throws {
         let directory = try root.openVerifiedChild(named: destinationName, identity: identity)
+        var currentEntries: Set<ProjectDirectoryFileIdentity> = []
+        try ProjectDirectoryTransaction.collectEntryIdentities(
+            of: directory.descriptor,
+            into: &currentEntries
+        )
+        guard currentEntries.isSubset(of: createdEntries) else {
+            throw ProjectDirectoryError.cleanupUnverified(
+                try root.displayPath(for: destinationName)
+            )
+        }
         guard try ProjectDirectoryTransaction.removeContents(
             of: directory.descriptor,
             limitedTo: createdEntries
@@ -418,7 +429,7 @@ final class ProjectDirectoryTransaction {
         return removedEverything
     }
 
-    private static func collectEntryIdentities(
+    fileprivate static func collectEntryIdentities(
         of descriptor: Int32,
         into identities: inout Set<ProjectDirectoryFileIdentity>
     ) throws {

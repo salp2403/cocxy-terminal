@@ -298,19 +298,13 @@ struct ProjectDirectoryTransactionSwiftTestingTests {
         #expect(try stagingEntries(in: rootURL).isEmpty)
     }
 
-    @Test("post-publication rollback removes only entries the operation created")
-    func postPublicationRollbackKeepsForeignEntries() throws {
+    @Test("post-publication rollback leaves a publication that gained foreign files untouched")
+    func postPublicationRollbackKeepsTaintedPublicationWhole() throws {
         let rootURL = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: rootURL) }
         let hooks = ProjectDirectoryTransactionHooks(afterPublish: { context in
-            let published = context.destinationURL
             try "user".write(
-                to: published.appendingPathComponent("user-notes.txt"),
-                atomically: false,
-                encoding: .utf8
-            )
-            try "user".write(
-                to: published.appendingPathComponent(".git/user-hook"),
+                to: context.destinationURL.appendingPathComponent(".git/user-hook"),
                 atomically: false,
                 encoding: .utf8
             )
@@ -322,8 +316,14 @@ struct ProjectDirectoryTransactionSwiftTestingTests {
             hooks: hooks
         )
         try createGitDirectory(in: transaction)
+        let staging = try transaction.workingDirectory.displayURL
+        try "ref: refs/heads/main".write(
+            to: staging.appendingPathComponent(".git/HEAD"),
+            atomically: false,
+            encoding: .utf8
+        )
         try "created".write(
-            to: try transaction.workingDirectory.displayURL.appendingPathComponent("README.md"),
+            to: staging.appendingPathComponent("README.md"),
             atomically: false,
             encoding: .utf8
         )
@@ -332,17 +332,12 @@ struct ProjectDirectoryTransactionSwiftTestingTests {
             try transaction.publish()
         }
         let published = rootURL.appendingPathComponent("Demo", isDirectory: true)
-        #expect(try String(
-            contentsOf: published.appendingPathComponent("user-notes.txt"),
-            encoding: .utf8
-        ) == "user")
-        #expect(try String(
-            contentsOf: published.appendingPathComponent(".git/user-hook"),
-            encoding: .utf8
-        ) == "user")
-        #expect(!FileManager.default.fileExists(
-            atPath: published.appendingPathComponent("README.md").path
-        ))
+        for entry in ["README.md", ".git/HEAD", ".git/user-hook"] {
+            #expect(
+                FileManager.default.fileExists(atPath: published.appendingPathComponent(entry).path),
+                "\(entry) should survive a rollback that found foreign files"
+            )
+        }
     }
 
     @Test("opened publication remains bound when its pathname is replaced")
