@@ -16,6 +16,9 @@ const REDIRECTS = Object.freeze({
 });
 const PUBLIC_ROOT_FILES = new Set([
   "/",
+  "/appcast-nightly.xml",
+  "/appcast-preview.xml",
+  "/appcast.xml",
   "/feed.xml",
   "/health",
   "/index.html",

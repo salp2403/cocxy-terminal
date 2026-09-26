@@ -3,7 +3,7 @@ module.exports = {
     {
       name: "cocxy-web",
       script: "server.js",
-      cwd: "/home/bitnami/web",
+      cwd: __dirname,
       instances: "max",
       exec_mode: "cluster",
       env: {

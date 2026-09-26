@@ -576,6 +576,20 @@ jobs:
             *) DEPLOY_PATH="${DEPLOY_PATH}/" ;;
           esac
 
+          # The runtime lives in the directory that contains the public root,
+          # where pm2 runs it. Anything left inside the public root is served.
+          RUNTIME_PATH="$(ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
+            "set -e; \
+             public_root=\$(readlink -f ${DEPLOY_PATH}); \
+             test \"\$(basename \"\$public_root\")\" = public; \
+             test -f \"\$public_root/index.html\"; \
+             test -f \"\$(dirname \"\$public_root\")/server.js\"; \
+             dirname \"\$public_root\"")"
+          case "$RUNTIME_PATH" in
+            /*) ;;
+            *) echo "::error::Unable to resolve the website runtime directory"; exit 1 ;;
+          esac
+
           node web/scripts/build-site.mjs
 
           ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
@@ -926,18 +940,37 @@ jobs:
           # Deploy the Express runtime too. The redesigned site relies on
           # server.js for redirects, CSP, and security headers; static assets
           # alone are not enough for a correct production deploy.
+          RUNTIME_BACKUP="/tmp/cocxy-web-runtime-backup-${GITHUB_RUN_ID}-$(date -u +%Y%m%d%H%M%S).tar.gz"
+          ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
+            "set -e; \
+             cd ${RUNTIME_PATH}; \
+             existing=; \
+             for entry in server.js package.json package-lock.json ecosystem.config.js restart-production-runtime.sh node_modules; do \
+               if [ -e \$entry ]; then existing=\"\$existing \$entry\"; fi; \
+             done; \
+             if [ -n \"\$existing\" ]; then tar -czf ${RUNTIME_BACKUP} \$existing; fi"
           scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/server.js web/package.json web/package-lock.json web/ecosystem.config.js \
             web/scripts/restart-production-runtime.sh \
-            ${DEPLOY_TARGET}:${DEPLOY_PATH}
+            ${DEPLOY_TARGET}:${RUNTIME_PATH}/
           ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
             "set -e; \
              export PATH=\"\$HOME/.npm-global/bin:\$HOME/.npm/bin:\$HOME/.local/bin:\$HOME/.nvm/current/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:\$PATH\"; \
+             export PATH=\"\$PATH:/opt/bitnami/node/bin\"; \
              if [ -s \"\$HOME/.nvm/nvm.sh\" ]; then . \"\$HOME/.nvm/nvm.sh\" >/dev/null 2>&1; fi; \
-             cd ${DEPLOY_PATH}; \
+             cd ${RUNTIME_PATH}; \
+             quarantine=.public-runtime-quarantine-\$(date -u +%Y%m%d%H%M%S); \
+             for artifact in server.js package.json package-lock.json ecosystem.config.js restart-production-runtime.sh cocxy-web.log cocxy-web.err.log .cocxy-web.pid node_modules; do \
+               if [ -e ${DEPLOY_PATH}\$artifact ]; then mkdir -p \$quarantine; mv ${DEPLOY_PATH}\$artifact \$quarantine/; fi; \
+             done; \
              npm ci --omit=dev --ignore-scripts --no-audit --no-fund; \
              chmod +x restart-production-runtime.sh; \
              ./restart-production-runtime.sh"
+
+          APPCAST_CHECK="$(mktemp "$RUNNER_TEMP/cocxy-release-appcast.XXXXXX")"
+          curl -fsSL "https://cocxy.dev/appcast.xml?release=${GITHUB_RUN_ID}" -o "$APPCAST_CHECK"
+          grep -q "sparkle:version=\"${VERSION}\"" "$APPCAST_CHECK"
+          rm -f "$APPCAST_CHECK"
 
           echo "Website deployed to cocxy.dev"
 
