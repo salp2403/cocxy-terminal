@@ -574,7 +574,7 @@ final class ConcurrencyEdgeCaseTests: XCTestCase {
 
         for i in 0..<20 {
             group.enter()
-            DispatchQueue.global(qos: .background).async {
+            DispatchQueue.global(qos: .userInteractive).async {
                 capturedEngine.processTerminalOutput(Data("output \(i)\n".utf8))
                 capturedEngine.processTerminalOutput(Data(oscData))
                 group.leave()
@@ -587,10 +587,10 @@ final class ConcurrencyEdgeCaseTests: XCTestCase {
         }
 
         let exp = expectation(description: "No crash during concurrent reset")
-        group.notify(queue: .global(qos: .background)) { exp.fulfill() }
-        // This stress case competes with the rest of the suite for CPU on CI.
-        // Keep the assertion strict (no retries), but allow enough headroom
-        // that scheduler pressure does not masquerade as a product failure.
+        group.notify(queue: .global(qos: .userInteractive)) { exp.fulfill() }
+        // Not background QoS: macOS may starve that class for as long as other
+        // work saturates the cores, so the test measured machine load instead
+        // of reset safety. The strict timeout keeps headroom for loaded runners.
         waitForExpectations(timeout: 20.0)
         // No crash = pass
     }
