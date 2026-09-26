@@ -109,6 +109,42 @@ struct ProjectCloneServiceSwiftTestingTests {
         #expect(FileManager.default.fileExists(atPath: unrelated.path))
     }
 
+    @Test("a failure after publishing a clone removes the clone but keeps files it did not create")
+    func postPublicationFailureRemovesOnlyTheClone() throws {
+        let sandbox = makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        let hooks = ProjectDirectoryTransactionHooks(afterPublish: { context in
+            try "user".write(
+                to: context.destinationURL.appendingPathComponent("user-notes.txt"),
+                atomically: false,
+                encoding: .utf8
+            )
+            throw ProjectDirectoryError.publicationChanged(context.destinationURL.path)
+        })
+        let service = ProjectCloneService(hooks: hooks) { workingDirectory, _ in
+            let checkout = workingDirectory.displayURL
+            try FileManager.default.createDirectory(
+                at: checkout.appendingPathComponent(".git", isDirectory: true),
+                withIntermediateDirectories: false
+            )
+            try "cloned".write(
+                to: checkout.appendingPathComponent("README.md"),
+                atomically: false,
+                encoding: .utf8
+            )
+            return successResult
+        }
+
+        #expect(throws: ProjectCloneError.self) {
+            try service.clone(remote: "https://example.test/team/project.git", into: sandbox)
+        }
+        let project = sandbox.appendingPathComponent("project", isDirectory: true)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: project.path) == [
+            "user-notes.txt",
+        ])
+    }
+
     @Test("runner exceptions also remove a newly-created partial destination")
     func cleansPartialCloneAfterRunnerError() throws {
         let sandbox = makeSandbox()

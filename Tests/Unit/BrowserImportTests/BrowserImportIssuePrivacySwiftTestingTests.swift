@@ -120,6 +120,68 @@ struct BrowserImportIssuePrivacySwiftTestingTests {
         #expect(!message.contains(Self.privateErrorDetail))
     }
 
+    @Test("source read failures are localized without profile paths")
+    @MainActor
+    func sourceReadFailureIsLocalized() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BrowserImportReadFailure-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let unreadableHistory = root.appendingPathComponent("History", isDirectory: true)
+        try FileManager.default.createDirectory(at: unreadableHistory, withIntermediateDirectories: true)
+
+        let preview = try ChromiumBrowserImporter().preview(plan: BrowserImportPlan(
+            source: .chrome,
+            profileID: UUID(),
+            importCookies: false,
+            importBookmarks: false,
+            explicitLocations: [BrowserImportLocation(
+                source: .chrome,
+                profileName: "Default",
+                historyPath: unreadableHistory,
+                cookiesPath: nil,
+                bookmarksPath: nil
+            )]
+        ))
+        let issue = try #require(preview.errors.first)
+        let message = BrowserImportWizardView.localizedIssueMessage(
+            issue,
+            localizer: try spanishLocalizer()
+        )
+
+        #expect(issue.kind == .sourceReadFailed(.history))
+        #expect(message == "No se pudo leer el historial de este perfil del navegador.")
+        #expect(!issue.message.contains(root.lastPathComponent))
+        #expect(!message.contains(root.lastPathComponent))
+    }
+
+    @Test("audit write failures are localized without private details")
+    @MainActor
+    func auditWriteFailureIsLocalized() throws {
+        let importer = BrowserImporter(
+            sourceImporter: PrivacyPreviewImporter(preview: BrowserImportPreview(
+                history: [BrowserImportedHistoryVisit(
+                    url: "https://example.com",
+                    title: "Example",
+                    visitedAt: Date(timeIntervalSince1970: 1_700_000_000)
+                )],
+                cookies: [],
+                bookmarks: [],
+                errors: []
+            )),
+            historyStore: nil,
+            bookmarkStore: nil,
+            cookieStore: nil,
+            auditLogger: PrivateFailureAuditLogger(detail: Self.privateErrorDetail)
+        )
+
+        let result = try importer.importData(BrowserImportPlan(source: .chrome, profileID: UUID()))
+        let issue = try #require(result.errors.first { $0.kind == .auditWriteFailed })
+        let message = BrowserImportWizardView.localizedIssueMessage(issue, localizer: try spanishLocalizer())
+
+        #expect(message == "La importación terminó, pero no se pudo guardar su registro local de auditoría.")
+        #expect(!issue.message.contains(Self.privateErrorDetail))
+    }
+
     @MainActor
     private func spanishLocalizer() throws -> AppLocalizer {
         let localizationURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -133,6 +195,14 @@ struct BrowserImportIssuePrivacySwiftTestingTests {
 
 private enum PrivateBrowserImportFailure: Error {
     case operation(String)
+}
+
+private struct PrivateFailureAuditLogger: BrowserImportAuditLogging {
+    let detail: String
+
+    func record(_ entry: BrowserImportAuditEntry) throws {
+        throw PrivateBrowserImportFailure.operation(detail)
+    }
 }
 
 private struct PrivacyPreviewImporter: BrowserSourceImporting {

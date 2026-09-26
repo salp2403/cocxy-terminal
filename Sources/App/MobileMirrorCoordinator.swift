@@ -4,6 +4,7 @@
 import AppKit
 import Combine
 import Foundation
+import os.log
 
 typealias MobileMirrorProjectCreationConfirmation = @MainActor (
     String,

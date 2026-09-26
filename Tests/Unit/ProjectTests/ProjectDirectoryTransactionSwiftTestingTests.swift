@@ -267,6 +267,53 @@ struct ProjectDirectoryTransactionSwiftTestingTests {
         #expect(try stagingEntries(in: rootURL).isEmpty)
     }
 
+    @Test("post-publication rollback removes only entries the operation created")
+    func postPublicationRollbackKeepsForeignEntries() throws {
+        let rootURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        let hooks = ProjectDirectoryTransactionHooks(afterPublish: { context in
+            let published = context.destinationURL
+            try "user".write(
+                to: published.appendingPathComponent("user-notes.txt"),
+                atomically: false,
+                encoding: .utf8
+            )
+            try "user".write(
+                to: published.appendingPathComponent(".git/user-hook"),
+                atomically: false,
+                encoding: .utf8
+            )
+            throw PostPublicationFailure.injected
+        })
+        let transaction = try ProjectDirectoryTransaction.begin(
+            in: ProjectDirectoryRoot.open(rootURL),
+            destinationName: "Demo",
+            hooks: hooks
+        )
+        try createGitDirectory(in: transaction)
+        try "created".write(
+            to: try transaction.workingDirectory.displayURL.appendingPathComponent("README.md"),
+            atomically: false,
+            encoding: .utf8
+        )
+
+        #expect(throws: PostPublicationFailure.injected) {
+            try transaction.publish()
+        }
+        let published = rootURL.appendingPathComponent("Demo", isDirectory: true)
+        #expect(try String(
+            contentsOf: published.appendingPathComponent("user-notes.txt"),
+            encoding: .utf8
+        ) == "user")
+        #expect(try String(
+            contentsOf: published.appendingPathComponent(".git/user-hook"),
+            encoding: .utf8
+        ) == "user")
+        #expect(!FileManager.default.fileExists(
+            atPath: published.appendingPathComponent("README.md").path
+        ))
+    }
+
     @Test("opened publication remains bound when its pathname is replaced")
     func openedPublicationRetainsExactDirectory() throws {
         let rootURL = try temporaryDirectory()

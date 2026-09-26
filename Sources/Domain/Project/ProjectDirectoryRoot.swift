@@ -37,7 +37,7 @@ enum ProjectDirectoryError: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
-struct ProjectDirectoryFileIdentity: Equatable, Sendable {
+struct ProjectDirectoryFileIdentity: Hashable, Sendable {
     let device: UInt64
     let inode: UInt64
     let fileType: mode_t

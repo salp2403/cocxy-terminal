@@ -50,6 +50,26 @@ extension BrowserImportWizardView {
                 "browser.import.issue.cancelled",
                 fallback: "The browser import was cancelled."
             )
+        case .sourceReadFailed(.history):
+            return localizer.string(
+                "browser.import.issue.historyReadFailed",
+                fallback: "History could not be read from this browser profile."
+            )
+        case .sourceReadFailed(.cookies):
+            return localizer.string(
+                "browser.import.issue.cookieReadFailed",
+                fallback: "Cookies could not be read from this browser profile."
+            )
+        case .sourceReadFailed(.bookmarks):
+            return localizer.string(
+                "browser.import.issue.bookmarkReadFailed",
+                fallback: "Bookmarks could not be read from this browser profile."
+            )
+        case .auditWriteFailed:
+            return localizer.string(
+                "browser.import.issue.auditWriteFailed",
+                fallback: "The import finished, but its local audit record could not be saved."
+            )
         case .cookieBatchWrite(let imported, let total, let uncertain) where uncertain > 0:
             return formattedIssue(
                 localizer,

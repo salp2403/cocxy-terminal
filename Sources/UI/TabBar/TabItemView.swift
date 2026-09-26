@@ -323,9 +323,14 @@ final class TabItemView: NSView {
 
     override func layout() {
         super.layout()
-        let stripWidth = displayItem.isActive ? 5.0 : 2.0
-        accentStrip.frame = NSRect(x: 0, y: 8, width: stripWidth, height: bounds.height - 16)
+        layoutAccentStrip()
         glowLayer.frame = bounds
+    }
+
+    private func layoutAccentStrip() {
+        let stripWidth = displayItem.isActive ? 5.0 : 2.0
+        let stripX = userInterfaceLayoutDirection == .rightToLeft ? bounds.width - stripWidth : 0
+        accentStrip.frame = NSRect(x: stripX, y: 8, width: stripWidth, height: bounds.height - 16)
     }
 
     // MARK: - Update
@@ -423,7 +428,6 @@ final class TabItemView: NSView {
             titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
             timeLabel.textColor = CocxyColors.subtext1
             pathLabel.textColor = CocxyColors.subtext0
-            accentStrip.frame.size.width = 5
             accentStrip.backgroundColor = CocxyColors.blue.cgColor
         } else {
             layer?.backgroundColor = NSColor.clear.cgColor
@@ -431,7 +435,6 @@ final class TabItemView: NSView {
             titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
             timeLabel.textColor = CocxyColors.overlay1
             pathLabel.textColor = CocxyColors.subtext0
-            accentStrip.frame.size.width = 2
         }
 
         // Notification badge: show count for inactive tabs with unread notifications.
@@ -471,6 +474,7 @@ final class TabItemView: NSView {
             ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
             to: self
         )
+        layoutAccentStrip()
     }
 
     // MARK: - Stats Chips

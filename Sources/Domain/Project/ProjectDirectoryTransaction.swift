@@ -49,15 +49,23 @@ struct ProjectDirectoryPublication: Sendable {
     private let root: ProjectDirectoryRoot
     private let destinationName: String
     private let identity: ProjectDirectoryFileIdentity
+    /// Every entry the operation placed in the directory before publishing it.
+    private let createdEntries: Set<ProjectDirectoryFileIdentity>
+    /// Verified before `publish()` returned, inside its rollback scope.
+    let destinationURL: URL
 
-    init(
+    fileprivate init(
         root: ProjectDirectoryRoot,
         destinationName: String,
-        identity: ProjectDirectoryFileIdentity
+        identity: ProjectDirectoryFileIdentity,
+        createdEntries: Set<ProjectDirectoryFileIdentity>,
+        destinationURL: URL
     ) {
         self.root = root
         self.destinationName = destinationName
         self.identity = identity
+        self.createdEntries = createdEntries
+        self.destinationURL = destinationURL
     }
 
     func verifiedURL() throws -> URL {
@@ -76,8 +84,31 @@ struct ProjectDirectoryPublication: Sendable {
     }
 
     func rollback() throws {
+        try Self.rollBack(
+            root: root,
+            destinationName: destinationName,
+            identity: identity,
+            createdEntries: createdEntries
+        )
+    }
+
+    /// Removes only entries this operation created. Anything added after
+    /// publication stays in place, and so does the directory that holds it.
+    fileprivate static func rollBack(
+        root: ProjectDirectoryRoot,
+        destinationName: String,
+        identity: ProjectDirectoryFileIdentity,
+        createdEntries: Set<ProjectDirectoryFileIdentity>
+    ) throws {
         let directory = try root.openVerifiedChild(named: destinationName, identity: identity)
-        try ProjectDirectoryTransaction.removeContents(of: directory.descriptor)
+        guard try ProjectDirectoryTransaction.removeContents(
+            of: directory.descriptor,
+            limitedTo: createdEntries
+        ) else {
+            throw ProjectDirectoryError.cleanupUnverified(
+                try root.displayPath(for: destinationName)
+            )
+        }
         guard try root.childIdentity(named: destinationName) == identity else {
             throw ProjectDirectoryError.cleanupUnverified(
                 try root.displayPath(for: destinationName)
@@ -246,6 +277,8 @@ final class ProjectDirectoryTransaction {
         try hooks.beforePublish?(context())
         try verifyStagingLink()
         try verifyRepositoryMetadata()
+        var createdEntries: Set<ProjectDirectoryFileIdentity> = []
+        try Self.collectEntryIdentities(of: stagingDescriptor, into: &createdEntries)
         if try root.childIdentity(named: destinationName) != nil {
             throw ProjectDirectoryError.destinationExists(
                 try root.displayPath(for: destinationName)
@@ -274,11 +307,6 @@ final class ProjectDirectoryTransaction {
             )
         }
         wasPublished = true
-        let publication = ProjectDirectoryPublication(
-            root: root,
-            destinationName: destinationName,
-            identity: stagingIdentity
-        )
         do {
             try hooks.afterPublish?(context())
             try verifyPublishedLink()
@@ -286,10 +314,24 @@ final class ProjectDirectoryTransaction {
             try root.synchronize()
             try verifyPublishedLink()
             try verifyRepositoryMetadata()
-            return publication
+            return ProjectDirectoryPublication(
+                root: root,
+                destinationName: destinationName,
+                identity: stagingIdentity,
+                createdEntries: createdEntries,
+                destinationURL: try root.verifiedChildURL(
+                    named: destinationName,
+                    identity: stagingIdentity
+                )
+            )
         } catch let originalError {
             do {
-                try publication.rollback()
+                try ProjectDirectoryPublication.rollBack(
+                    root: root,
+                    destinationName: destinationName,
+                    identity: stagingIdentity,
+                    createdEntries: createdEntries
+                )
             } catch {
                 Self.logger.error(
                     "Project publication rollback failed: \(String(describing: error), privacy: .private)"
@@ -361,12 +403,71 @@ final class ProjectDirectoryTransaction {
         }
     }
 
-    fileprivate static func removeContents(of descriptor: Int32) throws {
+    /// Returns false when entries outside `allowed` were left in place.
+    @discardableResult
+    fileprivate static func removeContents(
+        of descriptor: Int32,
+        limitedTo allowed: Set<ProjectDirectoryFileIdentity>? = nil
+    ) throws -> Bool {
+        var removedEverything = true
+        for name in try entryNames(of: descriptor) {
+            if try !removeEntry(named: name, from: descriptor, limitedTo: allowed) {
+                removedEverything = false
+            }
+        }
+        return removedEverything
+    }
+
+    private static func collectEntryIdentities(
+        of descriptor: Int32,
+        into identities: inout Set<ProjectDirectoryFileIdentity>
+    ) throws {
+        for name in try entryNames(of: descriptor) {
+            var metadata = stat()
+            guard name.withCString({
+                Darwin.fstatat(descriptor, $0, &metadata, AT_SYMLINK_NOFOLLOW)
+            }) == 0 else {
+                throw ProjectDirectoryError.systemCallFailed(
+                    operation: "inspect project staging entry",
+                    code: errno
+                )
+            }
+            let identity = ProjectDirectoryFileIdentity(metadata)
+            identities.insert(identity)
+            guard identity.fileType == mode_t(S_IFDIR) else { continue }
+            let child = name.withCString { Darwin.openat(descriptor, $0, directoryOpenFlags) }
+            guard child >= 0 else {
+                throw ProjectDirectoryError.systemCallFailed(
+                    operation: "open project staging entry",
+                    code: errno
+                )
+            }
+            defer { Darwin.close(child) }
+            var openedMetadata = stat()
+            guard Darwin.fstat(child, &openedMetadata) == 0,
+                  ProjectDirectoryFileIdentity(openedMetadata) == identity else {
+                throw ProjectDirectoryError.publicationChanged(name)
+            }
+            try collectEntryIdentities(of: child, into: &identities)
+        }
+    }
+
+    private static func entryNames(of descriptor: Int32) throws -> [String] {
         let duplicate = Darwin.dup(descriptor)
         guard duplicate >= 0 else {
             throw ProjectDirectoryError.systemCallFailed(
                 operation: "duplicate project staging directory",
                 code: errno
+            )
+        }
+        // A duplicate shares the directory offset, which an earlier
+        // enumeration of the same descriptor leaves at the end.
+        guard Darwin.lseek(duplicate, 0, SEEK_SET) == 0 else {
+            let code = errno
+            Darwin.close(duplicate)
+            throw ProjectDirectoryError.systemCallFailed(
+                operation: "rewind project staging directory",
+                code: code
             )
         }
         guard let stream = Darwin.fdopendir(duplicate) else {
@@ -396,21 +497,24 @@ final class ProjectDirectoryTransaction {
                 code: enumerationCode
             )
         }
-        for name in names {
-            try removeEntry(named: name, from: descriptor)
-        }
+        return names
     }
 
-    private static func removeEntry(named name: String, from parent: Int32) throws {
+    private static func removeEntry(
+        named name: String,
+        from parent: Int32,
+        limitedTo allowed: Set<ProjectDirectoryFileIdentity>?
+    ) throws -> Bool {
         var metadata = stat()
         let inspection = name.withCString {
             Darwin.fstatat(parent, $0, &metadata, AT_SYMLINK_NOFOLLOW)
         }
-        if inspection != 0, errno == ENOENT { return }
+        if inspection != 0, errno == ENOENT { return true }
         guard inspection == 0 else {
             throw ProjectDirectoryError.cleanupUnverified(name)
         }
         let identity = ProjectDirectoryFileIdentity(metadata)
+        if let allowed, !allowed.contains(identity) { return false }
         if identity.fileType == mode_t(S_IFDIR) {
             let child = name.withCString {
                 Darwin.openat(parent, $0, directoryOpenFlags)
@@ -424,7 +528,7 @@ final class ProjectDirectoryTransaction {
                   ProjectDirectoryFileIdentity(openedMetadata) == identity else {
                 throw ProjectDirectoryError.cleanupUnverified(name)
             }
-            try removeContents(of: child)
+            guard try removeContents(of: child, limitedTo: allowed) else { return false }
             guard try linkedIdentity(named: name, parent: parent) == identity,
                   name.withCString({ Darwin.unlinkat(parent, $0, AT_REMOVEDIR) }) == 0 else {
                 throw ProjectDirectoryError.cleanupUnverified(name)
@@ -435,6 +539,7 @@ final class ProjectDirectoryTransaction {
                 throw ProjectDirectoryError.cleanupUnverified(name)
             }
         }
+        return true
     }
 
     private static func linkedIdentity(

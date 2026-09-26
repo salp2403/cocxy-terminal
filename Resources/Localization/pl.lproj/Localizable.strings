@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "Odepnij projekt";
 "projectSidebar.unavailable" = "Lista projektów jest niedostępna";
 "project.registry.recovery.message" = "Nie udało się odczytać części metadanych projektu. Cocxy zapisał odrzucone rekordy (%d) w prywatnym pliku odzyskiwania.";
+"project.registry.recovery.document" = "Nie udało się odczytać listy projektów. Cocxy zapisał ją w prywatnym pliku odzyskiwania i rozpoczął nową listę.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d zadanie";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d zadań";
 "workspaceToolbar.panel.projectHome" = "Strona główna projektu";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Zaimportowano %d z %d plików cookie; WebKit nie zdołał potwierdzić %d z nich.";
 "browser.import.issue.bookmarkRootConflict" = "Zaimportowany folder zakładek powoduje konflikt z istniejącym elementem.";
 "browser.import.issue.cancelled" = "Import danych przeglądarki został anulowany.";
+"browser.import.issue.historyReadFailed" = "Nie udało się odczytać historii z tego profilu przeglądarki.";
+"browser.import.issue.cookieReadFailed" = "Nie udało się odczytać plików cookie z tego profilu przeglądarki.";
+"browser.import.issue.bookmarkReadFailed" = "Nie udało się odczytać zakładek z tego profilu przeglądarki.";
+"browser.import.issue.auditWriteFailed" = "Import zakończył się, ale nie udało się zapisać jego lokalnego wpisu audytu.";
 "browser.import.issue.historyWriteFailed" = "Niezapisane wizyty w historii: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Niezapisane zakładki: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Pominięte zaszyfrowane pliki cookie: %d.";

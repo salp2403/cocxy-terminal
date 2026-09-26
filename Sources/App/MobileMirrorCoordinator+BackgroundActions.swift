@@ -31,6 +31,9 @@ extension MobileMirrorCoordinator {
                 ))
             } catch {
                 stopTransport(revoke: true)
+                Self.logger.error(
+                    "Mobile mirror audit failed: \(String(describing: error), privacy: .private)"
+                )
                 state = .failed(.auditUnavailable)
                 return
             }

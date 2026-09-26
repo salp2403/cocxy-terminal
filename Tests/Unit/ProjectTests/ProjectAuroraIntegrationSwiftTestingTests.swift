@@ -398,6 +398,19 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         ]))
         #expect(controller.tabForNotesWorkspace(rawID: firstID.rawValue)?.id == firstTabID)
         #expect(controller.tabForNotesWorkspace(rawID: secondID.rawValue)?.id == secondTab.id)
+
+        let sidebar = Design.AuroraSidebarView(
+            workspaces: workspaces,
+            activeSessionID: nil,
+            notesByWorkspace: summaries,
+            onTogglePalette: {},
+            onCreateTab: {},
+            onActivateSession: { _ in },
+            onOpenNote: { _, _ in }
+        )
+        let renderedNotes = reflectedStrings(sidebar.notesSection(for: workspace))
+        #expect(renderedNotes.contains("First root"))
+        #expect(renderedNotes.contains("Second root"))
     }
 
     @Test("a symlinked non-worktree migrates when one legacy identity is already canonical")
@@ -542,4 +555,12 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         }
         #expect(aliases == expectedAliases)
     }
+}
+
+private func reflectedStrings(_ value: Any, depth: Int = 0) -> [String] {
+    if let string = value as? String { return [string] }
+    guard depth < 32 else { return [] }
+    let mirror = Mirror(reflecting: value)
+    guard mirror.displayStyle != .class else { return [] }
+    return mirror.children.flatMap { reflectedStrings($0.value, depth: depth + 1) }
 }

@@ -10,6 +10,7 @@ extension MainWindowController {
     ) {
         guard let projectRegistry else { return }
         let descriptor = projectResolver.resolveProject(for: directory)
+        guard descriptor.rootSource != .workingDirectory else { return }
         if let previousDirectory,
            projectResolver.resolveProject(for: previousDirectory).groupingID
                 == descriptor.groupingID {

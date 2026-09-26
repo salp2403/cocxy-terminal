@@ -19,7 +19,7 @@ struct AuroraSidebarHost: View {
             projectRegistryAvailable: controller.projectRegistryErrorDescription == nil,
             projectRegistryRecoveryMessage: controller.projectRegistryRecoveryDiagnostic.map {
                 Design.AuroraProjectRegistrySection.localizedRecoveryMessage(
-                    count: $0.discardedRecordCount,
+                    for: $0,
                     using: controller.localizer
                 )
             },

@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "Desafixar projeto";
 "projectSidebar.unavailable" = "Lista de projetos indisponível";
 "project.registry.recovery.message" = "Não foi possível ler alguns metadados de projetos. O Cocxy salvou os registros rejeitados (%d) em um arquivo privado de recuperação.";
+"project.registry.recovery.document" = "Não foi possível ler a lista de projetos. O Cocxy a salvou em um arquivo privado de recuperação e iniciou uma nova lista.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d tarefa";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d tarefas";
 "workspaceToolbar.panel.projectHome" = "Início do Projeto";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "%d de %d cookies foram importados; não foi possível confirmar %d deles pelo WebKit.";
 "browser.import.issue.bookmarkRootConflict" = "A pasta de favoritos importada está em conflito com um item existente.";
 "browser.import.issue.cancelled" = "A importação dos dados do navegador foi cancelada.";
+"browser.import.issue.historyReadFailed" = "Não foi possível ler o histórico deste perfil do navegador.";
+"browser.import.issue.cookieReadFailed" = "Não foi possível ler os cookies deste perfil do navegador.";
+"browser.import.issue.bookmarkReadFailed" = "Não foi possível ler os favoritos deste perfil do navegador.";
+"browser.import.issue.auditWriteFailed" = "A importação terminou, mas não foi possível salvar seu registro local de auditoria.";
 "browser.import.issue.historyWriteFailed" = "Visitas do histórico não salvas: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Favoritos não salvos: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Cookies criptografados ignorados: %d.";

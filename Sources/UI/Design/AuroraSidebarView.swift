@@ -444,7 +444,7 @@ extension Design {
         /// the visual workspace. Rows retain their source workspace ID so
         /// opening a note still focuses the owning tab.
         @ViewBuilder
-        private func notesSection(for workspace: AuroraWorkspace) -> some View {
+        func notesSection(for workspace: AuroraWorkspace) -> some View {
             if let summary = workspace.aggregatedNotesSummary(from: notesByWorkspace),
                let onOpenNote {
                 NotesSectionView(

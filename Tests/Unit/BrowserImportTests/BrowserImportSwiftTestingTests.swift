@@ -718,7 +718,7 @@ struct BrowserImportSwiftTestingTests {
 
         #expect(result.bookmarks.isEmpty)
         #expect(result.errors.count == 1)
-        #expect(result.errors[0].message.contains("Bookmark import failed"))
+        #expect(result.errors[0].kind == .sourceReadFailed(.bookmarks))
     }
 
     @Test("Chromium and Safari bookmark decoders preserve nested folders")
@@ -822,7 +822,7 @@ struct BrowserImportSwiftTestingTests {
         ])
         #expect(result.history[0].visitedAt > result.history[1].visitedAt)
         #expect(result.cookies.isEmpty)
-        #expect(result.errors.contains { $0.message.contains("Cookies.binarycookies") })
+        #expect(result.errors.contains { $0.kind == .sourceReadFailed(.cookies) })
     }
 
     @Test("orchestrator does not duplicate an imported history visit")

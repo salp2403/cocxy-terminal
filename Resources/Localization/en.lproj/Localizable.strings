@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "Unpin project";
 "projectSidebar.unavailable" = "Project list unavailable";
 "project.registry.recovery.message" = "Some project metadata could not be read. Cocxy saved the rejected records (%d) in a private recovery file.";
+"project.registry.recovery.document" = "The project list could not be read. Cocxy saved it in a private recovery file and started a new list.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d task";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d tasks";
 "workspaceToolbar.panel.projectHome" = "Project Home";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Imported %d of %d cookies; %d could not be confirmed by WebKit.";
 "browser.import.issue.bookmarkRootConflict" = "The imported bookmark folder conflicts with an existing item.";
 "browser.import.issue.cancelled" = "The browser import was cancelled.";
+"browser.import.issue.historyReadFailed" = "History could not be read from this browser profile.";
+"browser.import.issue.cookieReadFailed" = "Cookies could not be read from this browser profile.";
+"browser.import.issue.bookmarkReadFailed" = "Bookmarks could not be read from this browser profile.";
+"browser.import.issue.auditWriteFailed" = "The import finished, but its local audit record could not be saved.";
 "browser.import.issue.historyWriteFailed" = "History visits not saved: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Bookmarks not saved: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Encrypted cookies skipped: %d.";

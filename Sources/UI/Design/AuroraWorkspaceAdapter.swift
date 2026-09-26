@@ -79,14 +79,15 @@ extension Design {
         /// user has kept `[worktree].show-badge = true`. The builder
         /// applies the config gate so the adapter stays pure.
         let hasWorktree: Bool
-        /// Absolute filesystem path of the workspace root the tab
-        /// belongs to (the git ancestor when one exists, otherwise the
-        /// tab's own working directory). The adapter hashes this path
-        /// to compute the per-workspace `NoteWorkspaceID` so the
-        /// sidebar's notes section binds to the same identifier the
-        /// store uses on disk. Optional — SSH or detached tabs that
-        /// have no resolvable directory leave it `nil`, in which case
-        /// the adapter omits the notes hook entirely.
+        /// Absolute filesystem path of this tab's notes root (the origin
+        /// checkout for a linked worktree, the git ancestor when one
+        /// exists, otherwise the tab's own working directory). The
+        /// adapter hashes it into the session's
+        /// `NoteWorkspaceID`, which is the identifier the store uses on
+        /// disk. It is not the sidebar group: `workspaceGroup` may place
+        /// tabs with different notes roots under one project, and the
+        /// notes section aggregates their identities. When `nil`, the
+        /// adapter hashes `workingDirectory` instead.
         let workspaceRootPath: String?
 
         init(

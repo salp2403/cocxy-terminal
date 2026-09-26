@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "取消固定项目";
 "projectSidebar.unavailable" = "项目列表不可用";
 "project.registry.recovery.message" = "部分项目元数据无法读取。Cocxy 已将被拒绝的记录（%d 条）保存到私有恢复文件中。";
+"project.registry.recovery.document" = "无法读取项目列表。Cocxy 已将其保存到私有恢复文件中，并开始了一个新列表。";
 "projectSidebar.taskBadge.accessibility.one" = "%@，%d 个任务";
 "projectSidebar.taskBadge.accessibility.many" = "%@，%d 个任务";
 "workspaceToolbar.panel.projectHome" = "项目主页";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "已导入 %d/%d 个 Cookie；其中 %d 个无法由 WebKit 确认。";
 "browser.import.issue.bookmarkRootConflict" = "导入的书签文件夹与现有项目冲突。";
 "browser.import.issue.cancelled" = "浏览器数据导入已取消。";
+"browser.import.issue.historyReadFailed" = "无法从此浏览器配置文件读取历史记录。";
+"browser.import.issue.cookieReadFailed" = "无法从此浏览器配置文件读取 Cookie。";
+"browser.import.issue.bookmarkReadFailed" = "无法从此浏览器配置文件读取书签。";
+"browser.import.issue.auditWriteFailed" = "导入已完成，但无法保存其本地审计记录。";
 "browser.import.issue.historyWriteFailed" = "未保存的历史访问记录：%d。";
 "browser.import.issue.bookmarkWriteFailed" = "未保存的书签：%d。";
 "browser.import.issue.cookieDecryptionFailed" = "已跳过的加密 Cookie：%d。";

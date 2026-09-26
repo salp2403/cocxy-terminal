@@ -260,6 +260,7 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
         )
         expectDirection(.rightToLeft, in: tabItem, label: "initial Arabic tab item")
         expectMiniPillGeometry(.rightToLeft, in: tabItem)
+        expectAccentStripGeometry(.rightToLeft, in: tabItem)
         let initialViewIDs = Set(viewTree(rootedAt: tabItem).map(ObjectIdentifier.init))
 
         var updatedItem = makeActiveTabDisplayItem(title: "Updated")
@@ -288,6 +289,7 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
         tabItem.update(with: initialItem)
         expectDirection(.leftToRight, in: tabItem, label: "updated LTR tab item")
         expectMiniPillGeometry(.leftToRight, in: tabItem)
+        expectAccentStripGeometry(.leftToRight, in: tabItem)
     }
 
     @Test("directional panel geometry uses fixed logical-edge coordinates")
@@ -404,6 +406,7 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
         let smartRouting = try #require(controller.smartRoutingHostingView)
         expectDirection(direction, in: smartRouting, label: "smart routing")
 
+        controller.tabBarView?.frame.size.width = 360
         controller.refreshShortcutHintsOverlay(
             config: UXPolishConfig(
                 alwaysShowShortcutHints: true,
@@ -424,6 +427,15 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
             #expect(debugFrame.maxX == overlay.bounds.width - 18)
         } else {
             #expect(debugFrame.minX == 18)
+        }
+        let sidebarHost = try #require(controller.shortcutHintOverlayHosts[.sidebar])
+        let sidebarFrame = controller.tabBarView.map { $0.convert($0.bounds, to: overlay) }
+            ?? overlay.bounds
+        let sidebarInset: CGFloat = controller.tabBarView == nil ? 14 : 12
+        if direction == .rightToLeft {
+            #expect(sidebarFrame.maxX - sidebarHost.frame.maxX == sidebarInset)
+        } else {
+            #expect(sidebarHost.frame.minX - sidebarFrame.minX == sidebarInset)
         }
         let paneHost = try #require(controller.shortcutHintOverlayHosts[.pane])
         let paneAnchor = controller.focusedPaneView()
@@ -486,6 +498,25 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
         #expect(label.frame.width > 0)
         #expect(dot.frame.minX == (direction == .rightToLeft ? 19 : 5))
         #expect(!dot.frame.intersects(label.frame))
+    }
+
+    private func expectAccentStripGeometry(
+        _ direction: NSUserInterfaceLayoutDirection,
+        in tabItem: TabItemView
+    ) {
+        tabItem.frame = NSRect(x: 0, y: 0, width: 240, height: 56)
+        tabItem.layout()
+        guard let strip = tabItem.layer?.sublayers?.first(where: {
+            $0.frame.height == 40 && [2, 5].contains($0.frame.width)
+        }) else {
+            Issue.record("Tab item did not expose its accent strip")
+            return
+        }
+        if direction == .rightToLeft {
+            #expect(strip.frame.maxX == tabItem.bounds.maxX)
+        } else {
+            #expect(strip.frame.minX == tabItem.bounds.minX)
+        }
     }
 
     private func viewTree(rootedAt root: NSView) -> [NSView] {

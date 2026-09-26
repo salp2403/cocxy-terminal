@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "Відкріпити проєкт";
 "projectSidebar.unavailable" = "Список проєктів недоступний";
 "project.registry.recovery.message" = "Не вдалося прочитати частину метаданих проєктів. Cocxy зберіг відхилені записи (%d) у приватному файлі відновлення.";
+"project.registry.recovery.document" = "Не вдалося прочитати список проєктів. Cocxy зберіг його в приватному файлі відновлення й почав новий список.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d завдання";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d завдань";
 "workspaceToolbar.panel.projectHome" = "Огляд проєкту";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Імпортовано %d із %d файлів cookie; WebKit не вдалося підтвердити %d.";
 "browser.import.issue.bookmarkRootConflict" = "Імпортована папка закладок конфліктує з наявним елементом.";
 "browser.import.issue.cancelled" = "Імпорт даних браузера скасовано.";
+"browser.import.issue.historyReadFailed" = "Не вдалося прочитати історію з цього профілю браузера.";
+"browser.import.issue.cookieReadFailed" = "Не вдалося прочитати файли cookie з цього профілю браузера.";
+"browser.import.issue.bookmarkReadFailed" = "Не вдалося прочитати закладки з цього профілю браузера.";
+"browser.import.issue.auditWriteFailed" = "Імпорт завершено, але не вдалося зберегти його локальний запис аудиту.";
 "browser.import.issue.historyWriteFailed" = "Незбережені відвідування в історії: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Незбережені закладки: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Пропущені зашифровані файли cookie: %d.";

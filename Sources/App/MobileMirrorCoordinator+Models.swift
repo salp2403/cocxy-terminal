@@ -53,7 +53,11 @@ extension MobileMirrorCoordinator {
         let token: String
     }
 
+    /// The raw error can name local paths and hosts, so it only reaches the private log.
     func statusMessage(for error: any Error) -> MobileMirrorStatusMessage {
+        Self.logger.error(
+            "Mobile mirror stopped: \(String(describing: error), privacy: .private)"
+        )
         switch error {
         case let relayError as MobileMirrorLocalRelayError:
             return MobileMirrorStatusMessage(relayError.localizationEntry)
@@ -64,9 +68,6 @@ extension MobileMirrorCoordinator {
         case is RelayAuditLogError:
             return .auditUnavailable
         default:
-            Self.logger.error(
-                "Mobile mirror failed: \(String(describing: error), privacy: .private)"
-            )
             return .unavailable
         }
     }

@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "Bỏ ghim dự án";
 "projectSidebar.unavailable" = "Danh sách dự án không khả dụng";
 "project.registry.recovery.message" = "Không thể đọc một số siêu dữ liệu dự án. Cocxy đã lưu các bản ghi bị từ chối (%d) vào một tệp khôi phục riêng tư.";
+"project.registry.recovery.document" = "Không thể đọc danh sách dự án. Cocxy đã lưu nó vào một tệp khôi phục riêng tư và bắt đầu một danh sách mới.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d tác vụ";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d tác vụ";
 "workspaceToolbar.panel.projectHome" = "Trang chủ dự án";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Đã nhập %d trong số %d cookie; WebKit không thể xác nhận %d cookie.";
 "browser.import.issue.bookmarkRootConflict" = "Thư mục dấu trang đã nhập xung đột với một mục hiện có.";
 "browser.import.issue.cancelled" = "Đã hủy nhập dữ liệu trình duyệt.";
+"browser.import.issue.historyReadFailed" = "Không thể đọc lịch sử từ hồ sơ trình duyệt này.";
+"browser.import.issue.cookieReadFailed" = "Không thể đọc cookie từ hồ sơ trình duyệt này.";
+"browser.import.issue.bookmarkReadFailed" = "Không thể đọc dấu trang từ hồ sơ trình duyệt này.";
+"browser.import.issue.auditWriteFailed" = "Quá trình nhập đã xong, nhưng không thể lưu bản ghi kiểm tra cục bộ của nó.";
 "browser.import.issue.historyWriteFailed" = "Lượt truy cập lịch sử chưa lưu: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Dấu trang chưa lưu: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Cookie mã hóa đã bỏ qua: %d.";

@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "Otkači projekt";
 "projectSidebar.unavailable" = "Lista projekata nije dostupna";
 "project.registry.recovery.message" = "Neki metapodaci projekta nisu se mogli pročitati. Cocxy je sačuvao odbačene zapise (%d) u privatnu datoteku za oporavak.";
+"project.registry.recovery.document" = "Lista projekata se nije mogla pročitati. Cocxy ju je sačuvao u privatnu datoteku za oporavak i započeo novu listu.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d zadatak";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d zadataka";
 "workspaceToolbar.panel.projectHome" = "Početna stranica projekta";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Uvezeno je %d od %d kolačića; WebKit nije mogao potvrditi njih %d.";
 "browser.import.issue.bookmarkRootConflict" = "Uvezena mapa zabilješki u sukobu je s postojećom stavkom.";
 "browser.import.issue.cancelled" = "Uvoz podataka preglednika je otkazan.";
+"browser.import.issue.historyReadFailed" = "Historija se nije mogla pročitati iz ovog profila preglednika.";
+"browser.import.issue.cookieReadFailed" = "Kolačići se nisu mogli pročitati iz ovog profila preglednika.";
+"browser.import.issue.bookmarkReadFailed" = "Oznake se nisu mogle pročitati iz ovog profila preglednika.";
+"browser.import.issue.auditWriteFailed" = "Uvoz je završen, ali njegov lokalni revizijski zapis nije se mogao sačuvati.";
 "browser.import.issue.historyWriteFailed" = "Nesačuvane posjete historiji: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Nesačuvane oznake: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Preskočeni šifrirani kolačići: %d.";

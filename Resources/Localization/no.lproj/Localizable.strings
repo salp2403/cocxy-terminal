@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "Løsne prosjekt";
 "projectSidebar.unavailable" = "Prosjektlisten er utilgjengelig";
 "project.registry.recovery.message" = "Noen prosjektmetadata kunne ikke leses. Cocxy lagret de avviste postene (%d) i en privat gjenopprettingsfil.";
+"project.registry.recovery.document" = "Prosjektlisten kunne ikke leses. Cocxy lagret den i en privat gjenopprettingsfil og startet en ny liste.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d oppgave";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d oppgaver";
 "workspaceToolbar.panel.projectHome" = "Prosjektoversikt";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Importerte %d av %d informasjonskapsler. %d kunne ikke bekreftes av WebKit.";
 "browser.import.issue.bookmarkRootConflict" = "Den importerte bokmerkemappen er i konflikt med et eksisterende objekt.";
 "browser.import.issue.cancelled" = "Importen av nettleserdata ble avbrutt.";
+"browser.import.issue.historyReadFailed" = "Loggen kunne ikke leses fra denne nettleserprofilen.";
+"browser.import.issue.cookieReadFailed" = "Informasjonskapslene kunne ikke leses fra denne nettleserprofilen.";
+"browser.import.issue.bookmarkReadFailed" = "Bokmerkene kunne ikke leses fra denne nettleserprofilen.";
+"browser.import.issue.auditWriteFailed" = "Importen ble fullført, men den lokale revisjonsposten kunne ikke lagres.";
 "browser.import.issue.historyWriteFailed" = "Historikkbesøk som ikke ble lagret: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Bokmerker som ikke ble lagret: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Krypterte informasjonskapsler som ble hoppet over: %d.";

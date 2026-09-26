@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "Projekt lösen";
 "projectSidebar.unavailable" = "Projektliste nicht verfügbar";
 "project.registry.recovery.message" = "Einige Projektmetadaten konnten nicht gelesen werden. Cocxy hat die abgelehnten Einträge (%d) in einer privaten Wiederherstellungsdatei gespeichert.";
+"project.registry.recovery.document" = "Die Projektliste konnte nicht gelesen werden. Cocxy hat sie in einer privaten Wiederherstellungsdatei gespeichert und eine neue Liste begonnen.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d Aufgabe";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d Aufgaben";
 "workspaceToolbar.panel.projectHome" = "Projektübersicht";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "%d von %d Cookies wurden importiert; %d konnten von WebKit nicht bestätigt werden.";
 "browser.import.issue.bookmarkRootConflict" = "Der importierte Lesezeichenordner steht in Konflikt mit einem vorhandenen Objekt.";
 "browser.import.issue.cancelled" = "Der Browserdatenimport wurde abgebrochen.";
+"browser.import.issue.historyReadFailed" = "Der Verlauf konnte aus diesem Browserprofil nicht gelesen werden.";
+"browser.import.issue.cookieReadFailed" = "Die Cookies konnten aus diesem Browserprofil nicht gelesen werden.";
+"browser.import.issue.bookmarkReadFailed" = "Die Lesezeichen konnten aus diesem Browserprofil nicht gelesen werden.";
+"browser.import.issue.auditWriteFailed" = "Der Import wurde abgeschlossen, aber sein lokaler Prüfeintrag konnte nicht gespeichert werden.";
 "browser.import.issue.historyWriteFailed" = "Nicht gespeicherte Verlaufseinträge: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Nicht gespeicherte Lesezeichen: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Übersprungene verschlüsselte Cookies: %d.";

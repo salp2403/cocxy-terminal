@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "Rimuovi il progetto dagli elementi in evidenza";
 "projectSidebar.unavailable" = "Elenco dei progetti non disponibile";
 "project.registry.recovery.message" = "Non è stato possibile leggere alcuni metadati dei progetti. Cocxy ha salvato i record rifiutati (%d) in un file di recupero privato.";
+"project.registry.recovery.document" = "Non è stato possibile leggere l’elenco dei progetti. Cocxy lo ha salvato in un file di recupero privato e ha iniziato un nuovo elenco.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d attività";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d attività";
 "workspaceToolbar.panel.projectHome" = "Home del progetto";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Importati %d cookie su %d; %d non hanno potuto essere confermati da WebKit.";
 "browser.import.issue.bookmarkRootConflict" = "La cartella dei segnalibri importata è in conflitto con un elemento esistente.";
 "browser.import.issue.cancelled" = "L'importazione del browser è stata annullata.";
+"browser.import.issue.historyReadFailed" = "Non è stato possibile leggere la cronologia da questo profilo del browser.";
+"browser.import.issue.cookieReadFailed" = "Non è stato possibile leggere i cookie da questo profilo del browser.";
+"browser.import.issue.bookmarkReadFailed" = "Non è stato possibile leggere i segnalibri da questo profilo del browser.";
+"browser.import.issue.auditWriteFailed" = "L’importazione è terminata, ma non è stato possibile salvare il relativo record di audit locale.";
 "browser.import.issue.historyWriteFailed" = "Visite della cronologia non salvate: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Segnalibri non salvati: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Cookie crittografati ignorati: %d.";

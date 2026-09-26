@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "프로젝트 고정 해제";
 "projectSidebar.unavailable" = "프로젝트 목록을 사용할 수 없습니다";
 "project.registry.recovery.message" = "일부 프로젝트 메타데이터를 읽을 수 없습니다. Cocxy가 거부된 레코드(%d개)를 비공개 복구 파일에 저장했습니다.";
+"project.registry.recovery.document" = "프로젝트 목록을 읽을 수 없습니다. Cocxy가 이를 비공개 복구 파일에 저장하고 새 목록을 시작했습니다.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, 작업 %d개";
 "projectSidebar.taskBadge.accessibility.many" = "%@, 작업 %d개";
 "workspaceToolbar.panel.projectHome" = "프로젝트 홈";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "쿠키를 %d개 가져왔으며(전체 %d개), %d개는 WebKit에서 확인할 수 없습니다.";
 "browser.import.issue.bookmarkRootConflict" = "가져온 책갈피 폴더가 기존 항목과 충돌합니다.";
 "browser.import.issue.cancelled" = "브라우저 데이터 가져오기가 취소되었습니다.";
+"browser.import.issue.historyReadFailed" = "이 브라우저 프로필에서 방문 기록을 읽을 수 없습니다.";
+"browser.import.issue.cookieReadFailed" = "이 브라우저 프로필에서 쿠키를 읽을 수 없습니다.";
+"browser.import.issue.bookmarkReadFailed" = "이 브라우저 프로필에서 북마크를 읽을 수 없습니다.";
+"browser.import.issue.auditWriteFailed" = "가져오기는 완료되었지만 로컬 감사 기록을 저장할 수 없습니다.";
 "browser.import.issue.historyWriteFailed" = "저장하지 못한 방문 기록: %d개.";
 "browser.import.issue.bookmarkWriteFailed" = "저장하지 못한 북마크: %d개.";
 "browser.import.issue.cookieDecryptionFailed" = "건너뛴 암호화 쿠키: %d개.";

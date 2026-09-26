@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "Projenin sabitlemesini kaldır";
 "projectSidebar.unavailable" = "Proje listesi kullanılamıyor";
 "project.registry.recovery.message" = "Bazı proje meta verileri okunamadı. Cocxy reddedilen kayıtları (%d) özel bir kurtarma dosyasına kaydetti.";
+"project.registry.recovery.document" = "Proje listesi okunamadı. Cocxy listeyi özel bir kurtarma dosyasına kaydetti ve yeni bir liste başlattı.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d görev";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d görev";
 "workspaceToolbar.panel.projectHome" = "Proje Ana Sayfası";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "%2$d çerezden %1$d tanesi aktarıldı; %3$d tanesi WebKit tarafından doğrulanamadı.";
 "browser.import.issue.bookmarkRootConflict" = "İçe aktarılan yer imi klasörü mevcut bir öğeyle çakışıyor.";
 "browser.import.issue.cancelled" = "Tarayıcı içe aktarması iptal edildi.";
+"browser.import.issue.historyReadFailed" = "Bu tarayıcı profilinden geçmiş okunamadı.";
+"browser.import.issue.cookieReadFailed" = "Bu tarayıcı profilinden çerezler okunamadı.";
+"browser.import.issue.bookmarkReadFailed" = "Bu tarayıcı profilinden yer işaretleri okunamadı.";
+"browser.import.issue.auditWriteFailed" = "İçe aktarma tamamlandı ancak yerel denetim kaydı kaydedilemedi.";
 "browser.import.issue.historyWriteFailed" = "Kaydedilemeyen geçmiş ziyaretleri: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Kaydedilemeyen yer imleri: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Atlanan şifreli çerezler: %d.";

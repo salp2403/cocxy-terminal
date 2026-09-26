@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "เลิกปักหมุดโปรเจกต์";
 "projectSidebar.unavailable" = "รายการโปรเจกต์ไม่พร้อมใช้งาน";
 "project.registry.recovery.message" = "ไม่สามารถอ่านข้อมูลเมตาของโปรเจกต์บางส่วนได้ Cocxy บันทึกรายการที่ถูกปฏิเสธ (%d) ไว้ในไฟล์กู้คืนส่วนตัว";
+"project.registry.recovery.document" = "ไม่สามารถอ่านรายการโปรเจกต์ได้ Cocxy บันทึกไว้ในไฟล์กู้คืนส่วนตัวและเริ่มรายการใหม่";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d งาน";
 "projectSidebar.taskBadge.accessibility.many" = "%@, %d งาน";
 "workspaceToolbar.panel.projectHome" = "หน้าหลักโปรเจกต์";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "นำเข้าคุกกี้ %d จาก %d รายการ โดย WebKit ยืนยันไม่ได้ %d รายการ";
 "browser.import.issue.bookmarkRootConflict" = "โฟลเดอร์บุ๊กมาร์กที่นำเข้าเกิดข้อขัดแย้งกับรายการที่มีอยู่";
 "browser.import.issue.cancelled" = "การนำเข้าข้อมูลเบราว์เซอร์ถูกยกเลิกแล้ว";
+"browser.import.issue.historyReadFailed" = "ไม่สามารถอ่านประวัติจากโปรไฟล์เบราว์เซอร์นี้ได้";
+"browser.import.issue.cookieReadFailed" = "ไม่สามารถอ่านคุกกี้จากโปรไฟล์เบราว์เซอร์นี้ได้";
+"browser.import.issue.bookmarkReadFailed" = "ไม่สามารถอ่านบุ๊กมาร์กจากโปรไฟล์เบราว์เซอร์นี้ได้";
+"browser.import.issue.auditWriteFailed" = "การนำเข้าเสร็จสิ้นแล้ว แต่ไม่สามารถบันทึกระเบียนการตรวจสอบภายในเครื่องได้";
 "browser.import.issue.historyWriteFailed" = "การเข้าชมในประวัติที่ไม่ได้บันทึก: %d";
 "browser.import.issue.bookmarkWriteFailed" = "บุ๊กมาร์กที่ไม่ได้บันทึก: %d";
 "browser.import.issue.cookieDecryptionFailed" = "คุกกี้ที่เข้ารหัสซึ่งข้ามไป: %d";

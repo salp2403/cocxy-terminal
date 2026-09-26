@@ -185,7 +185,9 @@ struct BrowserImporter: Sendable {
                     } catch {
                         if isCancellation(error) { throw BrowserImportError.cancelled }
                         skippedCount += cookies.count
-                        issues.append(issue(plan, sourceProfile, "Cookie write failed: \(error)"))
+                        BrowserImportPrivacyLog.record("Cookie write failed", error: error)
+                        let stopped = BrowserImportIssueKind.cookieBatchWrite(imported: 0, total: cookies.count, uncertain: 0)
+                        issues.append(issue(plan, sourceProfile, "Cookie write failed", kind: stopped))
                     }
                 }
             } else if !preview.cookies.isEmpty {
@@ -226,11 +228,10 @@ struct BrowserImporter: Sendable {
                             kind: .bookmarkRootConflict
                         ))
                     } else {
-                        issues.append(issue(
-                            plan,
-                            sourceProfile,
-                            "Bookmark write failed: \(error)"
-                        ))
+                        BrowserImportPrivacyLog.record("Bookmark write failed", error: error)
+                        issues.append(issue(plan, sourceProfile, "Bookmark write failed", kind: .bookmarkWriteFailed(
+                            count: preview.bookmarks.count
+                        )))
                     }
                 }
             } else if !preview.bookmarks.isEmpty {
@@ -322,7 +323,8 @@ struct BrowserImporter: Sendable {
         do {
             try auditLogger?.record(entry)
         } catch {
-            issues.append(issue(plan, sourceProfile, "Import audit write failed: \(error)"))
+            BrowserImportPrivacyLog.record("Import audit write failed", error: error)
+            issues.append(issue(plan, sourceProfile, "Import audit write failed", kind: .auditWriteFailed))
             if status == .completed { status = .partial }
         }
 

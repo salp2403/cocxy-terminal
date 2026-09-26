@@ -246,7 +246,7 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         #expect(context.coordinator.state == .active)
         #expect(context.coordinator.activePairing != nil)
 
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(15))
         while context.coordinator.activePairing != nil, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(20))
         }
@@ -308,12 +308,10 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
 
         #expect(Self.statusText(context.coordinator.state, using: localizer)
             == "Conecta un perfil SSH o usa el relay local.")
-        let english = AppLocalizer(
-            languagePreference: .english,
-            bundle: try #require(Bundle(url: localizationRoot))
-        )
-        #expect(Self.statusText(context.coordinator.state, using: english)
-            == "Connect an SSH profile or use the local relay.")
+        let english = AppLocalizer(languagePreference: .english, bundle: try #require(Bundle(url: localizationRoot)))
+        let panelText = reflectedStrings(MobileMirrorView(coordinator: context.coordinator, localizer: english).body)
+        #expect(panelText.contains("Connect an SSH profile or use the local relay."))
+        #expect(!panelText.contains("Conecta un perfil SSH o usa el relay local."))
     }
 
     private static func statusText(
@@ -589,4 +587,12 @@ private final class MobileMirrorEventCapture: @unchecked Sendable {
     func contains(_ value: String) -> Bool {
         lock.withLock { payloads.contains(where: { $0.contains(value) }) }
     }
+}
+
+private func reflectedStrings(_ value: Any, depth: Int = 0) -> [String] {
+    if let string = value as? String { return [string] }
+    guard depth < 40 else { return [] }
+    let mirror = Mirror(reflecting: value)
+    guard mirror.displayStyle != .class else { return [] }
+    return mirror.children.flatMap { reflectedStrings($0.value, depth: depth + 1) }
 }

@@ -469,6 +469,7 @@
 "projectSidebar.unpin" = "ដកការខ្ទាស់គម្រោង";
 "projectSidebar.unavailable" = "បញ្ជីគម្រោងមិនអាចប្រើបាន";
 "project.registry.recovery.message" = "មិនអាចអានទិន្នន័យមេតាគម្រោងមួយចំនួនបានទេ។ Cocxy បានរក្សាទុកកំណត់ត្រាដែលបានបដិសេធ (%d) ក្នុងឯកសារសង្គ្រោះឯកជន។";
+"project.registry.recovery.document" = "មិនអាចអានបញ្ជីគម្រោងបានទេ។ Cocxy បានរក្សាទុកវាក្នុងឯកសារសង្គ្រោះឯកជន ហើយបានចាប់ផ្ដើមបញ្ជីថ្មី។";
 "projectSidebar.taskBadge.accessibility.one" = "%@, ភារកិច្ច %d";
 "projectSidebar.taskBadge.accessibility.many" = "%@, ភារកិច្ច %d";
 "workspaceToolbar.panel.projectHome" = "ទំព័រដើមគម្រោង";
@@ -2432,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "បាននាំចូល cookies ចំនួន %d ក្នុងចំណោម %d; ចំនួន %d មិនអាចបញ្ជាក់ដោយ WebKit បានទេ។";
 "browser.import.issue.bookmarkRootConflict" = "ថតចំណាំដែលបាននាំចូលមានការប៉ះទង្គិចជាមួយធាតុដែលមានស្រាប់។";
 "browser.import.issue.cancelled" = "ការនាំចូល browser ត្រូវបានបោះបង់។";
+"browser.import.issue.historyReadFailed" = "មិនអាចអានប្រវត្តិពីប្រវត្តិរូបកម្មវិធីរុករកនេះបានទេ។";
+"browser.import.issue.cookieReadFailed" = "មិនអាចអានខូគីពីប្រវត្តិរូបកម្មវិធីរុករកនេះបានទេ។";
+"browser.import.issue.bookmarkReadFailed" = "មិនអាចអានចំណាំពីប្រវត្តិរូបកម្មវិធីរុករកនេះបានទេ។";
+"browser.import.issue.auditWriteFailed" = "ការនាំចូលបានបញ្ចប់ ប៉ុន្តែមិនអាចរក្សាទុកកំណត់ត្រាសវនកម្មមូលដ្ឋានរបស់វាបានទេ។";
 "browser.import.issue.historyWriteFailed" = "ការចូលមើលប្រវត្តិដែលមិនបានរក្សាទុក៖ %d។";
 "browser.import.issue.bookmarkWriteFailed" = "ចំណាំដែលមិនបានរក្សាទុក៖ %d។";
 "browser.import.issue.cookieDecryptionFailed" = "ខូគីដែលបានអ៊ិនគ្រីបត្រូវបានរំលង៖ %d។";
