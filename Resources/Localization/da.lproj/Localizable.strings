@@ -2433,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Importerede %d af %d cookies; %d kunne ikke bekræftes af WebKit.";
 "browser.import.issue.bookmarkRootConflict" = "Den importerede bogmærkemappe er i konflikt med et eksisterende element.";
 "browser.import.issue.cancelled" = "Browserimporten blev annulleret.";
+"browser.import.issue.historyReadFailed" = "Historikken kunne ikke læses fra denne browserprofil.";
+"browser.import.issue.cookieReadFailed" = "Cookies kunne ikke læses fra denne browserprofil.";
+"browser.import.issue.bookmarkReadFailed" = "Bogmærkerne kunne ikke læses fra denne browserprofil.";
+"browser.import.issue.auditWriteFailed" = "Importen blev fuldført, men dens lokale revisionspost kunne ikke gemmes.";
 "browser.import.issue.historyWriteFailed" = "Historikbesøg, der ikke blev gemt: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Bogmærker, der ikke blev gemt: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Krypterede cookies, der blev sprunget over: %d.";

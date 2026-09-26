@@ -2433,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "쿠키를 %d개 가져왔으며(전체 %d개), %d개는 WebKit에서 확인할 수 없습니다.";
 "browser.import.issue.bookmarkRootConflict" = "가져온 책갈피 폴더가 기존 항목과 충돌합니다.";
 "browser.import.issue.cancelled" = "브라우저 데이터 가져오기가 취소되었습니다.";
+"browser.import.issue.historyReadFailed" = "이 브라우저 프로필에서 방문 기록을 읽을 수 없습니다.";
+"browser.import.issue.cookieReadFailed" = "이 브라우저 프로필에서 쿠키를 읽을 수 없습니다.";
+"browser.import.issue.bookmarkReadFailed" = "이 브라우저 프로필에서 북마크를 읽을 수 없습니다.";
+"browser.import.issue.auditWriteFailed" = "가져오기는 완료되었지만 로컬 감사 기록을 저장할 수 없습니다.";
 "browser.import.issue.historyWriteFailed" = "저장하지 못한 방문 기록: %d개.";
 "browser.import.issue.bookmarkWriteFailed" = "저장하지 못한 북마크: %d개.";
 "browser.import.issue.cookieDecryptionFailed" = "건너뛴 암호화 쿠키: %d개.";

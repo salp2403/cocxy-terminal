@@ -2433,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "%d / %d件のCookieを読み込みました。そのうち%d件はWebKitで確認できませんでした。";
 "browser.import.issue.bookmarkRootConflict" = "読み込んだブックマークフォルダが既存の項目と競合しています。";
 "browser.import.issue.cancelled" = "ブラウザの読み込みがキャンセルされました。";
+"browser.import.issue.historyReadFailed" = "このブラウザプロファイルから履歴を読み取れませんでした。";
+"browser.import.issue.cookieReadFailed" = "このブラウザプロファイルから Cookie を読み取れませんでした。";
+"browser.import.issue.bookmarkReadFailed" = "このブラウザプロファイルからブックマークを読み取れませんでした。";
+"browser.import.issue.auditWriteFailed" = "読み込みは完了しましたが、ローカルの監査記録を保存できませんでした。";
 "browser.import.issue.historyWriteFailed" = "保存できなかった履歴の訪問数：%d。";
 "browser.import.issue.bookmarkWriteFailed" = "保存できなかったブックマーク数：%d。";
 "browser.import.issue.cookieDecryptionFailed" = "スキップした暗号化Cookie数：%d。";

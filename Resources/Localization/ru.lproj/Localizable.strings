@@ -2433,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Импортировано %d из %d файлов cookie; для %d из них WebKit не удалось подтвердить запись.";
 "browser.import.issue.bookmarkRootConflict" = "Импортированная папка закладок конфликтует с существующим объектом.";
 "browser.import.issue.cancelled" = "Импорт данных браузера отменён.";
+"browser.import.issue.historyReadFailed" = "Не удалось прочитать историю из этого профиля браузера.";
+"browser.import.issue.cookieReadFailed" = "Не удалось прочитать файлы cookie из этого профиля браузера.";
+"browser.import.issue.bookmarkReadFailed" = "Не удалось прочитать закладки из этого профиля браузера.";
+"browser.import.issue.auditWriteFailed" = "Импорт завершён, но не удалось сохранить его локальную запись аудита.";
 "browser.import.issue.historyWriteFailed" = "Несохранённые посещения в истории: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Несохранённые закладки: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Пропущенные зашифрованные файлы cookie: %d.";

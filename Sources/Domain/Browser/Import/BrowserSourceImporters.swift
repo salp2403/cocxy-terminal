@@ -270,7 +270,7 @@ struct ChromiumBrowserImporter: BrowserSourceImporting {
                     try BrowserSourceImportSupport.rethrowCancellation(error)
                 }
             }
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "History import failed: \(error)"))
+            preview.errors.append(.sourceReadFailure(location, .history, error))
         }
     }
 
@@ -392,7 +392,7 @@ struct ChromiumBrowserImporter: BrowserSourceImporting {
             }
         } catch {
             try BrowserSourceImportSupport.rethrowCancellation(error)
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "Cookie import failed: \(error)"))
+            preview.errors.append(.sourceReadFailure(location, .cookies, error))
         }
     }
 
@@ -421,7 +421,7 @@ struct ChromiumBrowserImporter: BrowserSourceImporting {
             ))
         } catch {
             try BrowserSourceImportSupport.rethrowCancellation(error)
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "Bookmark import failed: \(error)"))
+            preview.errors.append(.sourceReadFailure(location, .bookmarks, error))
         }
     }
 
@@ -518,7 +518,7 @@ struct FirefoxBrowserImporter: BrowserSourceImporting {
                     try BrowserSourceImportSupport.rethrowCancellation(error)
                 }
             }
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "History import failed: \(error)"))
+            preview.errors.append(.sourceReadFailure(location, .history, error))
         }
     }
 
@@ -596,7 +596,7 @@ struct FirefoxBrowserImporter: BrowserSourceImporting {
             }
         } catch {
             try BrowserSourceImportSupport.rethrowCancellation(error)
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "Cookie import failed: \(error)"))
+            preview.errors.append(.sourceReadFailure(location, .cookies, error))
         }
     }
 
@@ -665,7 +665,7 @@ struct FirefoxBrowserImporter: BrowserSourceImporting {
             }
         } catch {
             try BrowserSourceImportSupport.rethrowCancellation(error)
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "Bookmark import failed: \(error)"))
+            preview.errors.append(.sourceReadFailure(location, .bookmarks, error))
         }
     }
 
@@ -739,7 +739,7 @@ struct SafariBrowserImporter: BrowserSourceImporting {
                     try BrowserSourceImportSupport.rethrowCancellation(error)
                 }
             }
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "History import failed: \(error)"))
+            preview.errors.append(.sourceReadFailure(location, .history, error))
         }
     }
 
@@ -848,7 +848,7 @@ struct SafariBrowserImporter: BrowserSourceImporting {
             }
         } catch {
             try BrowserSourceImportSupport.rethrowCancellation(error)
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "Cookie import failed: \(error)"))
+            preview.errors.append(.sourceReadFailure(location, .cookies, error))
         }
     }
 
@@ -935,7 +935,7 @@ struct SafariBrowserImporter: BrowserSourceImporting {
             ))
         } catch {
             try BrowserSourceImportSupport.rethrowCancellation(error)
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "Bookmark import failed: \(error)"))
+            preview.errors.append(.sourceReadFailure(location, .bookmarks, error))
         }
     }
 }

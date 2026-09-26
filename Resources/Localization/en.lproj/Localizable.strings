@@ -2433,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "Imported %d of %d cookies; %d could not be confirmed by WebKit.";
 "browser.import.issue.bookmarkRootConflict" = "The imported bookmark folder conflicts with an existing item.";
 "browser.import.issue.cancelled" = "The browser import was cancelled.";
+"browser.import.issue.historyReadFailed" = "History could not be read from this browser profile.";
+"browser.import.issue.cookieReadFailed" = "Cookies could not be read from this browser profile.";
+"browser.import.issue.bookmarkReadFailed" = "Bookmarks could not be read from this browser profile.";
+"browser.import.issue.auditWriteFailed" = "The import finished, but its local audit record could not be saved.";
 "browser.import.issue.historyWriteFailed" = "History visits not saved: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Bookmarks not saved: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Encrypted cookies skipped: %d.";

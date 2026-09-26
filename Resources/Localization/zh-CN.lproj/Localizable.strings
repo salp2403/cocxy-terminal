@@ -2433,6 +2433,10 @@
 "browser.import.issue.cookiesPartialUnconfirmed" = "已导入 %d/%d 个 Cookie；其中 %d 个无法由 WebKit 确认。";
 "browser.import.issue.bookmarkRootConflict" = "导入的书签文件夹与现有项目冲突。";
 "browser.import.issue.cancelled" = "浏览器数据导入已取消。";
+"browser.import.issue.historyReadFailed" = "无法从此浏览器配置文件读取历史记录。";
+"browser.import.issue.cookieReadFailed" = "无法从此浏览器配置文件读取 Cookie。";
+"browser.import.issue.bookmarkReadFailed" = "无法从此浏览器配置文件读取书签。";
+"browser.import.issue.auditWriteFailed" = "导入已完成，但无法保存其本地审计记录。";
 "browser.import.issue.historyWriteFailed" = "未保存的历史访问记录：%d。";
 "browser.import.issue.bookmarkWriteFailed" = "未保存的书签：%d。";
 "browser.import.issue.cookieDecryptionFailed" = "已跳过的加密 Cookie：%d。";
