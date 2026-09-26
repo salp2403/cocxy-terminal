@@ -80,7 +80,6 @@ final class KeychainSocketAuthenticationStore: SocketAuthenticationStoring, @unc
         var item = pathQuery
         item[kSecAttrAccount as String] = account
         item[kSecValueData as String] = Data(token.utf8)
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let status = SecItemAdd(item as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw SocketAuthenticationStoreError.keychainSaveFailed(status)

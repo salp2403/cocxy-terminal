@@ -101,7 +101,6 @@ final class SecuritySignatureKeyValueStore: SignatureKeyValueStore, @unchecked S
         var query = baseQuery(account: account)
         SecItemDelete(query as CFDictionary)
         query[kSecValueData as String] = data
-        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw SignatureKeyStoreError.saveFailed(status)
