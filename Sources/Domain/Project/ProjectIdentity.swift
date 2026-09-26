@@ -88,12 +88,39 @@ enum ProjectPathCanonicalizer {
     }
 }
 
+/// Why a directory resolved to its project root.
+enum ProjectRootSource: Equatable, Sendable {
+    /// A repository checkout or linked worktree marks the root.
+    case repository
+    /// An existing registry record contains the directory.
+    case registeredProject
+    /// Nothing marks a project, so the root is the directory itself.
+    case workingDirectory
+}
+
 struct ProjectDescriptor: Equatable, Sendable {
     let id: ProjectID
     let rootURL: URL
     let automaticName: String
     let displayName: String
     let parent: ProjectID?
+    let rootSource: ProjectRootSource
+
+    init(
+        id: ProjectID,
+        rootURL: URL,
+        automaticName: String,
+        displayName: String,
+        parent: ProjectID?,
+        rootSource: ProjectRootSource = .repository
+    ) {
+        self.id = id
+        self.rootURL = rootURL
+        self.automaticName = automaticName
+        self.displayName = displayName
+        self.parent = parent
+        self.rootSource = rootSource
+    }
 
     var groupingID: ProjectID {
         parent ?? id
@@ -130,7 +157,8 @@ struct ProjectDescriptor: Equatable, Sendable {
             rootURL: rootURL,
             automaticName: name,
             displayName: name,
-            parent: nil
+            parent: nil,
+            rootSource: .repository
         )
     }
 }
@@ -301,9 +329,18 @@ final class CachedProjectResolver: ProjectResolving {
     }
 
     private func makeDescriptor(for directory: URL) -> ProjectDescriptor {
-        let resolvedRoot = rootResolver.workspaceRoot(for: directory)
-            ?? deepestKnownProjectRoot(containing: directory)
-            ?? directory
+        let resolvedRoot: URL
+        let rootSource: ProjectRootSource
+        if let repositoryRoot = rootResolver.workspaceRoot(for: directory) {
+            resolvedRoot = repositoryRoot
+            rootSource = .repository
+        } else if let registeredRoot = deepestKnownProjectRoot(containing: directory) {
+            resolvedRoot = registeredRoot
+            rootSource = .registeredProject
+        } else {
+            resolvedRoot = directory
+            rootSource = .workingDirectory
+        }
         let root = ProjectPathCanonicalizer.canonicalURL(
             resolvedRoot
         )
@@ -315,7 +352,8 @@ final class CachedProjectResolver: ProjectResolving {
             automaticName: automaticName,
             displayName: automaticName,
             parent: LinkedWorktreeOriginResolver.originRoot(for: root)
-                .map(ProjectID.init(rootURL:))
+                .map(ProjectID.init(rootURL:)),
+            rootSource: rootSource
         )
     }
 
