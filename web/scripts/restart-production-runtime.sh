@@ -2,11 +2,11 @@
 set -euo pipefail
 
 APP_NAME="${COCXY_WEB_APP_NAME:-cocxy-web}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 if [ -f "$SCRIPT_DIR/server.js" ]; then
   APP_DIR="$SCRIPT_DIR"
 else
-  APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+  APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 fi
 PORT="${PORT:-3000}"
 PID_FILE="${COCXY_WEB_PID_FILE:-.cocxy-web.pid}"
@@ -127,15 +127,49 @@ wait_for_health() {
   return 1
 }
 
+# Only the current server sends Permissions-Policy and refuses paths outside
+# its public allowlist; an older runtime still bound to the port does neither.
+verify_current_runtime() {
+  if ! command -v curl >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local status headers
+  status="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/server.js" || true)"
+  headers="$(curl -s -D - -o /dev/null "http://127.0.0.1:${PORT}/health" || true)"
+  if [ "$status" != "404" ] || ! printf '%s\n' "$headers" | grep -qi '^permissions-policy:'; then
+    echo "cocxy-web is still serving a stale runtime on port ${PORT}" >&2
+    return 1
+  fi
+}
+
+pm2_exec_path() {
+  "$PM2_BIN" jlist 2>/dev/null | node -e '
+let raw = "";
+process.stdin.on("data", (chunk) => { raw += chunk; });
+process.stdin.on("end", () => {
+  let apps = [];
+  try { apps = JSON.parse(raw); } catch { apps = []; }
+  const app = Array.isArray(apps) ? apps.find((entry) => entry.name === process.argv[1]) : undefined;
+  process.stdout.write(app && app.pm2_env && app.pm2_env.pm_exec_path ? app.pm2_env.pm_exec_path : "");
+});' "$APP_NAME" || true
+}
+
 PM2_BIN="$(resolve_pm2 || true)"
 if [ -n "$PM2_BIN" ]; then
   if "$PM2_BIN" describe "$APP_NAME" >/dev/null 2>&1; then
-    "$PM2_BIN" reload "$APP_NAME" --update-env
+    if [ "$(pm2_exec_path)" = "$APP_DIR/server.js" ]; then
+      "$PM2_BIN" reload "$APP_NAME" --update-env
+    else
+      "$PM2_BIN" delete "$APP_NAME"
+      "$PM2_BIN" start ecosystem.config.js --only "$APP_NAME"
+    fi
   else
     "$PM2_BIN" start ecosystem.config.js --only "$APP_NAME"
   fi
-  "$PM2_BIN" save
   wait_for_health
+  verify_current_runtime
+  "$PM2_BIN" save
   exit 0
 fi
 
@@ -165,6 +199,7 @@ if local_health_is_ready; then
   listener_pids="$(port_listener_pids | tr '\n' ' ')"
   if [ -z "$listener_pids" ]; then
     echo "Existing cocxy-web runtime is healthy on port ${PORT}, but no listener PID was available; leaving it in place."
+    verify_current_runtime
     exit 0
   fi
   for pid in $listener_pids; do
@@ -192,3 +227,4 @@ if ! kill -0 "$new_pid" >/dev/null 2>&1; then
 fi
 
 wait_for_health
+verify_current_runtime

@@ -921,8 +921,74 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(workflow.contains(#"grep -q "style.css?v=${ASSET_VERSION}" "$SMOKE_DIR/home.html""#))
         #expect(workflow.contains(#"grep -q "main.js?v=${ASSET_VERSION}" "$SMOKE_DIR/home.html""#))
         #expect(workflow.contains(#"grep -q "theme-switcher.js?v=${ASSET_VERSION}" "$SMOKE_DIR/home.html""#))
+        #expect(workflow.contains(#"grep -qi "^permissions-policy:" "$SMOKE_DIR/home.headers""#))
+        #expect(workflow.contains(#"curl -fsSL https://cocxy.dev/appcast.xml -o "$SMOKE_DIR/appcast.xml""#))
+        #expect(workflow.contains(#"grep -q "sparkle:edSignature=" "$SMOKE_DIR/appcast.xml""#))
+        #expect(workflow.contains(#"curl -fsSL "https://cocxy.dev/service-worker.js?deploy=${GITHUB_RUN_ID}" -o "$SMOKE_DIR/service-worker.js""#))
+        #expect(workflow.contains(#"echo "runtime_backup=${RUNTIME_BACKUP}" >> "$GITHUB_STEP_SUMMARY""#))
+        #expect(workflow.contains("for private_path in server.js package.json package-lock.json ecosystem.config.js restart-production-runtime.sh cocxy-web.log cocxy-web.err.log node_modules/express/package.json; do"))
+        #expect(workflow.contains(#"test "$(curl -sS -o /dev/null -w '%{http_code}' "https://cocxy.dev/${private_path}?deploy=${GITHUB_RUN_ID}")" = "404""#))
         #expect(!workflow.contains("curl -fsSL https://cocxy.dev/ | grep -q"))
         #expect(!workflow.contains("|| true"))
+    }
+
+    @Test("website deploys install the server runtime beside the public root, never inside it")
+    func websiteDeploysInstallServerRuntimeBesidePublicRoot() throws {
+        let root = repositoryRoot()
+        let runtimeScript = try String(
+            contentsOf: root.appendingPathComponent("web/scripts/restart-production-runtime.sh"),
+            encoding: .utf8
+        )
+        let ecosystem = try String(
+            contentsOf: root.appendingPathComponent("web/ecosystem.config.js"),
+            encoding: .utf8
+        )
+
+        let serverScript = try String(
+            contentsOf: root.appendingPathComponent("web/server.js"),
+            encoding: .utf8
+        )
+
+        for workflowName in ["deploy-website.yml", "release.yml"] {
+            let workflow = try String(
+                contentsOf: root.appendingPathComponent(".github/workflows/\(workflowName)"),
+                encoding: .utf8
+            )
+            let deployStep = try #require(workflow.range(of: "- name: Deploy website"))
+            let runtimeResolution = try #require(workflow.range(of: #"public_root=\$(readlink -f ${DEPLOY_PATH}); \"#))
+            let firstStaticCopy = try #require(workflow.range(of: "web/public/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}"))
+            let runtimeBackup = try #require(workflow.range(of: "then tar -czf ${RUNTIME_BACKUP} \\$existing; fi"))
+            let runtimeCopy = try #require(workflow.range(of: "${DEPLOY_TARGET}:${RUNTIME_PATH}/"))
+            #expect(deployStep.lowerBound < runtimeResolution.lowerBound, "\(workflowName)")
+            #expect(runtimeResolution.lowerBound < firstStaticCopy.lowerBound, "\(workflowName) resolves the runtime after copying pages")
+            #expect(runtimeBackup.lowerBound < runtimeCopy.lowerBound, "\(workflowName) overwrites the runtime before backing it up")
+            #expect(workflow.contains(#"test \"\$(basename \"\$public_root\")\" = public; \"#), "\(workflowName)")
+            #expect(workflow.contains(#"test -f \"\$(dirname \"\$public_root\")/server.js\"; \"#), "\(workflowName)")
+            #expect(workflow.contains(#"export PATH=\"\$PATH:/opt/bitnami/node/bin\"; \"#), "\(workflowName)")
+            #expect(workflow.contains("web/scripts/restart-production-runtime.sh \\\n            ${DEPLOY_TARGET}:${RUNTIME_PATH}/"), "\(workflowName)")
+            #expect(workflow.contains("cd ${RUNTIME_PATH}; \\"), "\(workflowName)")
+            #expect(!workflow.contains("cd ${DEPLOY_PATH}; \\"), "\(workflowName) installs the runtime into the public root")
+            #expect(workflow.contains("for artifact in server.js package.json package-lock.json ecosystem.config.js restart-production-runtime.sh cocxy-web.log cocxy-web.err.log .cocxy-web.pid node_modules; do"), "\(workflowName)")
+            #expect(workflow.contains(#"mv ${DEPLOY_PATH}\$artifact \$quarantine/"#), "\(workflowName)")
+        }
+
+        let releaseWorkflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+        #expect(releaseWorkflow.contains(#"grep -q "sparkle:version=\"${VERSION}\"" "$APPCAST_CHECK""#))
+        for feed in ["/appcast.xml", "/appcast-preview.xml", "/appcast-nightly.xml"] {
+            #expect(serverScript.contains("\"\(feed)\","), "server.js refuses the \(feed) update feed")
+        }
+        let verification = try #require(runtimeScript.range(of: "  verify_current_runtime\n  \"$PM2_BIN\" save"))
+        #expect(!runtimeScript[..<verification.lowerBound].contains(#""$PM2_BIN" save"#))
+        #expect(ecosystem.contains("cwd: __dirname,"))
+        #expect(!ecosystem.contains("/home/"))
+        #expect(runtimeScript.contains(#"if [ "$(pm2_exec_path)" = "$APP_DIR/server.js" ]; then"#))
+        #expect(runtimeScript.contains(#""$PM2_BIN" delete "$APP_NAME""#))
+        #expect(runtimeScript.contains(#"grep -qi '^permissions-policy:'"#))
+        #expect(runtimeScript.contains("cocxy-web is still serving a stale runtime"))
+        #expect(runtimeScript.components(separatedBy: "verify_current_runtime\n").count == 4)
     }
 
     @Test("preview workflow runs website quality gates without publishing from pull requests")
