@@ -152,6 +152,19 @@ struct MobileMirrorTLSE2ESwiftTestingTests {
             "\(MobileMirrorRequestRouter.cookieName)=\(cookie)",
             forHTTPHeaderField: "Cookie"
         )
+
+        let unboundSocket = session.webSocketTask(with: socketRequest)
+        unboundSocket.resume()
+        defer { unboundSocket.cancel(with: .normalClosure, reason: nil) }
+        await #expect(throws: (any Error).self) {
+            _ = try await Self.receiveData(from: unboundSocket)
+        }
+
+        let binding = Data((0..<16).map { _ in UInt8.random(in: .min ... .max) })
+        socketRequest.setValue(
+            "cocxy-stream.\(MobileMirrorPairingAuthority.base64URL(binding))",
+            forHTTPHeaderField: "Sec-WebSocket-Protocol"
+        )
         let socket = session.webSocketTask(with: socketRequest)
         socket.resume()
         defer { socket.cancel(with: .normalClosure, reason: nil) }
@@ -160,11 +173,21 @@ struct MobileMirrorTLSE2ESwiftTestingTests {
         #expect(!String(decoding: encrypted, as: UTF8.self).contains("auth_ok"))
         let decrypted = try Self.decryptTerminalEnvelope(
             encrypted,
-            key: keys.terminalEncryptionKey
+            key: keys.terminalEncryptionKey,
+            binding: binding
         )
         #expect(decrypted.kind == 1)
         #expect(decrypted.sequence == 0)
         #expect(String(decoding: decrypted.payload, as: UTF8.self) == "{\"type\":\"auth_ok\"}")
+        var otherBinding = binding
+        otherBinding[0] ^= 0x01
+        #expect(throws: (any Error).self) {
+            _ = try Self.decryptTerminalEnvelope(
+                encrypted,
+                key: keys.terminalEncryptionKey,
+                binding: otherBinding
+            )
+        }
     }
 
     private static func receiveData(
@@ -190,7 +213,8 @@ struct MobileMirrorTLSE2ESwiftTestingTests {
 
     private static func decryptTerminalEnvelope(
         _ envelope: Data,
-        key: Data
+        key: Data,
+        binding: Data
     ) throws -> (kind: UInt8, sequence: UInt64, payload: Data) {
         let headerLength = 26
         let tagLength = 16
@@ -213,7 +237,7 @@ struct MobileMirrorTLSE2ESwiftTestingTests {
         let plaintext = try AES.GCM.open(
             sealedBox,
             using: SymmetricKey(data: key),
-            authenticating: header
+            authenticating: header + binding
         )
         return (envelope[5], sequence, plaintext)
     }
