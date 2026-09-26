@@ -141,9 +141,8 @@ struct ProjectCloneService: Sendable {
             }
             try transaction.verifyRepositoryMetadata()
             let publication = try transaction.publish()
-            let destination = try publication.verifiedURL()
             return ProjectCloneResult(
-                rootURL: destination,
+                rootURL: publication.destinationURL,
                 remoteOrigin: remote.absoluteString,
                 publication: publication
             )
