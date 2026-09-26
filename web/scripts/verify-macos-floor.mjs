@@ -3,13 +3,42 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+// Apple moved from macOS 15 straight to macOS 26; there is no macOS 16.
 const macOSReleaseNames = new Map([
   [12, 'Monterey'],
   [13, 'Ventura'],
   [14, 'Sonoma'],
   [15, 'Sequoia'],
-  [16, 'Tahoe'],
+  [26, 'Tahoe'],
 ]);
+
+const staleFloorSweepExtensions = new Set([
+  '.html', '.htm', '.js', '.json', '.md', '.mjs', '.plist', '.rb', '.sh', '.strings',
+  '.toml', '.txt', '.xml', '.yaml', '.yml',
+]);
+const staleFloorSweepFileNames = new Set(['Makefile', 'Package.swift']);
+// Every other file in the checkout is swept for a stale macOS floor.
+const staleFloorSweepExclusions = {
+  directoryNames: new Set(['.git', 'node_modules']),
+  // Paths relative to the repository root; `web/public/docs` stays swept.
+  directories: new Set([
+    '.build', '.swiftpm', 'build',
+    // Private development notes, never published.
+    'docs', '.agents', '.claude', '.codex',
+    // Prebuilt engine binaries.
+    'libs',
+    // Swift sources carry `#available` checks and API notes, not the published floor.
+    'CLI', 'Daemon', 'QuickLook', 'Shared', 'Sources', 'Tests',
+  ]),
+  files: new Set([
+    // Release history legitimately names the floors of earlier versions.
+    'CHANGELOG.md',
+    // Asks reporters for their own macOS version, with examples.
+    '.github/ISSUE_TEMPLATE/bug_report.yml',
+    // Holds the release-name table above.
+    'web/scripts/verify-macos-floor.mjs',
+  ]),
+};
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -44,6 +73,39 @@ function parseDeclaredFloor(packageManifest, failures) {
 function isVersionOlder(candidateMajor, candidateMinor, floor) {
   return candidateMajor < floor.major
     || (candidateMajor === floor.major && candidateMinor < floor.minor);
+}
+
+function discoverStaleFloorSweepSurfaces(repoRoot, readUTF8) {
+  const surfaces = [];
+  function visit(directory) {
+    let entries;
+    try {
+      entries = fs.readdirSync(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(directory, entry.name);
+      const label = path.relative(repoRoot, fullPath).split(path.sep).join('/');
+      if (entry.isDirectory()) {
+        if (
+          !staleFloorSweepExclusions.directoryNames.has(entry.name)
+          && !staleFloorSweepExclusions.directories.has(label)
+        ) {
+          visit(fullPath);
+        }
+      } else if (
+        entry.isFile()
+        && !staleFloorSweepExclusions.files.has(label)
+        && (staleFloorSweepExtensions.has(path.extname(entry.name))
+          || staleFloorSweepFileNames.has(entry.name))
+      ) {
+        surfaces.push({ label, content: readUTF8(fullPath, label) });
+      }
+    }
+  }
+  visit(repoRoot);
+  return surfaces;
 }
 
 function rejectStaleFloorReferences(failures, surfaces, floor) {
@@ -85,10 +147,12 @@ export function verifyMacOSFloor({ repoRoot, webRoot, homeContent, spanishHomeCo
     }
   }
 
-  function expectTextCount(label, content, expectedText, expectedCount) {
+  // Published text only needs its required mentions; stale mentions are
+  // caught by the repository-wide sweep, so extra correct ones must pass.
+  function expectTextCount(label, content, expectedText, minimumCount) {
     const count = content.split(expectedText).length - 1;
-    if (count !== expectedCount) {
-      failures.push(`${label} expected ${expectedCount} occurrence(s), found ${count}`);
+    if (count < minimumCount) {
+      failures.push(`${label} expected at least ${minimumCount} occurrence(s), found ${count}`);
     }
   }
 
@@ -101,6 +165,7 @@ export function verifyMacOSFloor({ repoRoot, webRoot, homeContent, spanishHomeCo
 
   const surfaces = [
     ['Package.swift', path.join(repoRoot, 'Package.swift')],
+    ['README.md', path.join(repoRoot, 'README.md')],
     ['Resources/Info.plist', path.join(repoRoot, 'Resources/Info.plist')],
     ['project.yml', path.join(repoRoot, 'project.yml')],
     ['.github/workflows/release.yml', path.join(repoRoot, '.github/workflows/release.yml')],
@@ -317,16 +382,15 @@ export function verifyMacOSFloor({ repoRoot, webRoot, homeContent, spanishHomeCo
     `Platform: macOS ${floor.version}+`,
     1
   );
-
-  rejectStaleFloorReferences(
-    failures,
-    [
-      ...surfaces,
-      { label: 'web/public/index.html', content: homeContent ?? '' },
-      { label: 'web/public/es/index.html', content: spanishHomeContent ?? '' },
-    ],
-    floor
+  expectTextCount(
+    'README system requirement',
+    content['README.md'],
+    `- macOS ${floor.version} (${floor.releaseName}) or later`,
+    1
   );
+  expectTextCount('README platform badge', content['README.md'], `macOS-${floor.major}%2B`, 1);
+
+  rejectStaleFloorReferences(failures, discoverStaleFloorSweepSurfaces(repoRoot, readUTF8), floor);
 
   return failures;
 }
