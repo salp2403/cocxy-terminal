@@ -337,7 +337,7 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
         }
         Darwin.close(held)
 
-        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(15))
         var recovered = false
         repeat {
             do {

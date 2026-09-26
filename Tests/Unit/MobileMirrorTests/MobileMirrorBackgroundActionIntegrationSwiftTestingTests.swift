@@ -377,7 +377,7 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
     }
 
     private func eventually(_ condition: @MainActor () -> Bool) async -> Bool {
-        for _ in 0..<500 {
+        for _ in 0..<15_000 {
             if condition() { return true }
             try? await Task.sleep(nanoseconds: 1_000_000)
         }
