@@ -18,8 +18,10 @@ final class MobileMirrorLocalRelayConnection: @unchecked Sendable {
     private var upstream: NWConnection?
     private var handshakeTimer: DispatchSourceTimer?
     private var idleTimer: DispatchSourceTimer?
+    private var drainTimer: DispatchSourceTimer?
     private var lastActivity = ProcessInfo.processInfo.systemUptime
     private var isActive = false
+    private var isDraining = false
     private var isClosed = false
 
     init(
@@ -61,6 +63,25 @@ final class MobileMirrorLocalRelayConnection: @unchecked Sendable {
 
     func close() {
         queue.async { [weak self] in self?.closeNow() }
+    }
+
+    /// Stops reading from the phone and keeps forwarding what the gateway
+    /// already wrote until the gateway closes its side or `timeout` passes.
+    /// The pending timer keeps this connection alive after its relay is gone.
+    func drain(timeout: TimeInterval) {
+        queue.async { [self] in
+            guard !isClosed else { return }
+            guard isActive else {
+                closeNow()
+                return
+            }
+            isDraining = true
+            let timer = DispatchSource.makeTimerSource(queue: queue)
+            timer.schedule(deadline: .now() + timeout)
+            timer.setEventHandler { [self] in closeNow() }
+            drainTimer = timer
+            timer.resume()
+        }
     }
 
     private func openUpstream() {
@@ -116,6 +137,7 @@ final class MobileMirrorLocalRelayConnection: @unchecked Sendable {
 
     private func pump(from source: NWConnection, to destination: NWConnection) {
         guard !isClosed else { return }
+        let fromPhone = source === client
         source.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1_024) {
             [weak self] data, _, isComplete, error in
             guard let self else {
@@ -123,6 +145,7 @@ final class MobileMirrorLocalRelayConnection: @unchecked Sendable {
                 destination.cancel()
                 return
             }
+            if fromPhone, self.isDraining { return }
             guard !self.isClosed, error == nil else {
                 self.closeNow()
                 return
@@ -143,6 +166,7 @@ final class MobileMirrorLocalRelayConnection: @unchecked Sendable {
                     destination.cancel()
                     return
                 }
+                if fromPhone, self.isDraining { return }
                 guard sendError == nil, !self.isClosed, !isComplete else {
                     self.closeNow()
                     return
@@ -185,6 +209,8 @@ final class MobileMirrorLocalRelayConnection: @unchecked Sendable {
         handshakeTimer = nil
         idleTimer?.cancel()
         idleTimer = nil
+        drainTimer?.cancel()
+        drainTimer = nil
         client.stateUpdateHandler = nil
         upstream?.stateUpdateHandler = nil
         client.cancel()

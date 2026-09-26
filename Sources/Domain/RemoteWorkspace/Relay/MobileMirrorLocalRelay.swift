@@ -182,6 +182,9 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
     typealias TLSIdentityProvider = @Sendable (String) throws -> MobileMirrorEphemeralTLSIdentity
 
     static let idleTimeout: TimeInterval = 45
+    /// Bounds how long a stopped relay keeps delivering bytes the gateway
+    /// already wrote, such as the revocation event.
+    static let drainTimeout: TimeInterval = 2
     private static let handshakeTimeout: TimeInterval = 8
 
     private final class StartupGate: @unchecked Sendable {
@@ -357,7 +360,7 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
         candidate?.stateUpdateHandler = nil
         candidate?.newConnectionHandler = nil
         candidate?.cancel()
-        activeConnections.forEach { $0.close() }
+        activeConnections.forEach { $0.drain(timeout: Self.drainTimeout) }
         identity?.removeFromKeychain()
     }
 

@@ -228,6 +228,40 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
 
     }
 
+    @Test("stopping the relay still delivers what the gateway already wrote")
+    func stoppingRelayDrainsGatewayBytes() async throws {
+        let payload = Data((0..<(1_024 * 1_024)).map { UInt8(truncatingIfNeeded: $0 &* 31) })
+        let responder = try LoopbackBulkResponder(payload: payload)
+        let tlsIdentity = try MobileMirrorTestRelayTLSIdentity(
+            bindAddress: MobileMirrorGateway.loopbackAddress
+        )
+        let relay = MobileMirrorLocalRelay(
+            gatewayPort: responder.port,
+            preambleSecret: "relay-drain-secret",
+            addressProvider: { MobileMirrorGateway.loopbackAddress },
+            bindAddressPolicy: { $0 == MobileMirrorGateway.loopbackAddress },
+            peerAddressNormalizer: { _ in "192.168.42.60" },
+            tlsIdentityProvider: tlsIdentity.provider
+        )
+        let lease = try await relay.start()
+        let fingerprint = testCertificateFingerprint(tlsIdentity.identity.certificate)
+        let download = Task {
+            try await Self.request(
+                address: lease.address,
+                port: lease.port,
+                path: "/revoked",
+                expectedFingerprint: fingerprint
+            )
+        }
+
+        #expect(await responder.waitUntilWritten(timeout: 5))
+        relay.stop()
+
+        let received = try await download.value
+        #expect(received.count == payload.count)
+        #expect(received == payload)
+    }
+
     @Test("production relay binds its exact RFC 1918 interface")
     func productionRelayBindsPrivateInterface() async throws {
         guard let address = MobileMirrorPrivateNetworkAddress.current() else {
