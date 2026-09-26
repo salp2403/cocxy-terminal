@@ -207,16 +207,22 @@ extension AppDelegate {
         panel.resolvesAliases = true
         presentOpenPanel(panel) { [weak self] response in
             guard response == .OK, let directory = panel.url, let self else { return }
-            let descriptor = projectResolver.resolveProject(for: directory)
-            do {
-                try projectRegistry.recordOpen(descriptor, incrementOpenCount: false)
-            } catch {
-                Self.projectRegistryLogger.error(
-                    "Opened project could not be registered: \(String(describing: error), privacy: .private)"
-                )
-            }
-            activateProjectForUser(descriptor.groupingID)
+            activateProjectForUser(registerChosenProjectFolder(directory))
         }
+    }
+
+    /// A folder the user opens as a project is registered even without a
+    /// repository; opening its tab counts the visit.
+    func registerChosenProjectFolder(_ directory: URL) -> ProjectID {
+        let descriptor = projectResolver.resolveProject(for: directory)
+        do {
+            try projectRegistry.recordOpen(descriptor, incrementOpenCount: false)
+        } catch {
+            Self.projectRegistryLogger.error(
+                "Opened project could not be registered: \(String(describing: error), privacy: .private)"
+            )
+        }
+        return descriptor.groupingID
     }
 
     @objc func openRecentProjectMenuAction(_ sender: NSMenuItem) {
