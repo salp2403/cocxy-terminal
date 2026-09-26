@@ -6,7 +6,7 @@ import Testing
 @testable import CocxyTerminal
 
 @Suite("Mobile mirror gateway")
-struct MobileMirrorGatewaySwiftTestingTests {
+struct MobileMirrorGatewaySwiftTestingTests: MobileMirrorRouterTestSupport {
     @Test("one stalled event client cannot delay another client")
     func eventClientsAreIsolated() {
         let slowStarted = DispatchSemaphore(value: 0)
@@ -291,6 +291,60 @@ struct MobileMirrorGatewaySwiftTestingTests {
         ) + Data("GET /events HTTP/1.1\r\nHost: local\r\n\r\n".utf8)
         #expect(MobileMirrorGateway.sendAll(duplicateRequest, to: duplicate))
         #expect(Self.receiveHTTPHead(from: duplicate).hasPrefix("HTTP/1.1 429"))
+    }
+
+    @Test("gateway admission refusals reach the phone coded and in its language")
+    func admissionRefusalIsLocalized() throws {
+        let secret = "localized-admission"
+        let spanish = try webLocalization(.spanish)
+        let gateway = MobileMirrorGateway(
+            trustedRelaySecret: secret,
+            connectionLimits: MobileMirrorConnectionLimits(
+                maximumTotal: 3,
+                maximumPerAddress: 1,
+                maximumStartsPerWindow: 4,
+                maximumFailuresPerWindow: 2,
+                rateWindow: 10
+            ),
+            localization: { spanish }
+        ) { _, _ in .eventStream }
+        let port = try gateway.start()
+        defer { gateway.stop() }
+        let first = try Self.openRelayedEventStream(
+            port: port,
+            secret: secret,
+            remoteAddress: "192.168.10.30"
+        )
+        defer { Darwin.close(first) }
+
+        let duplicate = try Self.connect(port: port)
+        defer { Darwin.close(duplicate) }
+        let duplicateRequest = MobileMirrorRelayPreamble.encode(
+            secret: secret,
+            remoteAddress: "192.168.10.30"
+        ) + Data("GET /events HTTP/1.1\r\nHost: local\r\n\r\n".utf8)
+        #expect(MobileMirrorGateway.sendAll(duplicateRequest, to: duplicate))
+        let reply = Self.receiveUntilClosed(from: duplicate)
+        #expect(reply.hasPrefix("HTTP/1.1 429"))
+        let body = try #require(reply.range(of: "\r\n\r\n").map { reply[$0.upperBound...] })
+        let payload = try JSONDecoder().decode(
+            MobileMirrorActionResponse.self,
+            from: Data(body.utf8)
+        )
+        #expect(payload.code == "rate-limited")
+        #expect(payload.error == "Demasiadas solicitudes. Espera un momento y vuelve a intentarlo.")
+    }
+
+    private static func receiveUntilClosed(from descriptor: Int32) -> String {
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while true {
+            let count = Darwin.recv(descriptor, &buffer, buffer.count, 0)
+            if count > 0 { data.append(buffer, count: count); continue }
+            if count < 0, errno == EINTR { continue }
+            break
+        }
+        return String(decoding: data, as: UTF8.self)
     }
 
     private static func openRelayedEventStream(

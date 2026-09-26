@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "لم يتم تحديد جلسة طرفية";
 "mobile.web.error.signedInputUnavailable" = "الإدخال الموقّع من الهاتف غير متاح";
 "mobile.web.error.stateUnavailable" = "حالة الهاتف غير متاحة";
+"mobile.web.error.rateLimited" = "طلبات كثيرة جدًا. انتظر لحظة ثم حاول مرة أخرى.";
+"mobile.web.error.timedOut" = "استغرق جهاز Mac وقتًا طويلًا جدًا للرد.";
+"mobile.web.error.clockSkew" = "ساعة هذا الهاتف لا تطابق ساعة جهاز Mac. فعّل التاريخ والوقت التلقائيين، ثم حاول مرة أخرى.";
+"mobile.web.error.invalidRequest" = "تعذّرت معالجة الطلب.";
 "mobile.web.notification.agentUpdate" = "تحديث الوكيل";
 "mobile.web.notification.approvalRequested" = "طُلبت الموافقة";
 "mobile.web.notification.stateChanged" = "تغيّرت حالة الوكيل";

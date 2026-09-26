@@ -15,6 +15,7 @@ enum MobileMirrorActionAudit {
         case invalidEnvelope = "invalid-envelope"
         case invalidSignature = "invalid-signature"
         case replayDetected = "replay-detected"
+        case clockSkew = "clock-skew"
         case malformedAction = "malformed-action"
         case sessionExpired = "session-expired"
     }

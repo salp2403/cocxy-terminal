@@ -88,6 +88,14 @@ struct ReplayTracker: Sendable {
         self.maxEntries = max(1, maxEntries)
     }
 
+    enum Admission: Equatable, Sendable {
+        case allowed
+        /// The timestamp is outside the freshness window around `now`.
+        case stale
+        /// The nonce was already seen, is malformed, or the window is full.
+        case rejected
+    }
+
     /// Checks if a timestamp is fresh and its nonce has not been replayed.
     ///
     /// - Parameters:
@@ -95,21 +103,29 @@ struct ReplayTracker: Sendable {
     ///   - nonce: Random authenticated nonce for this connection.
     /// - Returns: `true` if the timestamp is within the window and hasn't been seen.
     mutating func isAllowed(timestamp: UInt64, nonce: Data) -> Bool {
-        guard nonce.count == RelayHandshake.nonceSize else { return false }
-        let now = UInt64(Date().timeIntervalSince1970)
+        admit(
+            timestamp: timestamp,
+            nonce: nonce,
+            now: UInt64(Date().timeIntervalSince1970)
+        ) == .allowed
+    }
+
+    /// Records `nonce` when `timestamp` is fresh relative to `now` (Unix epoch seconds).
+    mutating func admit(timestamp: UInt64, nonce: Data, now: UInt64) -> Admission {
+        guard nonce.count == RelayHandshake.nonceSize else { return .rejected }
         let windowU64 = UInt64(windowSeconds)
 
         let distance = timestamp > now ? timestamp - now : now - timestamp
-        guard distance <= windowU64 else { return false }
+        guard distance <= windowU64 else { return .stale }
 
         pruneOldNonces(now: now)
 
         // Reject replayed nonces while allowing legitimate same-second connections.
-        guard seenNonces[nonce] == nil else { return false }
-        guard seenNonces.count < maxEntries else { return false }
+        guard seenNonces[nonce] == nil else { return .rejected }
+        guard seenNonces.count < maxEntries else { return .rejected }
 
         seenNonces[nonce] = timestamp
-        return true
+        return .allowed
     }
 
     /// Removes nonces whose authenticated timestamp has fallen outside the window.

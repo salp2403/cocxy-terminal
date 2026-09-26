@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "No hay ninguna sesión de terminal seleccionada";
 "mobile.web.error.signedInputUnavailable" = "La entrada móvil firmada no está disponible";
 "mobile.web.error.stateUnavailable" = "El estado móvil no está disponible";
+"mobile.web.error.rateLimited" = "Demasiadas solicitudes. Espera un momento y vuelve a intentarlo.";
+"mobile.web.error.timedOut" = "El Mac tardó demasiado en responder.";
+"mobile.web.error.clockSkew" = "El reloj de este teléfono no coincide con el del Mac. Activa la fecha y la hora automáticas y vuelve a intentarlo.";
+"mobile.web.error.invalidRequest" = "No se pudo procesar la solicitud.";
 "mobile.web.notification.agentUpdate" = "Actualización del agente";
 "mobile.web.notification.approvalRequested" = "Aprobación solicitada";
 "mobile.web.notification.stateChanged" = "Estado del agente actualizado";

@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "未選取終端機工作階段";
 "mobile.web.error.signedInputUnavailable" = "已簽署的行動輸入無法使用";
 "mobile.web.error.stateUnavailable" = "行動狀態無法使用";
+"mobile.web.error.rateLimited" = "要求過多。請稍候再試一次。";
+"mobile.web.error.timedOut" = "Mac 回應時間過長。";
+"mobile.web.error.clockSkew" = "此手機的時鐘與 Mac 不一致。請開啟自動設定日期與時間，然後再試一次。";
+"mobile.web.error.invalidRequest" = "無法處理此要求。";
 "mobile.web.notification.agentUpdate" = "代理程式更新";
 "mobile.web.notification.approvalRequested" = "已要求核准";
 "mobile.web.notification.stateChanged" = "代理程式狀態已變更";

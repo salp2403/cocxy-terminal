@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "선택된 터미널 세션이 없습니다";
 "mobile.web.error.signedInputUnavailable" = "서명된 모바일 입력을 사용할 수 없습니다";
 "mobile.web.error.stateUnavailable" = "모바일 상태를 사용할 수 없습니다";
+"mobile.web.error.rateLimited" = "요청이 너무 많습니다. 잠시 기다린 후 다시 시도하십시오.";
+"mobile.web.error.timedOut" = "Mac의 응답이 너무 오래 걸렸습니다.";
+"mobile.web.error.clockSkew" = "이 휴대폰의 시계가 Mac과 일치하지 않습니다. 날짜 및 시간 자동 설정을 켠 후 다시 시도하십시오.";
+"mobile.web.error.invalidRequest" = "요청을 처리할 수 없습니다.";
 "mobile.web.notification.agentUpdate" = "에이전트 업데이트";
 "mobile.web.notification.approvalRequested" = "승인이 요청되었습니다";
 "mobile.web.notification.stateChanged" = "에이전트 상태가 변경되었습니다";

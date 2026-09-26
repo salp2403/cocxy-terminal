@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "Сеанс термінала не вибрано";
 "mobile.web.error.signedInputUnavailable" = "Підписане мобільне введення недоступне";
 "mobile.web.error.stateUnavailable" = "Мобільний стан недоступний";
+"mobile.web.error.rateLimited" = "Забагато запитів. Зачекайте трохи й повторіть спробу.";
+"mobile.web.error.timedOut" = "Mac відповідав надто довго.";
+"mobile.web.error.clockSkew" = "Годинник цього телефона не збігається з годинником Mac. Увімкніть автоматичні дату й час і повторіть спробу.";
+"mobile.web.error.invalidRequest" = "Не вдалося обробити запит.";
 "mobile.web.notification.agentUpdate" = "Оновлення агента";
 "mobile.web.notification.approvalRequested" = "Запитано підтвердження";
 "mobile.web.notification.stateChanged" = "Стан агента змінено";

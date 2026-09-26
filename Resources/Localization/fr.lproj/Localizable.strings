@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "Aucune session de terminal n’est sélectionnée";
 "mobile.web.error.signedInputUnavailable" = "La saisie mobile signée n’est pas disponible";
 "mobile.web.error.stateUnavailable" = "L’état mobile n’est pas disponible";
+"mobile.web.error.rateLimited" = "Trop de requêtes. Patientez un instant, puis réessayez.";
+"mobile.web.error.timedOut" = "Le Mac a mis trop de temps à répondre.";
+"mobile.web.error.clockSkew" = "L’horloge de ce téléphone ne correspond pas à celle du Mac. Activez la date et l’heure automatiques, puis réessayez.";
+"mobile.web.error.invalidRequest" = "La requête n’a pas pu être traitée.";
 "mobile.web.notification.agentUpdate" = "Mise à jour de l’agent";
 "mobile.web.notification.approvalRequested" = "Approbation demandée";
 "mobile.web.notification.stateChanged" = "État de l’agent modifié";

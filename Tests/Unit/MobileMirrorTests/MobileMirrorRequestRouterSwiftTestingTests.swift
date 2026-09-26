@@ -15,12 +15,14 @@ struct MobileMirrorRequestRouterSwiftTestingTests: MobileMirrorRouterTestSupport
         let rejectionRecorder = MobileMirrorRejectionRecorder()
         let snapshot = MobileMirrorSnapshot.empty
         let localization = try webLocalization(.spanish)
+        let monotonicClock = MobileMirrorManualMonotonicClock()
         let router = MobileMirrorRequestRouter(
             publicAddress: "127.0.0.1",
             transport: .localTLS,
             authority: authority,
             routeRegistry: routes,
             localization: localization,
+            monotonicNow: { monotonicClock.now },
             snapshotProvider: { _ in snapshot },
             actionHandler: { action, _, _, _ in
                 await actionRecorder.record(action)
@@ -182,12 +184,23 @@ struct MobileMirrorRequestRouterSwiftTestingTests: MobileMirrorRouterTestSupport
             from: replayResponse.body
         )
         #expect(replayPayload.code == "replay-detected")
+        var replayStatuses: [Int] = []
+        var lastReplay: MobileMirrorHTTPResponse?
         for _ in 0..<12 {
-            #expect(try response(
+            let replay = try response(
                 from: await router.route(request: signedRequest, identity: identity)
-            ).status == 409)
+            )
+            replayStatuses.append(replay.status)
+            lastReplay = replay
         }
+        // The replayed pair-status poll above already spent one of the 12 failures.
+        #expect(replayStatuses == Array(repeating: 409, count: 10) + [429, 429])
+        #expect(try JSONDecoder().decode(
+            MobileMirrorActionResponse.self,
+            from: try #require(lastReplay).body
+        ).code == "rate-limited")
         #expect(await actionRecorder.values == [action])
+        monotonicClock.advance(by: 11)
 
         var invalidSignatureHeaders = MobileMirrorEncryptedActionTestSupport.signedHeaders(
             body: body,

@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "Ingen terminaløkt er valgt";
 "mobile.web.error.signedInputUnavailable" = "Signert mobilinndata er utilgjengelig";
 "mobile.web.error.stateUnavailable" = "Mobilstatus er utilgjengelig";
+"mobile.web.error.rateLimited" = "For mange forespørsler. Vent litt, og prøv igjen.";
+"mobile.web.error.timedOut" = "Macen brukte for lang tid på å svare.";
+"mobile.web.error.clockSkew" = "Klokken på denne telefonen stemmer ikke med Macen. Slå på automatisk dato og tid, og prøv igjen.";
+"mobile.web.error.invalidRequest" = "Forespørselen kunne ikke behandles.";
 "mobile.web.notification.agentUpdate" = "Agentoppdatering";
 "mobile.web.notification.approvalRequested" = "Godkjenning forespurt";
 "mobile.web.notification.stateChanged" = "Agentstatus endret";

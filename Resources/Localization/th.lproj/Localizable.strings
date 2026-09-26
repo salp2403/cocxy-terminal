@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "ยังไม่ได้เลือกเซสชันเทอร์มินัล";
 "mobile.web.error.signedInputUnavailable" = "ไม่สามารถใช้การป้อนข้อมูลมือถือที่ลงนามแล้ว";
 "mobile.web.error.stateUnavailable" = "ไม่สามารถใช้สถานะมือถือได้";
+"mobile.web.error.rateLimited" = "มีคำขอมากเกินไป โปรดรอสักครู่แล้วลองอีกครั้ง";
+"mobile.web.error.timedOut" = "Mac ใช้เวลาตอบสนองนานเกินไป";
+"mobile.web.error.clockSkew" = "นาฬิกาของโทรศัพท์เครื่องนี้ไม่ตรงกับ Mac โปรดเปิดวันที่และเวลาอัตโนมัติ แล้วลองอีกครั้ง";
+"mobile.web.error.invalidRequest" = "ไม่สามารถประมวลผลคำขอได้";
 "mobile.web.notification.agentUpdate" = "การอัปเดตเอเจนต์";
 "mobile.web.notification.approvalRequested" = "มีการขออนุมัติ";
 "mobile.web.notification.stateChanged" = "สถานะเอเจนต์เปลี่ยนแล้ว";

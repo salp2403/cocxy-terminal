@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "មិនបានជ្រើសរើសសម័យស្ថានីយ";
 "mobile.web.error.signedInputUnavailable" = "ការបញ្ចូលលើទូរស័ព្ទដែលបានចុះហត្ថលេខាមិនអាចប្រើបាន";
 "mobile.web.error.stateUnavailable" = "ស្ថានភាពទូរស័ព្ទមិនអាចប្រើបាន";
+"mobile.web.error.rateLimited" = "សំណើច្រើនពេក។ សូមរង់ចាំបន្តិច រួចព្យាយាមម្តងទៀត។";
+"mobile.web.error.timedOut" = "Mac ចំណាយពេលយូរពេកក្នុងការឆ្លើយតប។";
+"mobile.web.error.clockSkew" = "នាឡិការបស់ទូរស័ព្ទនេះមិនត្រូវគ្នានឹង Mac ទេ។ សូមបើកកាលបរិច្ឆេទ និងម៉ោងស្វ័យប្រវត្តិ រួចព្យាយាមម្តងទៀត។";
+"mobile.web.error.invalidRequest" = "មិនអាចដំណើរការសំណើបានទេ។";
 "mobile.web.notification.agentUpdate" = "បច្ចុប្បន្នភាពភ្នាក់ងារ";
 "mobile.web.notification.approvalRequested" = "បានស្នើសុំការអនុម័ត";
 "mobile.web.notification.stateChanged" = "ស្ថានភាពភ្នាក់ងារបានផ្លាស់ប្តូរ";

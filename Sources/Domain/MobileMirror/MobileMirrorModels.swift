@@ -474,6 +474,7 @@ enum MobileMirrorError: Error, Equatable, Sendable, LocalizedError {
     case sessionExpired
     case invalidSignature
     case replayDetected
+    case clockSkew
     case invalidAction
     case targetUnavailable
     case authorizationDenied
@@ -493,6 +494,7 @@ enum MobileMirrorError: Error, Equatable, Sendable, LocalizedError {
         case .sessionExpired: return "The paired session has expired or was revoked."
         case .invalidSignature: return "The signed mobile action is invalid."
         case .replayDetected: return "The mobile action was already used."
+        case .clockSkew: return "The phone clock does not match the Mac clock."
         case .invalidAction: return "The mobile action is invalid."
         case .targetUnavailable: return "The requested local target is unavailable."
         case .authorizationDenied: return "The action was not approved on the Mac."
@@ -504,57 +506,44 @@ enum MobileMirrorError: Error, Equatable, Sendable, LocalizedError {
     }
 
     func localizedDescription(using localizer: AppLocalizer) -> String {
+        let entry = localizationEntry
+        return localizer.string(entry.key, fallback: entry.fallback)
+    }
+
+    func localizedDescription(using localization: MobileMirrorWebLocalization) -> String {
+        localization.text(localizationEntry.key)
+    }
+
+    var localizationEntry: (key: String, fallback: String) {
         switch self {
         case .unavailable:
-            return localizer.string(
-                "mobile.mirror.error.unavailable",
-                fallback: "Mobile mirror is unavailable."
-            )
+            return ("mobile.mirror.error.unavailable", "Mobile mirror is unavailable.")
         case .noPrivateNetwork:
-            return localizer.string(
-                "mobile.mirror.error.noPrivateNetwork",
-                fallback: "No private local network is available."
-            )
+            return ("mobile.mirror.error.noPrivateNetwork", "No private local network is available.")
         case .invalidPairingToken, .invalidSignature:
-            return localizer.string(
-                "mobile.web.status.authenticationFailed",
-                fallback: "Authentication failed"
-            )
+            return ("mobile.web.status.authenticationFailed", "Authentication failed")
         case .pairingExpired, .sessionExpired:
-            return localizer.string(
-                "mobile.web.status.rescanRequired",
-                fallback: "Scan a new QR code on the Mac to reconnect"
-            )
+            return ("mobile.web.status.rescanRequired", "Scan a new QR code on the Mac to reconnect")
         case .pairingPending:
-            return localizer.string(
-                "mobile.mirror.status.confirmation",
-                fallback: "Desktop confirmation required"
-            )
+            return ("mobile.mirror.status.confirmation", "Desktop confirmation required")
         case .pairingDenied:
-            return localizer.string(
-                "mobile.mirror.status.denied",
-                fallback: "Pairing denied"
-            )
+            return ("mobile.mirror.status.denied", "Pairing denied")
         case .replayDetected, .invalidAction, .authorizationDenied:
-            return localizer.string(
-                "mobile.web.error.actionRejected",
-                fallback: "Mobile action was rejected"
+            return ("mobile.web.error.actionRejected", "Mobile action was rejected")
+        case .clockSkew:
+            return (
+                "mobile.web.error.clockSkew",
+                "This phone's clock doesn't match the Mac. Turn on automatic date and time, then try again."
             )
         case .targetUnavailable:
-            return localizer.string(
-                "mobile.web.error.noTerminal",
-                fallback: "No terminal session is selected"
-            )
+            return ("mobile.web.error.noTerminal", "No terminal session is selected")
         case .projectCreationUnavailable:
-            return localizer.string(
+            return (
                 "mobile.web.project.creationUnavailable",
-                fallback: "Choose a creation folder on the Mac first."
+                "Choose a creation folder on the Mac first."
             )
         case .invalidProjectName, .projectAlreadyExists, .projectCreationFailed:
-            return localizer.string(
-                "mobile.web.action.failed",
-                fallback: "Action could not be completed"
-            )
+            return ("mobile.web.action.failed", "Action could not be completed")
         }
     }
 }

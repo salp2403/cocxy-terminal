@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "Chưa chọn phiên dòng lệnh";
 "mobile.web.error.signedInputUnavailable" = "Không thể dùng dữ liệu nhập di động đã ký";
 "mobile.web.error.stateUnavailable" = "Không thể tải trạng thái di động";
+"mobile.web.error.rateLimited" = "Quá nhiều yêu cầu. Hãy đợi một lát rồi thử lại.";
+"mobile.web.error.timedOut" = "Máy Mac phản hồi quá lâu.";
+"mobile.web.error.clockSkew" = "Đồng hồ của điện thoại này không khớp với máy Mac. Hãy bật ngày và giờ tự động, rồi thử lại.";
+"mobile.web.error.invalidRequest" = "Không thể xử lý yêu cầu.";
 "mobile.web.notification.agentUpdate" = "Cập nhật tác nhân";
 "mobile.web.notification.approvalRequested" = "Đã yêu cầu phê duyệt";
 "mobile.web.notification.stateChanged" = "Trạng thái tác nhân đã thay đổi";

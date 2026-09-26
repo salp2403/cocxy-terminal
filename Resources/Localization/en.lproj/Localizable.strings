@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "No terminal session is selected";
 "mobile.web.error.signedInputUnavailable" = "Signed mobile input is unavailable";
 "mobile.web.error.stateUnavailable" = "Mobile state is unavailable";
+"mobile.web.error.rateLimited" = "Too many requests. Wait a moment and try again.";
+"mobile.web.error.timedOut" = "The Mac took too long to respond.";
+"mobile.web.error.clockSkew" = "This phone's clock doesn't match the Mac. Turn on automatic date and time, then try again.";
+"mobile.web.error.invalidRequest" = "The request could not be processed.";
 "mobile.web.notification.agentUpdate" = "Agent update";
 "mobile.web.notification.approvalRequested" = "Approval requested";
 "mobile.web.notification.stateChanged" = "Agent state changed";

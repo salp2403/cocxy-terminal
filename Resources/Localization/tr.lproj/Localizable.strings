@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "Terminal oturumu seçilmedi";
 "mobile.web.error.signedInputUnavailable" = "İmzalı mobil giriş kullanılamıyor";
 "mobile.web.error.stateUnavailable" = "Mobil durum kullanılamıyor";
+"mobile.web.error.rateLimited" = "Çok fazla istek. Biraz bekleyip yeniden deneyin.";
+"mobile.web.error.timedOut" = "Mac’in yanıt vermesi çok uzun sürdü.";
+"mobile.web.error.clockSkew" = "Bu telefonun saati Mac ile eşleşmiyor. Otomatik tarih ve saati açıp yeniden deneyin.";
+"mobile.web.error.invalidRequest" = "İstek işlenemedi.";
 "mobile.web.notification.agentUpdate" = "Ajan güncellemesi";
 "mobile.web.notification.approvalRequested" = "Onay istendi";
 "mobile.web.notification.stateChanged" = "Ajan durumu değişti";

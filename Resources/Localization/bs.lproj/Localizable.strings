@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "Nije odabrana terminalska sesija";
 "mobile.web.error.signedInputUnavailable" = "Potpisani mobilni unos nije dostupan";
 "mobile.web.error.stateUnavailable" = "Mobilno stanje nije dostupno";
+"mobile.web.error.rateLimited" = "Previše zahtjeva. Sačekajte trenutak i pokušajte ponovo.";
+"mobile.web.error.timedOut" = "Mac je predugo odgovarao.";
+"mobile.web.error.clockSkew" = "Sat ovog telefona ne odgovara satu na Macu. Uključite automatski datum i vrijeme, pa pokušajte ponovo.";
+"mobile.web.error.invalidRequest" = "Zahtjev nije moguće obraditi.";
 "mobile.web.notification.agentUpdate" = "Ažuriranje agenta";
 "mobile.web.notification.approvalRequested" = "Odobrenje je zatraženo";
 "mobile.web.notification.stateChanged" = "Stanje agenta je promijenjeno";

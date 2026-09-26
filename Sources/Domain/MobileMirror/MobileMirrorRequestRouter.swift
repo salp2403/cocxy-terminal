@@ -113,7 +113,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         localizationLock.unlock()
     }
 
-    private func currentLocalization() -> MobileMirrorWebLocalization {
+    func currentLocalization() -> MobileMirrorWebLocalization {
         localizationLock.lock()
         defer { localizationLock.unlock() }
         return localization
@@ -133,10 +133,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
               let expectedHost = URLComponents(string: baseURL)?.host,
               let expectedPort = URLComponents(string: baseURL)?.port,
               request.host == "\(expectedHost):\(expectedPort)" else {
-            return rejected(
-                .error("Invalid local host.", status: 403),
-                identity: identity
-            )
+            return respond(.invalidHost, identity: identity)
         }
 
         if request.path == "/pair" {
@@ -149,21 +146,11 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         }
 
         guard let cookie = request.cookie(named: Self.cookieName) else {
-            return rejected(
-                .error(currentLocalization().text(
-                    "mobile.web.status.rescanRequired"
-                ), status: 401),
-                identity: identity
-            )
+            return respond(.missingSession, identity: identity)
         }
         guard let activePairing = authority.activePairing(cookie: cookie),
               activePairing.identity.fingerprint == identity.fingerprint else {
-            return rejected(
-                .error(currentLocalization().text(
-                    "mobile.web.status.rescanRequired"
-                ), status: 401),
-                identity: identity
-            )
+            return respond(.missingSession, identity: identity)
         }
 
         switch request.path {
@@ -219,14 +206,14 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         identity: MobileMirrorClientIdentity
     ) async -> MobileMirrorHTTPRouteResult {
         guard request.method == "GET", let token = request.query["token"] else {
-            return .response(.error("Invalid pairing request.", status: 400))
+            return respond(.malformedRequest, identity: nil)
         }
         do {
             let pending = try authority.consumeOffer(token: token, identity: identity)
             await pendingPairingHandler(pending)
             return .response(pairingPage(pendingID: pending.id))
         } catch {
-            return errorResponse(error, identity: identity, authenticationFailure: true)
+            return errorResponse(error, identity: identity)
         }
     }
 
@@ -237,14 +224,19 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         guard request.method == "GET",
               let rawID = request.query["id"],
               let pendingID = UUID(uuidString: rawID) else {
-            return .response(.error("Invalid pairing request.", status: 400))
+            return respond(.malformedRequest, identity: nil)
         }
         do {
             switch try authority.poll(pendingID: pendingID, identity: identity) {
             case .pending:
                 return .response(.json(["status": "pending"], status: 202))
             case .denied:
-                return .response(.json(["status": "denied"], status: 403))
+                return .response(.json(
+                    MobileMirrorPairingDenial(
+                        error: currentLocalization().text("mobile.mirror.status.denied")
+                    ),
+                    status: 403
+                ))
             case .confirmed(let cookie):
                 let maxAge = Int(MobileMirrorPairingAuthority.sessionTTL)
                 let secureAttribute = transport.requiresSecureCookie ? "; Secure" : ""
@@ -256,7 +248,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                 ))
             }
         } catch {
-            return errorResponse(error, identity: identity, authenticationFailure: true)
+            return errorResponse(error, identity: identity)
         }
     }
 
@@ -281,10 +273,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             ) {
                 return auditFailure
             }
-            return rejected(
-                .error("Invalid signed action.", status: 403),
-                identity: identity
-            )
+            return respond(.unsignedAction, identity: identity)
         }
         let openedAction: MobileMirrorOpenedAction
         do {
@@ -311,7 +300,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             let responseError: Error = error is MobileMirrorEncryptedActionEnvelopeError
                 ? MobileMirrorError.invalidSignature
                 : error
-            return errorResponse(responseError, identity: identity, authenticationFailure: true)
+            return errorResponse(responseError, identity: identity)
         }
 
         let action: MobileMirrorAction
@@ -326,11 +315,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             ) {
                 return auditFailure
             }
-            return errorResponse(
-                MobileMirrorError.invalidAction,
-                identity: identity,
-                authenticationFailure: true
-            )
+            return errorResponse(MobileMirrorError.invalidAction, identity: identity)
         }
 
         do {
@@ -344,10 +329,8 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             return .response(.json(MobileMirrorActionResponse.success(
                 snapshot: responseSnapshot
             )))
-        } catch is CancellationError {
-            return .response(.error("Local request timed out.", status: 504))
         } catch {
-            return errorResponse(error, identity: identity, authenticationFailure: true)
+            return errorResponse(error, identity: identity)
         }
     }
 
@@ -360,10 +343,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             try await rejectionAuditor(reason, channelID, identity)
             return nil
         } catch {
-            return .response(.error(
-                currentLocalization().text("mobile.mirror.audit.unavailable"),
-                status: 503
-            ))
+            return respond(.auditUnavailable, identity: nil)
         }
     }
 
@@ -375,6 +355,8 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             return .invalidSignature
         case MobileMirrorError.replayDetected:
             return .replayDetected
+        case MobileMirrorError.clockSkew:
+            return .clockSkew
         case MobileMirrorError.sessionExpired:
             return .sessionExpired
         default:
@@ -391,21 +373,18 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         guard request.method == "GET" else { return methodNotAllowed() }
         let isWebSocket = request.headers["upgrade"]?.lowercased() == "websocket"
         if isWebSocket, request.origin != baseURL {
-            return rejected(
-                .error("Invalid terminal origin.", status: 403),
-                identity: identity
-            )
+            return respond(.invalidTerminalOrigin, identity: identity)
         }
         let terminalSessionID = Self.terminalSessionID(from: request.path)
         if isWebSocket, request.path != "/ws", terminalSessionID == nil {
-            return .response(.error("Not found.", status: 404))
+            return respond(.notFound, identity: nil)
         }
 
         if let surfaceID = terminalSessionID {
             guard UUID(uuidString: surfaceID) != nil,
                   let route = routeRegistry.route(forSurfaceID: surfaceID),
                   let credentials = try? authority.credentials(cookie: cookie) else {
-                return .response(.error("Terminal stream is unavailable.", status: 404))
+                return respond(.missingTerminalStream, identity: nil)
             }
             return .proxy(MobileMirrorProxyTarget(
                 port: route.port,
@@ -417,7 +396,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
 
         guard request.path == "/ws"
                 || MobileMirrorStaticAssets.allowedPaths.contains(request.path) else {
-            return .response(.error("Not found.", status: 404))
+            return respond(.notFound, identity: nil)
         }
         if request.path != "/ws", let staticAssetEndpoint {
             return .proxy(MobileMirrorProxyTarget(
@@ -430,10 +409,10 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         let route = selectedSurfaceID.flatMap(routeRegistry.route(forSurfaceID:))
             ?? routeRegistry.defaultRoute()
         guard let route else {
-            return .response(.error("No local terminal stream is available.", status: 503))
+            return respond(.noTerminalStream, identity: nil)
         }
         guard let credentials = try? authority.credentials(cookie: cookie) else {
-            return .response(.error(MobileMirrorError.sessionExpired.localizedDescription, status: 401))
+            return errorResponse(MobileMirrorError.sessionExpired)
         }
         let rewrittenPath = request.path == "/ws" ? "/ws" : request.target
         return .proxy(MobileMirrorProxyTarget(
@@ -487,46 +466,27 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     }
 
     private func methodNotAllowed() -> MobileMirrorHTTPRouteResult {
-        .response(.error("Method not allowed.", status: 400))
+        respond(.malformedRequest, identity: nil)
     }
 
+    /// Scores against the limiter only when a caller passes the identity and
+    /// the contract classifies the failure as part of a credential search.
     private func errorResponse(
         _ error: Error,
-        identity: MobileMirrorClientIdentity? = nil,
-        authenticationFailure: Bool = false
+        identity: MobileMirrorClientIdentity? = nil
     ) -> MobileMirrorHTTPRouteResult {
-        let status: Int
-        switch error {
-        case MobileMirrorError.invalidPairingToken,
-             MobileMirrorError.invalidSignature:
-            status = 403
-        case MobileMirrorError.replayDetected:
-            status = 409
-        case MobileMirrorError.pairingExpired,
-             MobileMirrorError.sessionExpired:
-            status = 401
-        case MobileMirrorError.invalidAction,
-             MobileMirrorError.invalidProjectName:
-            status = 400
-        case MobileMirrorError.projectAlreadyExists:
-            status = 409
-        case MobileMirrorError.authorizationDenied:
-            status = 403
-        default:
-            status = 503
+        respond(MobileMirrorFailure(error), identity: identity)
+    }
+
+    private func respond(
+        _ failure: MobileMirrorFailure,
+        identity: MobileMirrorClientIdentity?
+    ) -> MobileMirrorHTTPRouteResult {
+        let response = failure.response(using: currentLocalization())
+        guard failure.countsAsAuthenticationFailure, let identity else {
+            return .response(response)
         }
-        let responseCode = error as? MobileMirrorError == .replayDetected
-            ? "replay-detected"
-            : nil
-        let response = MobileMirrorHTTPResponse.error(
-            error.localizedDescription,
-            status: status,
-            code: responseCode
-        )
-        if authenticationFailure, responseCode == nil, let identity {
-            return rejected(response, identity: identity)
-        }
-        return .response(response)
+        return rejected(response, identity: identity)
     }
 
     private func admitPreAuthentication(identity: MobileMirrorClientIdentity) -> Bool {
@@ -552,7 +512,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     }
 
     private func rateLimited() -> MobileMirrorHTTPRouteResult {
-        .response(.error("Too many local requests.", status: 429))
+        .response(MobileMirrorFailure.rateLimited.response(using: currentLocalization()))
     }
 
     private static func htmlEscaped(_ value: String) -> String {

@@ -28,6 +28,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
         MobileMirrorHTTPRequest,
         MobileMirrorClientIdentity
     ) async -> MobileMirrorHTTPRouteResult
+    typealias LocalizationProvider = @Sendable () -> MobileMirrorWebLocalization
 
     static let maximumConnections = 16
     static let loopbackAddress = "127.0.0.1"
@@ -46,6 +47,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
     private let requestTimeout: TimeInterval
     private let maximumPendingConnections: Int
     private let monotonicNow: @Sendable () -> TimeInterval
+    private let localization: LocalizationProvider
     private let listenerQueue = DispatchQueue(label: "dev.cocxy.mobile.listener")
     private let workerQueue = DispatchQueue(
         label: "dev.cocxy.mobile.connections",
@@ -68,6 +70,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
         monotonicNow: @escaping @Sendable () -> TimeInterval = {
             ProcessInfo.processInfo.systemUptime
         },
+        localization: @escaping LocalizationProvider = { .english },
         routeHandler: @escaping RouteHandler
     ) {
         self.requestedPort = requestedPort
@@ -80,6 +83,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
         self.maximumPendingConnections = max(1, connectionLimits.maximumTotal)
         self.connectionPolicy = MobileMirrorConnectionPolicy(limits: connectionLimits)
         self.monotonicNow = monotonicNow
+        self.localization = localization
         self.routeHandler = routeHandler
     }
 
@@ -191,10 +195,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
             stateLock.unlock()
             guard decision == .accepted else {
                 _ = Self.sendAll(
-                    MobileMirrorHTTPResponse.error(
-                        "Too many local requests.",
-                        status: 429
-                    ).encoded(),
+                    failureResponse(.rateLimited).encoded(),
                     to: descriptor
                 )
                 Darwin.shutdown(descriptor, SHUT_RDWR)
@@ -244,10 +245,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
                     relayedRemoteAddress = address
                     consumedRelayPreamble = true
                     guard admitRelayedConnection(descriptor, address: address) else {
-                        respond(
-                            .error("Too many local requests.", status: 429),
-                            to: descriptor
-                        )
+                        respond(failureResponse(.rateLimited), to: descriptor)
                         return
                     }
                 }
@@ -273,7 +271,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
                 )
             }
         } catch {
-            respond(.error("Invalid local request.", status: 400), to: descriptor)
+            respond(failureResponse(.malformedRequest), to: descriptor)
         }
     }
 
@@ -325,10 +323,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
                 case .result(let result):
                     complete(request: request, result: result, descriptor: descriptor)
                 case .timedOut:
-                    respond(
-                        .error("Local request timed out.", status: 504),
-                        to: descriptor
-                    )
+                    respond(failureResponse(.timedOut), to: descriptor)
                 }
             }
         }
@@ -378,6 +373,10 @@ final class MobileMirrorGateway: @unchecked Sendable {
         }
     }
 
+    private func failureResponse(_ failure: MobileMirrorFailure) -> MobileMirrorHTTPResponse {
+        failure.response(using: localization())
+    }
+
     private func respond(_ response: MobileMirrorHTTPResponse, to descriptor: Int32) {
         _ = Self.sendAll(response.encoded(), to: descriptor)
         finish(descriptor)
@@ -403,7 +402,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
     ) {
         let upstream = Darwin.socket(AF_INET, SOCK_STREAM, 0)
         guard upstream >= 0 else {
-            respond(.error("Terminal stream is unavailable.", status: 503), to: client)
+            respond(failureResponse(.terminalProxyUnavailable), to: client)
             return
         }
         configureClientSocket(upstream)
@@ -420,7 +419,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
         guard connected == 0,
               Self.sendAll(rewrittenRequest(request, target: target), to: upstream) else {
             Darwin.close(upstream)
-            respond(.error("Terminal stream is unavailable.", status: 503), to: client)
+            respond(failureResponse(.terminalProxyUnavailable), to: client)
             return
         }
 
@@ -435,7 +434,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
         guard pumpDescriptors.allSatisfy({ $0 >= 0 }) else {
             pumpDescriptors.filter { $0 >= 0 }.forEach { Darwin.close($0) }
             Darwin.close(upstream)
-            respond(.error("Terminal stream is unavailable.", status: 503), to: client)
+            respond(failureResponse(.terminalProxyUnavailable), to: client)
             return
         }
         pumpDescriptors.forEach { _ = fcntl($0, F_SETFD, FD_CLOEXEC) }

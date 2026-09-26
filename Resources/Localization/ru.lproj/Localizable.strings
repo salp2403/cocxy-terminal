@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "Сеанс терминала не выбран";
 "mobile.web.error.signedInputUnavailable" = "Подписанный мобильный ввод недоступен";
 "mobile.web.error.stateUnavailable" = "Мобильное состояние недоступно";
+"mobile.web.error.rateLimited" = "Слишком много запросов. Подождите немного и повторите попытку.";
+"mobile.web.error.timedOut" = "Mac слишком долго не отвечал.";
+"mobile.web.error.clockSkew" = "Часы этого телефона не совпадают с часами Mac. Включите автоматическую настройку даты и времени и повторите попытку.";
+"mobile.web.error.invalidRequest" = "Не удалось обработать запрос.";
 "mobile.web.notification.agentUpdate" = "Обновление агента";
 "mobile.web.notification.approvalRequested" = "Запрошено подтверждение";
 "mobile.web.notification.stateChanged" = "Состояние агента изменилось";

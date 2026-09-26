@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "未选择终端会话";
 "mobile.web.error.signedInputUnavailable" = "签名的移动输入不可用";
 "mobile.web.error.stateUnavailable" = "移动状态不可用";
+"mobile.web.error.rateLimited" = "请求过多。请稍候再试。";
+"mobile.web.error.timedOut" = "Mac 响应时间过长。";
+"mobile.web.error.clockSkew" = "此手机的时钟与 Mac 不一致。请开启自动设置日期与时间，然后重试。";
+"mobile.web.error.invalidRequest" = "无法处理该请求。";
 "mobile.web.notification.agentUpdate" = "智能体更新";
 "mobile.web.notification.approvalRequested" = "已请求审批";
 "mobile.web.notification.stateChanged" = "智能体状态已更改";

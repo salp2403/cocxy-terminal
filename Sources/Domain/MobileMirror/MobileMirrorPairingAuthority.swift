@@ -392,10 +392,16 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
                 throw MobileMirrorError.replayDetected
             }
             let nonceData = withUnsafeBytes(of: nonceUUID.uuid) { Data($0) }
-            guard current.replayTracker.isAllowed(
+            switch current.replayTracker.admit(
                 timestamp: timestampValue,
-                nonce: nonceData
-            ) else {
+                nonce: nonceData,
+                now: UInt64(max(0, now.timeIntervalSince1970))
+            ) {
+            case .allowed:
+                break
+            case .stale:
+                throw MobileMirrorError.clockSkew
+            case .rejected:
                 throw MobileMirrorError.replayDetected
             }
             current.inputSequenceWindow = sequenceWindow

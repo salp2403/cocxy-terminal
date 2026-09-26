@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "Nie wybrano sesji terminala";
 "mobile.web.error.signedInputUnavailable" = "Podpisane wejście mobilne jest niedostępne";
 "mobile.web.error.stateUnavailable" = "Stan mobilny jest niedostępny";
+"mobile.web.error.rateLimited" = "Zbyt wiele żądań. Poczekaj chwilę i spróbuj ponownie.";
+"mobile.web.error.timedOut" = "Mac zbyt długo nie odpowiadał.";
+"mobile.web.error.clockSkew" = "Zegar tego telefonu nie zgadza się z zegarem Maca. Włącz automatyczną datę i godzinę, a następnie spróbuj ponownie.";
+"mobile.web.error.invalidRequest" = "Nie udało się przetworzyć żądania.";
 "mobile.web.notification.agentUpdate" = "Aktualizacja agenta";
 "mobile.web.notification.approvalRequested" = "Zażądano zatwierdzenia";
 "mobile.web.notification.stateChanged" = "Stan agenta uległ zmianie";

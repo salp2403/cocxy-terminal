@@ -160,11 +160,13 @@ final class MobileMirrorCoordinator: ObservableObject {
             transport: transport,
             staticAssetEndpoint: staticAssetEndpoint
         )
+        let localization = Self.gatewayLocalization(router)
         let gateway = MobileMirrorGateway(
-            clientIdentityLabel: "SSH \(target.destination)"
+            clientIdentityLabel: "SSH \(target.destination)",
+            localization: localization
         ) { [weak router] request, identity in
             guard let router else {
-                return .response(.error("Mobile mirror is unavailable.", status: 503))
+                return .response(MobileMirrorFailure.unexpected.response(using: localization()))
             }
             return await router.route(request: request, identity: identity)
         }
@@ -238,11 +240,13 @@ final class MobileMirrorCoordinator: ObservableObject {
             transport: transport,
             staticAssetEndpoint: staticAssetEndpoint
         )
+        let localization = Self.gatewayLocalization(router)
         let gateway = MobileMirrorGateway(
-            trustedRelaySecret: preambleSecret
+            trustedRelaySecret: preambleSecret,
+            localization: localization
         ) { [weak router] request, identity in
             guard let router else {
-                return .response(.error("Mobile mirror is unavailable.", status: 503))
+                return .response(MobileMirrorFailure.unexpected.response(using: localization()))
             }
             return await router.route(request: request, identity: identity)
         }
@@ -319,6 +323,13 @@ final class MobileMirrorCoordinator: ObservableObject {
             "mobile.mirror.error.unavailable",
             fallback: "Mobile mirror is unavailable."
         )
+    }
+
+    private static func gatewayLocalization(
+        _ router: MobileMirrorRequestRouter
+    ) -> MobileMirrorGateway.LocalizationProvider {
+        let initial = router.currentLocalization()
+        return { [weak router] in router?.currentLocalization() ?? initial }
     }
 
     private func makePairingRouter(

@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "ターミナルセッションが選択されていません";
 "mobile.web.error.signedInputUnavailable" = "署名付きモバイル入力を利用できません";
 "mobile.web.error.stateUnavailable" = "モバイル状態を利用できません";
+"mobile.web.error.rateLimited" = "リクエストが多すぎます。しばらく待ってからもう一度お試しください。";
+"mobile.web.error.timedOut" = "Macの応答に時間がかかりすぎました。";
+"mobile.web.error.clockSkew" = "このスマートフォンの時計がMacと一致しません。日付と時刻の自動設定をオンにしてから、もう一度お試しください。";
+"mobile.web.error.invalidRequest" = "リクエストを処理できませんでした。";
 "mobile.web.notification.agentUpdate" = "エージェントの更新";
 "mobile.web.notification.approvalRequested" = "承認が要求されました";
 "mobile.web.notification.stateChanged" = "エージェントの状態が変更されました";

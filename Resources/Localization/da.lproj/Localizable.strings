@@ -3603,6 +3603,10 @@
 "mobile.web.error.noTerminal" = "Ingen terminalsession er valgt";
 "mobile.web.error.signedInputUnavailable" = "Signeret mobilinput er ikke tilgængeligt";
 "mobile.web.error.stateUnavailable" = "Mobilstatus er ikke tilgængelig";
+"mobile.web.error.rateLimited" = "For mange anmodninger. Vent et øjeblik, og prøv igen.";
+"mobile.web.error.timedOut" = "Mac-computeren var for længe om at svare.";
+"mobile.web.error.clockSkew" = "Telefonens ur stemmer ikke overens med Mac-computeren. Slå automatisk dato og tid til, og prøv igen.";
+"mobile.web.error.invalidRequest" = "Anmodningen kunne ikke behandles.";
 "mobile.web.notification.agentUpdate" = "Agentopdatering";
 "mobile.web.notification.approvalRequested" = "Godkendelse anmodet";
 "mobile.web.notification.stateChanged" = "Agentstatus ændret";

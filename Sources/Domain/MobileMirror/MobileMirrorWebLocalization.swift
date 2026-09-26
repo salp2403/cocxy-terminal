@@ -60,6 +60,8 @@ struct MobileMirrorWebLocalization: Equatable, Sendable {
         ("mobile.mirror.status.confirmation", "Desktop confirmation required"),
         ("mobile.mirror.status.denied", "Pairing denied"),
         ("mobile.mirror.audit.unavailable", "The local audit log is unavailable."),
+        ("mobile.mirror.error.unavailable", "Mobile mirror is unavailable."),
+        ("mobile.mirror.error.noPrivateNetwork", "No private local network is available."),
         ("mobile.web.projects.open", "Open projects"),
         ("mobile.web.notifications.enable", "Enable local notifications"),
         ("mobile.web.notifications.enabled", "Local notifications enabled"),
@@ -100,5 +102,12 @@ struct MobileMirrorWebLocalization: Equatable, Sendable {
         ("mobile.web.error.actionRejected", "Mobile action was rejected"),
         ("mobile.web.error.noTerminal", "No terminal session is selected"),
         ("mobile.web.error.stateUnavailable", "Mobile state is unavailable"),
+        ("mobile.web.error.rateLimited", "Too many requests. Wait a moment and try again."),
+        ("mobile.web.error.timedOut", "The Mac took too long to respond."),
+        (
+            "mobile.web.error.clockSkew",
+            "This phone's clock doesn't match the Mac. Turn on automatic date and time, then try again."
+        ),
+        ("mobile.web.error.invalidRequest", "The request could not be processed."),
     ]
 }
