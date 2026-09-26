@@ -3605,6 +3605,7 @@
 "mobile.web.direction.right" = "Вправо";
 "mobile.web.direction.up" = "Вверх";
 "mobile.web.error.actionRejected" = "Мобильное действие отклонено";
+"mobile.web.error.macUnreachable" = "Не удаётся подключиться к Mac";
 "mobile.web.error.noTerminal" = "Сеанс терминала не выбран";
 "mobile.web.error.signedInputUnavailable" = "Подписанный мобильный ввод недоступен";
 "mobile.web.error.stateUnavailable" = "Мобильное состояние недоступно";

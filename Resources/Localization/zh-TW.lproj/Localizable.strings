@@ -3605,6 +3605,7 @@
 "mobile.web.direction.right" = "右";
 "mobile.web.direction.up" = "上";
 "mobile.web.error.actionRejected" = "行動操作遭拒";
+"mobile.web.error.macUnreachable" = "無法連線到 Mac";
 "mobile.web.error.noTerminal" = "未選取終端機工作階段";
 "mobile.web.error.signedInputUnavailable" = "已簽署的行動輸入無法使用";
 "mobile.web.error.stateUnavailable" = "行動狀態無法使用";

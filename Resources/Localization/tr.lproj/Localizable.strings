@@ -3605,6 +3605,7 @@
 "mobile.web.direction.right" = "Sağ";
 "mobile.web.direction.up" = "Yukarı";
 "mobile.web.error.actionRejected" = "Mobil işlem reddedildi";
+"mobile.web.error.macUnreachable" = "Mac'e ulaşılamıyor";
 "mobile.web.error.noTerminal" = "Terminal oturumu seçilmedi";
 "mobile.web.error.signedInputUnavailable" = "İmzalı mobil giriş kullanılamıyor";
 "mobile.web.error.stateUnavailable" = "Mobil durum kullanılamıyor";

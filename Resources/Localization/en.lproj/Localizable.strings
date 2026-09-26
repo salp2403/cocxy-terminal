@@ -3605,6 +3605,7 @@
 "mobile.web.direction.right" = "Right";
 "mobile.web.direction.up" = "Up";
 "mobile.web.error.actionRejected" = "Mobile action was rejected";
+"mobile.web.error.macUnreachable" = "Unable to reach the Mac";
 "mobile.web.error.noTerminal" = "No terminal session is selected";
 "mobile.web.error.signedInputUnavailable" = "Signed mobile input is unavailable";
 "mobile.web.error.stateUnavailable" = "Mobile state is unavailable";

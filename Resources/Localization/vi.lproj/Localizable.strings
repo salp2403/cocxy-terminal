@@ -3605,6 +3605,7 @@
 "mobile.web.direction.right" = "Phải";
 "mobile.web.direction.up" = "Lên";
 "mobile.web.error.actionRejected" = "Thao tác di động đã bị từ chối";
+"mobile.web.error.macUnreachable" = "Không thể kết nối với máy Mac";
 "mobile.web.error.noTerminal" = "Chưa chọn phiên dòng lệnh";
 "mobile.web.error.signedInputUnavailable" = "Không thể dùng dữ liệu nhập di động đã ký";
 "mobile.web.error.stateUnavailable" = "Không thể tải trạng thái di động";

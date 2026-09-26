@@ -100,6 +100,7 @@ struct MobileMirrorWebLocalization: Equatable, Sendable {
         ("mobile.web.approval.title", "Approval"),
         ("mobile.web.error.signedInputUnavailable", "Signed mobile input is unavailable"),
         ("mobile.web.error.actionRejected", "Mobile action was rejected"),
+        ("mobile.web.error.macUnreachable", "Unable to reach the Mac"),
         ("mobile.web.error.noTerminal", "No terminal session is selected"),
         ("mobile.web.error.stateUnavailable", "Mobile state is unavailable"),
         ("mobile.web.error.rateLimited", "Too many requests. Wait a moment and try again."),

@@ -3605,6 +3605,7 @@
 "mobile.web.direction.right" = "Droite";
 "mobile.web.direction.up" = "Haut";
 "mobile.web.error.actionRejected" = "L’action mobile a été refusée";
+"mobile.web.error.macUnreachable" = "Impossible de joindre le Mac";
 "mobile.web.error.noTerminal" = "Aucune session de terminal n’est sélectionnée";
 "mobile.web.error.signedInputUnavailable" = "La saisie mobile signée n’est pas disponible";
 "mobile.web.error.stateUnavailable" = "L’état mobile n’est pas disponible";

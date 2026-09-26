@@ -3605,6 +3605,7 @@
 "mobile.web.direction.right" = "右";
 "mobile.web.direction.up" = "上";
 "mobile.web.error.actionRejected" = "移动操作已被拒绝";
+"mobile.web.error.macUnreachable" = "无法连接到 Mac";
 "mobile.web.error.noTerminal" = "未选择终端会话";
 "mobile.web.error.signedInputUnavailable" = "签名的移动输入不可用";
 "mobile.web.error.stateUnavailable" = "移动状态不可用";

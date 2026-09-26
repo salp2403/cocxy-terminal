@@ -3605,6 +3605,7 @@
 "mobile.web.direction.right" = "右";
 "mobile.web.direction.up" = "上";
 "mobile.web.error.actionRejected" = "モバイル操作は拒否されました";
+"mobile.web.error.macUnreachable" = "Mac に接続できません";
 "mobile.web.error.noTerminal" = "ターミナルセッションが選択されていません";
 "mobile.web.error.signedInputUnavailable" = "署名付きモバイル入力を利用できません";
 "mobile.web.error.stateUnavailable" = "モバイル状態を利用できません";
