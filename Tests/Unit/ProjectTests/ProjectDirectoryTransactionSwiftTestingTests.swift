@@ -69,6 +69,37 @@ struct ProjectDirectoryTransactionSwiftTestingTests {
         #expect(try stagingEntries(in: rootURL).isEmpty)
     }
 
+    @Test("a publication rejected after the creation inventory still cleans its staging directory")
+    func rejectedPublicationCleansInventoriedStaging() throws {
+        let rootURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        let hooks = ProjectDirectoryTransactionHooks(beforePublish: { context in
+            try FileManager.default.createDirectory(
+                at: context.destinationURL,
+                withIntermediateDirectories: false
+            )
+        })
+        let transaction = try ProjectDirectoryTransaction.begin(
+            in: ProjectDirectoryRoot.open(rootURL),
+            destinationName: "Demo",
+            hooks: hooks
+        )
+        try createGitDirectory(in: transaction)
+        try "created".write(
+            to: try transaction.workingDirectory.displayURL.appendingPathComponent(".git/HEAD"),
+            atomically: false,
+            encoding: .utf8
+        )
+
+        do {
+            _ = try transaction.publish()
+            Issue.record("Publication should fail when the destination exists")
+        } catch ProjectDirectoryError.destinationExists {
+        }
+        #expect(throws: Never.self) { try transaction.cleanup() }
+        #expect(try stagingEntries(in: rootURL).isEmpty)
+    }
+
     @Test("a staging symlink is never published or cleaned through")
     func stagingSymlinkSwapFailsClosed() throws {
         let rootURL = try temporaryDirectory()
