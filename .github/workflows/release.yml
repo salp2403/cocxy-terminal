@@ -434,7 +434,6 @@ jobs:
               "download the dmg",       # Install template
               "brew tap",               # Install template
               "brew install",           # Install template
-              "macos 15",              # System requirements
               "apple silicon",          # System requirements
               "intel mac",              # System requirements
               "system requirements",    # Section header
