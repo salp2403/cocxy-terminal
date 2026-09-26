@@ -277,13 +277,13 @@ final class ProjectDirectoryTransaction {
         try hooks.beforePublish?(context())
         try verifyStagingLink()
         try verifyRepositoryMetadata()
+        var createdEntries: Set<ProjectDirectoryFileIdentity> = []
+        try Self.collectEntryIdentities(of: stagingDescriptor, into: &createdEntries)
         if try root.childIdentity(named: destinationName) != nil {
             throw ProjectDirectoryError.destinationExists(
                 try root.displayPath(for: destinationName)
             )
         }
-        var createdEntries: Set<ProjectDirectoryFileIdentity> = []
-        try Self.collectEntryIdentities(of: stagingDescriptor, into: &createdEntries)
         let result = stagingName.withCString { source in
             destinationName.withCString { destination in
                 Darwin.renameatx_np(
@@ -458,6 +458,16 @@ final class ProjectDirectoryTransaction {
             throw ProjectDirectoryError.systemCallFailed(
                 operation: "duplicate project staging directory",
                 code: errno
+            )
+        }
+        // A duplicate shares the directory offset, which an earlier
+        // enumeration of the same descriptor leaves at the end.
+        guard Darwin.lseek(duplicate, 0, SEEK_SET) == 0 else {
+            let code = errno
+            Darwin.close(duplicate)
+            throw ProjectDirectoryError.systemCallFailed(
+                operation: "rewind project staging directory",
+                code: code
             )
         }
         guard let stream = Darwin.fdopendir(duplicate) else {
