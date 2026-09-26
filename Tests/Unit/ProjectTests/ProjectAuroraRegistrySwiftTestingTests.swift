@@ -135,10 +135,13 @@ struct ProjectAuroraRegistrySwiftTestingTests {
         #expect(diagnostic.discardedRecordCount == 1)
         let expectedMessage = "No se pudieron leer algunos metadatos de proyectos. Cocxy guardó los registros rechazados (1) en un archivo privado de recuperación."
         let sidebar = AuroraSidebarHost(controller: controller).makeSidebarView()
-        let sidebarSurfaceStrings = renderedViewStrings(sidebar.body)
+        let mountedSection = try #require(firstReflectedValue(
+            of: Design.AuroraProjectRegistrySection.self,
+            in: sidebar.body
+        ))
 
         #expect(sidebar.projectRegistryRecoveryMessage == expectedMessage)
-        #expect(sidebarSurfaceStrings.contains(expectedMessage))
+        #expect(renderedViewStrings(mountedSection.body).contains(expectedMessage))
     }
 
     private func makeSandbox() throws -> URL {
@@ -160,4 +163,21 @@ private func renderedViewStrings(
     return mirror.children.flatMap {
         renderedViewStrings($0.value, depth: depth + 1)
     }
+}
+
+private func firstReflectedValue<Value>(
+    of type: Value.Type,
+    in value: Any,
+    depth: Int = 0
+) -> Value? {
+    if let match = value as? Value { return match }
+    guard depth < 32 else { return nil }
+    let mirror = Mirror(reflecting: value)
+    guard mirror.displayStyle != .class else { return nil }
+    for child in mirror.children {
+        if let match = firstReflectedValue(of: type, in: child.value, depth: depth + 1) {
+            return match
+        }
+    }
+    return nil
 }

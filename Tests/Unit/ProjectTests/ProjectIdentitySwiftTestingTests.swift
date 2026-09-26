@@ -122,7 +122,7 @@ struct ProjectIdentitySwiftTestingTests {
         try FileManager.default.createDirectory(at: unrelated, withIntermediateDirectories: true)
         let resolver = CachedProjectResolver(
             rootResolver: CountingRootResolver(),
-            knownProjectRoots: { [home, registered] },
+            knownProjectRoots: { [sandbox, home, registered] },
             homeDirectory: home
         )
 
