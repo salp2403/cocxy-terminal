@@ -213,13 +213,11 @@ final class PTYDaemonProcessMessageBuffer: @unchecked Sendable {
         }
     }
 
+    /// Replies and events already completed stay deliverable until `reset()`:
+    /// a helper that answers and exits at once must not lose that answer to
+    /// whichever thread happens to observe end-of-stream first.
     private func disconnect(_ state: inout State) {
         state.pendingBytes.removeAll(keepingCapacity: false)
-        state.responses.removeAll(keepingCapacity: false)
-        state.responseBytes = 0
-        state.events.removeAll(keepingCapacity: false)
-        state.eventHead = 0
-        state.eventBytes = 0
         state.disconnected = true
     }
 

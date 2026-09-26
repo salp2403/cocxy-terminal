@@ -785,13 +785,7 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(connection.requests.map(\.command) == [.hello, .surfaceCreate])
     }
 
-    @Test(
-        "process connection reuses one helper process for multiple requests",
-        .disabled(
-            if: ProcessInfo.processInfo.environment["CI"] != nil,
-            "Spawns a real /bin/sh helper; CI runners intermittently drop the transport within milliseconds of the first write, which no client-side budget can absorb."
-        )
-    )
+    @Test("process connection reuses one helper process for multiple requests")
     func processConnectionReusesHelperProcess() throws {
         let tempDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-ptydaemon-connection-\(UUID().uuidString)", isDirectory: true)
@@ -841,13 +835,7 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(starts.count == 1)
     }
 
-    @Test(
-        "process connection queues daemon events received before a response",
-        .disabled(
-            if: ProcessInfo.processInfo.environment["CI"] != nil,
-            "Spawns a real /bin/sh helper; CI runners intermittently drop the transport within milliseconds of the first write, which no client-side budget can absorb."
-        )
-    )
+    @Test("process connection queues daemon events received before a response")
     func processConnectionQueuesDaemonEventsReceivedBeforeResponse() throws {
         let tempDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-ptydaemon-events-\(UUID().uuidString)", isDirectory: true)
@@ -940,6 +928,18 @@ struct PTYDaemonClientSwiftTestingTests {
         buffer.markDisconnected(generation: oldGeneration)
 
         #expect(buffer.isDisconnected == false)
+    }
+
+    @Test("replies and events completed before the helper exits stay deliverable")
+    func messageBufferKeepsCompletedMessagesPastEndOfStream() {
+        let buffer = PTYDaemonProcessMessageBuffer()
+        let generation = buffer.reset()
+        buffer.ingest(Data(#"{"event":"surface_closed","surfaceID":"s"}\#n{"id":"bye","ok":true}\#n"#.utf8), generation: generation)
+        buffer.markDisconnected(generation: generation)
+
+        #expect(buffer.isDisconnected)
+        #expect(buffer.waitForResponse(id: "bye", timeout: 0)?.ok == true)
+        #expect(buffer.receiveEvent(timeout: 0)?.event == .surfaceClosed)
     }
 
     @Test("real helper process connection initializes, writes, streams output and frames")
