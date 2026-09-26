@@ -273,16 +273,24 @@ final class LoopbackConnectionProbe: @unchecked Sendable {
     }
 }
 
-/// Loopback stand-in for the gateway: answers one relayed request with a
-/// fixed body, then half-closes the socket the way the gateway does on stop.
+/// Loopback stand-in for an upstream server: answers one request with fixed
+/// bytes, then half-closes the socket the way the gateway does on stop.
 final class LoopbackBulkResponder: @unchecked Sendable {
     let port: UInt16
 
     private let listener: Int32
-    private let payload: Data
+    private let response: Data
     private let written = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var received = Data()
 
-    init(payload: Data) throws {
+    convenience init(payload: Data) throws {
+        let head = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n"
+            + "Content-Length: \(payload.count)\r\nConnection: close\r\n\r\n"
+        try self.init(rawResponse: Data(head.utf8) + payload)
+    }
+
+    init(rawResponse: Data) throws {
         let descriptor = Darwin.socket(AF_INET, SOCK_STREAM, 0)
         guard descriptor >= 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
         var address = sockaddr_in()
@@ -303,7 +311,7 @@ final class LoopbackBulkResponder: @unchecked Sendable {
         }
         listener = descriptor
         port = UInt16(bigEndian: address.sin_port)
-        self.payload = payload
+        response = rawResponse
         Thread.detachNewThread { [self] in serveOnce() }
     }
 
@@ -320,20 +328,27 @@ final class LoopbackBulkResponder: @unchecked Sendable {
         }
     }
 
+    var receivedRequest: String {
+        lock.lock()
+        defer { lock.unlock() }
+        return String(decoding: received, as: UTF8.self)
+    }
+
     private func serveOnce() {
         let client = Darwin.accept(listener, nil, nil)
         guard client >= 0 else { return }
-        var received = Data()
+        var request = Data()
         var buffer = [UInt8](repeating: 0, count: 4_096)
-        while received.range(of: Data("\r\n\r\n".utf8)) == nil {
+        while request.range(of: Data("\r\n\r\n".utf8)) == nil {
             let count = Darwin.recv(client, &buffer, buffer.count, 0)
             if count < 0, errno == EINTR { continue }
             guard count > 0 else { break }
-            received.append(buffer, count: count)
+            request.append(buffer, count: count)
         }
-        let head = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n"
-            + "Content-Length: \(payload.count)\r\nConnection: close\r\n\r\n"
-        if MobileMirrorGateway.sendAll(Data(head.utf8) + payload, to: client) {
+        lock.lock()
+        received = request
+        lock.unlock()
+        if MobileMirrorGateway.sendAll(response, to: client) {
             Darwin.shutdown(client, SHUT_RDWR)
             written.signal()
         }
