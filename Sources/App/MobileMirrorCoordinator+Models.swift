@@ -8,8 +8,29 @@ enum MobileMirrorServiceState: Equatable {
     case awaitingConfirmation
     case active
     case denied
-    case unavailable(String)
-    case failed(String)
+    case unavailable(MobileMirrorStatusMessage)
+    case failed(MobileMirrorStatusMessage)
+}
+
+/// Panel text for an unavailable or failed mirror. It keeps how it was
+/// produced so the panel can render it in the current app language.
+struct MobileMirrorStatusMessage: Equatable {
+    private let render: (AppLocalizer) -> String
+    /// The text in the language that was active when the status was set.
+    let text: String
+
+    init(using localizer: AppLocalizer, render: @escaping (AppLocalizer) -> String) {
+        self.render = render
+        text = render(localizer)
+    }
+
+    func text(using localizer: AppLocalizer) -> String {
+        render(localizer)
+    }
+
+    static func == (lhs: MobileMirrorStatusMessage, rhs: MobileMirrorStatusMessage) -> Bool {
+        lhs.text == rhs.text
+    }
 }
 
 extension MobileMirrorCoordinator {

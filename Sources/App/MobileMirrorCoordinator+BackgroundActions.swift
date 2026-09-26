@@ -28,10 +28,10 @@ extension MobileMirrorCoordinator {
                 ))
             } catch {
                 stopTransport(revoke: true)
-                state = .failed(mobileMirrorLocalizer.string(
-                    "mobile.mirror.audit.unavailable",
-                    fallback: "The local audit log is unavailable."
-                ))
+                logStatusError(error)
+                state = .failed(MobileMirrorStatusMessage(using: mobileMirrorLocalizer) {
+                    $0.string("mobile.mirror.audit.unavailable", fallback: "The local audit log is unavailable.")
+                })
                 return
             }
 

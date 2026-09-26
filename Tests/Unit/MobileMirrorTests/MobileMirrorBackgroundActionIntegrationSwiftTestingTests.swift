@@ -242,9 +242,8 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         )
 
         #expect(await eventually {
-            context.coordinator.state == .failed(
-                "El registro de auditoría local no está disponible."
-            )
+            guard case .failed(let message) = context.coordinator.state else { return false }
+            return message.text == "El registro de auditoría local no está disponible."
         })
     }
 
@@ -264,9 +263,19 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
 
         context.coordinator.startPairing()
 
-        #expect(context.coordinator.state == .unavailable(
-            "Conecta un perfil SSH o usa el relay local."
-        ))
+        guard case .unavailable(let message) = context.coordinator.state else {
+            Issue.record("Pairing without an SSH target did not report an unavailable state")
+            return
+        }
+        #expect(message.text == "Conecta un perfil SSH o usa el relay local.")
+
+        let englishPanel = MobileMirrorView(
+            coordinator: context.coordinator,
+            localizer: AppLocalizer(languagePreference: .english, bundle: try #require(Bundle(url: localizationRoot)))
+        )
+        let panelText = reflectedStrings(englishPanel.body)
+        #expect(panelText.contains("Connect an SSH profile or use the local relay."))
+        #expect(!panelText.contains("Conecta un perfil SSH o usa el relay local."))
     }
 
     private func preparedProjectCreation(
@@ -530,4 +539,12 @@ private final class MobileMirrorEventCapture: @unchecked Sendable {
     func contains(_ value: String) -> Bool {
         lock.withLock { payloads.contains(where: { $0.contains(value) }) }
     }
+}
+
+private func reflectedStrings(_ value: Any, depth: Int = 0) -> [String] {
+    if let string = value as? String { return [string] }
+    guard depth < 40 else { return [] }
+    let mirror = Mirror(reflecting: value)
+    guard mirror.displayStyle != .class else { return [] }
+    return mirror.children.flatMap { reflectedStrings($0.value, depth: depth + 1) }
 }

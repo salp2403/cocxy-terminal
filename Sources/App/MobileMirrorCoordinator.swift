@@ -4,6 +4,7 @@
 import AppKit
 import Combine
 import Foundation
+import os.log
 
 typealias MobileMirrorProjectCreationConfirmation = @MainActor (
     String,
@@ -106,11 +107,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         if usesSSHTunnel {
             guard let targetID = selectedTunnelTargetID,
                   let selected = tunnelTargets.first(where: { $0.id == targetID }) else {
-                state = .unavailable(
-                    MobileMirrorTunnelError.noConnectedTarget.localizedDescription(
-                        using: mobileMirrorLocalizer
-                    )
-                )
+                state = .unavailable(localizedStatusError(MobileMirrorTunnelError.noConnectedTarget))
                 return
             }
             target = selected
@@ -128,9 +125,7 @@ final class MobileMirrorCoordinator: ObservableObject {
             guard self.tunnelLease == nil,
                   self.tunnelController.unresolvedLease == nil else {
                 self.state = .failed(
-                    MobileMirrorTunnelError.closureUnconfirmed.localizedDescription(
-                        using: self.mobileMirrorLocalizer
-                    )
+                    self.localizedStatusError(MobileMirrorTunnelError.closureUnconfirmed)
                 )
                 return
             }
@@ -217,9 +212,7 @@ final class MobileMirrorCoordinator: ObservableObject {
 
     private func openLocalPairingTransport(generation: UInt64) async {
         guard let publicAddress = relayManager.privateMobileMirrorAddress() else {
-            state = .unavailable(MobileMirrorLocalRelayError.noPrivateNetwork.localizedDescription(
-                using: mobileMirrorLocalizer
-            ))
+            state = .unavailable(localizedStatusError(MobileMirrorLocalRelayError.noPrivateNetwork))
             return
         }
         let staticAssetEndpoint: MobileMirrorStaticAssetEndpoint
@@ -298,8 +291,26 @@ final class MobileMirrorCoordinator: ObservableObject {
             ?? AppLocalizer(languagePreference: .system)
     }
 
-    func localizedStatusError(_ error: any Error) -> String {
-        let localizer = mobileMirrorLocalizer
+    func localizedStatusError(_ error: any Error) -> MobileMirrorStatusMessage {
+        logStatusError(error)
+        return MobileMirrorStatusMessage(using: mobileMirrorLocalizer) { localizer in
+            Self.statusText(for: error, using: localizer)
+        }
+    }
+
+    /// The raw error can name local paths and hosts, so it only reaches the private log.
+    func logStatusError(_ error: any Error) {
+        Self.statusLogger.error(
+            "Mobile mirror stopped: \(String(describing: error), privacy: .private)"
+        )
+    }
+
+    private static let statusLogger = Logger(
+        subsystem: "dev.cocxy.terminal",
+        category: "MobileMirror"
+    )
+
+    private static func statusText(for error: any Error, using localizer: AppLocalizer) -> String {
         if let relayError = error as? MobileMirrorLocalRelayError {
             return relayError.localizedDescription(using: localizer)
         }
@@ -502,9 +513,7 @@ final class MobileMirrorCoordinator: ObservableObject {
                    !targets.contains(where: { $0.id == lease.profileID }) {
                     stopTransport(revoke: true)
                     state = .unavailable(
-                        MobileMirrorTunnelError.noConnectedTarget.localizedDescription(
-                            using: mobileMirrorLocalizer
-                        )
+                        localizedStatusError(MobileMirrorTunnelError.noConnectedTarget)
                     )
                 }
             }
