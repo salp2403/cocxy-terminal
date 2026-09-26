@@ -203,6 +203,7 @@ struct MobileMirrorHTTPResponse: Equatable, Sendable {
         case 429: reason = "Too Many Requests"
         case 500: reason = "Internal Server Error"
         case 503: reason = "Service Unavailable"
+        case 504: reason = "Gateway Timeout"
         default: reason = "Response"
         }
         var resolvedHeaders = headers
