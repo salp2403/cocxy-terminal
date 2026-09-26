@@ -306,7 +306,9 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                 throw MobileMirrorError.sessionExpired
             }
         } catch {
-            if let auditFailure = await auditRejection(
+            let repeatsClockSkew = error as? MobileMirrorError == .clockSkew
+                && !authority.beginClockSkewEpisode(cookie: cookie)
+            if !repeatsClockSkew, let auditFailure = await auditRejection(
                 Self.rejectionReason(forValidationError: error),
                 channelID: expectedChannelID,
                 identity: identity

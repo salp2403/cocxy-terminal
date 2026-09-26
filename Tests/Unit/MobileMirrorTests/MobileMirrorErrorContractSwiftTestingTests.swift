@@ -125,7 +125,7 @@ struct MobileMirrorErrorContractSwiftTestingTests: MobileMirrorRouterTestSupport
         #expect(try Self.decode(revoked).code == "session-expired")
     }
 
-    @Test("a skewed phone clock gets actionable guidance instead of a replay alarm")
+    @Test("a skewed phone clock gets actionable guidance and one audit entry per episode")
     func skewedClockIsActionable() async throws {
         let paired = try PairedMirrorRouter.make(localization: webLocalization(.spanish)) { _ in
             .empty
@@ -139,11 +139,16 @@ struct MobileMirrorErrorContractSwiftTestingTests: MobileMirrorRouterTestSupport
             #expect(reply.payload.error == "El reloj de este teléfono no coincide con el del Mac. "
                 + "Activa la fecha y la hora automáticas y vuelve a intentarlo.")
         }
-        #expect(await paired.rejections.reasons.map(\.rawValue)
-            == Array(repeating: "clock-skew", count: 14))
+        #expect(await paired.rejections.reasons.map(\.rawValue) == ["clock-skew"])
 
         let corrected = try await paired.post(Self.scrollAction, sequence: 0)
         #expect(corrected.status == 200)
+
+        for _ in 0..<3 {
+            let reply = try await paired.post(Self.scrollAction, sequence: 1, timestamp: skewed)
+            #expect(reply.status == 400)
+        }
+        #expect(await paired.rejections.reasons.map(\.rawValue) == ["clock-skew", "clock-skew"])
     }
 
     @Test("every protocol-level error response carries a contract code in the phone language")

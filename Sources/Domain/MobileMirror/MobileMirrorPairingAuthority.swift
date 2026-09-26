@@ -119,6 +119,7 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
         var selectedSurfaceID: String?
         var inputSequenceWindow: MobileMirrorInputSequenceWindow
         var replayTracker: ReplayTracker
+        var clockSkewEpisodeOpen = false
     }
 
     private let lock = NSLock()
@@ -409,11 +410,27 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
                 throw MobileMirrorError.replayDetected
             }
             current.inputSequenceWindow = sequenceWindow
+            current.clockSkewEpisodeOpen = false
             session = current
             return MobileMirrorOpenedAction(
                 channelID: current.channelID,
                 body: opened.plaintext
             )
+        }
+    }
+
+    /// Returns `true` only for the first stale action since the session last
+    /// accepted one, so a skewed phone clock is recorded once per episode.
+    func beginClockSkewEpisode(cookie: String) -> Bool {
+        let now = clock()
+        return lock.withLock {
+            guard var current = validSession(cookie: cookie, now: now),
+                  !current.clockSkewEpisodeOpen else {
+                return false
+            }
+            current.clockSkewEpisodeOpen = true
+            session = current
+            return true
         }
     }
 
