@@ -2438,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "ไม่สามารถอ่านคุกกี้จากโปรไฟล์เบราว์เซอร์นี้ได้";
 "browser.import.issue.bookmarkReadFailed" = "ไม่สามารถอ่านบุ๊กมาร์กจากโปรไฟล์เบราว์เซอร์นี้ได้";
 "browser.import.issue.auditWriteFailed" = "การนำเข้าเสร็จสิ้นแล้ว แต่ไม่สามารถบันทึกระเบียนการตรวจสอบภายในเครื่องได้";
+"browser.import.issue.historySourceUnavailable" = "ไม่พบไฟล์ประวัติในโปรไฟล์เบราว์เซอร์นี้";
+"browser.import.issue.cookieSourceUnavailable" = "ไม่พบไฟล์คุกกี้ในโปรไฟล์เบราว์เซอร์นี้";
+"browser.import.issue.bookmarkSourceUnavailable" = "ไม่พบไฟล์บุ๊กมาร์กในโปรไฟล์เบราว์เซอร์นี้";
+"browser.import.issue.historyStorageUnavailable" = "พื้นที่จัดเก็บประวัติเบราว์เซอร์ของ Cocxy ไม่พร้อมใช้งาน";
+"browser.import.issue.cookieStorageUnavailable" = "พื้นที่จัดเก็บคุกกี้เบราว์เซอร์ของ Cocxy ไม่พร้อมใช้งาน";
+"browser.import.issue.bookmarkStorageUnavailable" = "พื้นที่จัดเก็บบุ๊กมาร์กเบราว์เซอร์ของ Cocxy ไม่พร้อมใช้งาน";
+"browser.import.issue.historyLatestVisitOnly" = "เบราว์เซอร์นี้เก็บเฉพาะการเข้าชมล่าสุดของแต่ละหน้า จึงนำเข้าเฉพาะการเข้าชมเหล่านั้น";
+"browser.import.issue.partitionedCookiesSkipped" = "คุกกี้แบบแบ่งพาร์ติชันที่ข้ามเพราะรักษาพาร์ติชันไว้ไม่ได้: %d";
+"browser.import.issue.isolatedCookiesSkipped" = "คุกกี้คอนเทนเนอร์หรือแบบแบ่งพาร์ติชันที่ข้ามเพราะรักษาการแยกไว้ไม่ได้: %d";
+"browser.import.issue.historyImportLimit" = "การนำเข้าประวัติหยุดที่ %d การเข้าชม; การเข้าชมที่ตรงกันที่ข้าม: %d";
+"browser.import.issue.historyScanLimit" = "การสแกนประวัติหยุดหลังจากการเข้าชมล่าสุด %d รายการ; อาจยังมีการเข้าชมที่เก่ากว่าเหลืออยู่";
 "browser.import.issue.historyWriteFailed" = "การเข้าชมในประวัติที่ไม่ได้บันทึก: %d";
 "browser.import.issue.bookmarkWriteFailed" = "บุ๊กมาร์กที่ไม่ได้บันทึก: %d";
 "browser.import.issue.cookieDecryptionFailed" = "คุกกี้ที่เข้ารหัสซึ่งข้ามไป: %d";

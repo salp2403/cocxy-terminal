@@ -2438,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "No se pudieron leer las cookies de este perfil del navegador.";
 "browser.import.issue.bookmarkReadFailed" = "No se pudieron leer los marcadores de este perfil del navegador.";
 "browser.import.issue.auditWriteFailed" = "La importación terminó, pero no se pudo guardar su registro local de auditoría.";
+"browser.import.issue.historySourceUnavailable" = "No se encontró ningún archivo de historial en este perfil del navegador.";
+"browser.import.issue.cookieSourceUnavailable" = "No se encontró ningún archivo de cookies en este perfil del navegador.";
+"browser.import.issue.bookmarkSourceUnavailable" = "No se encontró ningún archivo de marcadores en este perfil del navegador.";
+"browser.import.issue.historyStorageUnavailable" = "El almacenamiento del historial del navegador de Cocxy no está disponible.";
+"browser.import.issue.cookieStorageUnavailable" = "El almacenamiento de cookies del navegador de Cocxy no está disponible.";
+"browser.import.issue.bookmarkStorageUnavailable" = "El almacenamiento de marcadores del navegador de Cocxy no está disponible.";
+"browser.import.issue.historyLatestVisitOnly" = "Este navegador solo guarda la última visita a cada página, así que solo se importaron esas visitas.";
+"browser.import.issue.partitionedCookiesSkipped" = "Cookies particionadas omitidas porque no se puede conservar su partición: %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "Cookies de contenedor o particionadas omitidas porque no se puede conservar su aislamiento: %d.";
+"browser.import.issue.historyImportLimit" = "La importación del historial se detuvo en %d visitas; visitas coincidentes omitidas: %d.";
+"browser.import.issue.historyScanLimit" = "El análisis del historial se detuvo tras las %d visitas más recientes; puede haber visitas anteriores sin importar.";
 "browser.import.issue.historyWriteFailed" = "Visitas del historial sin guardar: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Marcadores sin guardar: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Cookies cifradas omitidas: %d.";

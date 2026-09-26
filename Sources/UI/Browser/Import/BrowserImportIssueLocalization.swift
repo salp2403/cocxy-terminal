@@ -17,8 +17,7 @@ extension BrowserImportWizardView {
         _ issue: BrowserImportIssue,
         localizer: AppLocalizer
     ) -> String {
-        guard let kind = issue.kind else { return issue.message }
-        switch kind {
+        switch issue.kind {
         case .historyWriteFailed(let count):
             return formattedIssue(
                 localizer,
@@ -70,6 +69,75 @@ extension BrowserImportWizardView {
                 "browser.import.issue.auditWriteFailed",
                 fallback: "The import finished, but its local audit record could not be saved."
             )
+        case .sourceFileUnavailable(.history):
+            return localizer.string(
+                "browser.import.issue.historySourceUnavailable",
+                fallback: "No history file was found in this browser profile."
+            )
+        case .sourceFileUnavailable(.cookies):
+            return localizer.string(
+                "browser.import.issue.cookieSourceUnavailable",
+                fallback: "No cookie file was found in this browser profile."
+            )
+        case .sourceFileUnavailable(.bookmarks):
+            return localizer.string(
+                "browser.import.issue.bookmarkSourceUnavailable",
+                fallback: "No bookmark file was found in this browser profile."
+            )
+        case .storageUnavailable(.history):
+            return localizer.string(
+                "browser.import.issue.historyStorageUnavailable",
+                fallback: "Cocxy's browser history storage is unavailable."
+            )
+        case .storageUnavailable(.cookies):
+            return localizer.string(
+                "browser.import.issue.cookieStorageUnavailable",
+                fallback: "Cocxy's browser cookie storage is unavailable."
+            )
+        case .storageUnavailable(.bookmarks):
+            return localizer.string(
+                "browser.import.issue.bookmarkStorageUnavailable",
+                fallback: "Cocxy's browser bookmark storage is unavailable."
+            )
+        case .historyLatestVisitOnly:
+            return localizer.string(
+                "browser.import.issue.historyLatestVisitOnly",
+                fallback: "This browser keeps only the latest visit to each page, so only those visits were imported."
+            )
+        case .partitionedCookiesSkipped(let count):
+            return formattedIssue(
+                localizer,
+                key: "browser.import.issue.partitionedCookiesSkipped",
+                fallback: "Partitioned cookies skipped because their partition cannot be kept: %d.",
+                count
+            )
+        case .isolatedCookiesSkipped(let count):
+            return formattedIssue(
+                localizer,
+                key: "browser.import.issue.isolatedCookiesSkipped",
+                fallback: "Container or partitioned cookies skipped because their isolation cannot be kept: %d.",
+                count
+            )
+        case .historySafetyLimit(let skipped, let importLimit, let scanLimit):
+            var parts: [String] = []
+            if skipped > 0 {
+                parts.append(formattedIssue(
+                    localizer,
+                    key: "browser.import.issue.historyImportLimit",
+                    fallback: "History import stopped at %d visits; matching visits skipped: %d.",
+                    importLimit,
+                    skipped
+                ))
+            }
+            if let scanLimit {
+                parts.append(formattedIssue(
+                    localizer,
+                    key: "browser.import.issue.historyScanLimit",
+                    fallback: "History scan stopped after the %d most recent visits; older visits may remain.",
+                    scanLimit
+                ))
+            }
+            return parts.joined(separator: " ")
         case .cookieBatchWrite(let imported, let total, let uncertain) where uncertain > 0:
             return formattedIssue(
                 localizer,

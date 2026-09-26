@@ -2438,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "មិនអាចអានខូគីពីប្រវត្តិរូបកម្មវិធីរុករកនេះបានទេ។";
 "browser.import.issue.bookmarkReadFailed" = "មិនអាចអានចំណាំពីប្រវត្តិរូបកម្មវិធីរុករកនេះបានទេ។";
 "browser.import.issue.auditWriteFailed" = "ការនាំចូលបានបញ្ចប់ ប៉ុន្តែមិនអាចរក្សាទុកកំណត់ត្រាសវនកម្មមូលដ្ឋានរបស់វាបានទេ។";
+"browser.import.issue.historySourceUnavailable" = "រកមិនឃើញឯកសារប្រវត្តិក្នុងប្រវត្តិរូបកម្មវិធីរុករកនេះទេ។";
+"browser.import.issue.cookieSourceUnavailable" = "រកមិនឃើញឯកសារខូគីក្នុងប្រវត្តិរូបកម្មវិធីរុករកនេះទេ។";
+"browser.import.issue.bookmarkSourceUnavailable" = "រកមិនឃើញឯកសារចំណាំក្នុងប្រវត្តិរូបកម្មវិធីរុករកនេះទេ។";
+"browser.import.issue.historyStorageUnavailable" = "ឃ្លាំងផ្ទុកប្រវត្តិកម្មវិធីរុករករបស់ Cocxy មិនអាចប្រើបានទេ។";
+"browser.import.issue.cookieStorageUnavailable" = "ឃ្លាំងផ្ទុកខូគីកម្មវិធីរុករករបស់ Cocxy មិនអាចប្រើបានទេ។";
+"browser.import.issue.bookmarkStorageUnavailable" = "ឃ្លាំងផ្ទុកចំណាំកម្មវិធីរុករករបស់ Cocxy មិនអាចប្រើបានទេ។";
+"browser.import.issue.historyLatestVisitOnly" = "កម្មវិធីរុករកនេះរក្សាទុកតែការចូលមើលចុងក្រោយបង្អស់នៃទំព័រនីមួយៗ ដូច្នេះមានតែការចូលមើលទាំងនោះប៉ុណ្ណោះដែលត្រូវបាននាំចូល។";
+"browser.import.issue.partitionedCookiesSkipped" = "ខូគីដែលបានបែងចែកត្រូវបានរំលង ព្រោះមិនអាចរក្សាការបែងចែករបស់វាបាន៖ %d។";
+"browser.import.issue.isolatedCookiesSkipped" = "ខូគីធុងផ្ទុក ឬខូគីដែលបានបែងចែកត្រូវបានរំលង ព្រោះមិនអាចរក្សាភាពដាច់ដោយឡែករបស់វាបាន៖ %d។";
+"browser.import.issue.historyImportLimit" = "ការនាំចូលប្រវត្តិបានឈប់នៅការចូលមើល %d ដង៖ ការចូលមើលដែលត្រូវគ្នាដែលបានរំលង៖ %d។";
+"browser.import.issue.historyScanLimit" = "ការស្កេនប្រវត្តិបានឈប់បន្ទាប់ពីការចូលមើលថ្មីៗបំផុត %d ដង៖ ការចូលមើលចាស់ៗអាចនៅសល់។";
 "browser.import.issue.historyWriteFailed" = "ការចូលមើលប្រវត្តិដែលមិនបានរក្សាទុក៖ %d។";
 "browser.import.issue.bookmarkWriteFailed" = "ចំណាំដែលមិនបានរក្សាទុក៖ %d។";
 "browser.import.issue.cookieDecryptionFailed" = "ខូគីដែលបានអ៊ិនគ្រីបត្រូវបានរំលង៖ %d។";

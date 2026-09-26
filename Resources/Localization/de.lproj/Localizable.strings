@@ -2438,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "Die Cookies konnten aus diesem Browserprofil nicht gelesen werden.";
 "browser.import.issue.bookmarkReadFailed" = "Die Lesezeichen konnten aus diesem Browserprofil nicht gelesen werden.";
 "browser.import.issue.auditWriteFailed" = "Der Import wurde abgeschlossen, aber sein lokaler Prüfeintrag konnte nicht gespeichert werden.";
+"browser.import.issue.historySourceUnavailable" = "In diesem Browserprofil wurde keine Verlaufsdatei gefunden.";
+"browser.import.issue.cookieSourceUnavailable" = "In diesem Browserprofil wurde keine Cookie-Datei gefunden.";
+"browser.import.issue.bookmarkSourceUnavailable" = "In diesem Browserprofil wurde keine Lesezeichendatei gefunden.";
+"browser.import.issue.historyStorageUnavailable" = "Der Browserverlaufsspeicher von Cocxy ist nicht verfügbar.";
+"browser.import.issue.cookieStorageUnavailable" = "Der Browser-Cookie-Speicher von Cocxy ist nicht verfügbar.";
+"browser.import.issue.bookmarkStorageUnavailable" = "Der Browser-Lesezeichenspeicher von Cocxy ist nicht verfügbar.";
+"browser.import.issue.historyLatestVisitOnly" = "Dieser Browser speichert nur den letzten Besuch jeder Seite, daher wurden nur diese Besuche importiert.";
+"browser.import.issue.partitionedCookiesSkipped" = "Partitionierte Cookies übersprungen, weil ihre Partition nicht erhalten werden kann: %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "Container- oder partitionierte Cookies übersprungen, weil ihre Isolation nicht erhalten werden kann: %d.";
+"browser.import.issue.historyImportLimit" = "Der Verlaufsimport wurde bei %d Besuchen beendet; übersprungene passende Besuche: %d.";
+"browser.import.issue.historyScanLimit" = "Die Verlaufsprüfung wurde nach den %d neuesten Besuchen beendet; ältere Besuche können übrig bleiben.";
 "browser.import.issue.historyWriteFailed" = "Nicht gespeicherte Verlaufseinträge: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Nicht gespeicherte Lesezeichen: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Übersprungene verschlüsselte Cookies: %d.";

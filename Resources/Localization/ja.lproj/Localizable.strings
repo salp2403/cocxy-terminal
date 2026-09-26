@@ -2438,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "このブラウザプロファイルから Cookie を読み取れませんでした。";
 "browser.import.issue.bookmarkReadFailed" = "このブラウザプロファイルからブックマークを読み取れませんでした。";
 "browser.import.issue.auditWriteFailed" = "読み込みは完了しましたが、ローカルの監査記録を保存できませんでした。";
+"browser.import.issue.historySourceUnavailable" = "このブラウザプロファイルに履歴ファイルが見つかりませんでした。";
+"browser.import.issue.cookieSourceUnavailable" = "このブラウザプロファイルに Cookie ファイルが見つかりませんでした。";
+"browser.import.issue.bookmarkSourceUnavailable" = "このブラウザプロファイルにブックマークファイルが見つかりませんでした。";
+"browser.import.issue.historyStorageUnavailable" = "Cocxy のブラウザ履歴ストレージを利用できません。";
+"browser.import.issue.cookieStorageUnavailable" = "Cocxy のブラウザ Cookie ストレージを利用できません。";
+"browser.import.issue.bookmarkStorageUnavailable" = "Cocxy のブラウザブックマークストレージを利用できません。";
+"browser.import.issue.historyLatestVisitOnly" = "このブラウザは各ページの最新の訪問のみを保持しているため、それらの訪問のみを読み込みました。";
+"browser.import.issue.partitionedCookiesSkipped" = "パーティションを保持できないためスキップしたパーティション Cookie：%d。";
+"browser.import.issue.isolatedCookiesSkipped" = "分離を保持できないためスキップしたコンテナまたはパーティション Cookie：%d。";
+"browser.import.issue.historyImportLimit" = "履歴の読み込みは %d 件の訪問で停止しました。スキップした該当訪問：%d。";
+"browser.import.issue.historyScanLimit" = "履歴の確認は最新の %d 件の訪問で停止しました。古い訪問が残っている可能性があります。";
 "browser.import.issue.historyWriteFailed" = "保存できなかった履歴の訪問数：%d。";
 "browser.import.issue.bookmarkWriteFailed" = "保存できなかったブックマーク数：%d。";
 "browser.import.issue.cookieDecryptionFailed" = "スキップした暗号化Cookie数：%d。";

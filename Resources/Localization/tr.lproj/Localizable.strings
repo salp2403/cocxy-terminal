@@ -2438,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "Bu tarayıcı profilinden çerezler okunamadı.";
 "browser.import.issue.bookmarkReadFailed" = "Bu tarayıcı profilinden yer işaretleri okunamadı.";
 "browser.import.issue.auditWriteFailed" = "İçe aktarma tamamlandı ancak yerel denetim kaydı kaydedilemedi.";
+"browser.import.issue.historySourceUnavailable" = "Bu tarayıcı profilinde geçmiş dosyası bulunamadı.";
+"browser.import.issue.cookieSourceUnavailable" = "Bu tarayıcı profilinde çerez dosyası bulunamadı.";
+"browser.import.issue.bookmarkSourceUnavailable" = "Bu tarayıcı profilinde yer işareti dosyası bulunamadı.";
+"browser.import.issue.historyStorageUnavailable" = "Cocxy tarayıcı geçmişi depolaması kullanılamıyor.";
+"browser.import.issue.cookieStorageUnavailable" = "Cocxy tarayıcı çerez depolaması kullanılamıyor.";
+"browser.import.issue.bookmarkStorageUnavailable" = "Cocxy tarayıcı yer işareti depolaması kullanılamıyor.";
+"browser.import.issue.historyLatestVisitOnly" = "Bu tarayıcı her sayfanın yalnızca son ziyaretini tutar; bu nedenle yalnızca bu ziyaretler içe aktarıldı.";
+"browser.import.issue.partitionedCookiesSkipped" = "Bölümü korunamadığı için atlanan bölümlenmiş çerezler: %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "Yalıtımı korunamadığı için atlanan kapsayıcı veya bölümlenmiş çerezler: %d.";
+"browser.import.issue.historyImportLimit" = "Geçmiş içe aktarma %d ziyarette durdu; atlanan eşleşen ziyaretler: %d.";
+"browser.import.issue.historyScanLimit" = "Geçmiş taraması en son %d ziyaretten sonra durdu; daha eski ziyaretler kalmış olabilir.";
 "browser.import.issue.historyWriteFailed" = "Kaydedilemeyen geçmiş ziyaretleri: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Kaydedilemeyen yer imleri: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Atlanan şifreli çerezler: %d.";

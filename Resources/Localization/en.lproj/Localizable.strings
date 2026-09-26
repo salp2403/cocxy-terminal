@@ -2438,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "Cookies could not be read from this browser profile.";
 "browser.import.issue.bookmarkReadFailed" = "Bookmarks could not be read from this browser profile.";
 "browser.import.issue.auditWriteFailed" = "The import finished, but its local audit record could not be saved.";
+"browser.import.issue.historySourceUnavailable" = "No history file was found in this browser profile.";
+"browser.import.issue.cookieSourceUnavailable" = "No cookie file was found in this browser profile.";
+"browser.import.issue.bookmarkSourceUnavailable" = "No bookmark file was found in this browser profile.";
+"browser.import.issue.historyStorageUnavailable" = "Cocxy's browser history storage is unavailable.";
+"browser.import.issue.cookieStorageUnavailable" = "Cocxy's browser cookie storage is unavailable.";
+"browser.import.issue.bookmarkStorageUnavailable" = "Cocxy's browser bookmark storage is unavailable.";
+"browser.import.issue.historyLatestVisitOnly" = "This browser keeps only the latest visit to each page, so only those visits were imported.";
+"browser.import.issue.partitionedCookiesSkipped" = "Partitioned cookies skipped because their partition cannot be kept: %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "Container or partitioned cookies skipped because their isolation cannot be kept: %d.";
+"browser.import.issue.historyImportLimit" = "History import stopped at %d visits; matching visits skipped: %d.";
+"browser.import.issue.historyScanLimit" = "History scan stopped after the %d most recent visits; older visits may remain.";
 "browser.import.issue.historyWriteFailed" = "History visits not saved: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Bookmarks not saved: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Encrypted cookies skipped: %d.";

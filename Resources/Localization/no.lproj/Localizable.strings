@@ -2438,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "Informasjonskapslene kunne ikke leses fra denne nettleserprofilen.";
 "browser.import.issue.bookmarkReadFailed" = "Bokmerkene kunne ikke leses fra denne nettleserprofilen.";
 "browser.import.issue.auditWriteFailed" = "Importen ble fullført, men den lokale revisjonsposten kunne ikke lagres.";
+"browser.import.issue.historySourceUnavailable" = "Fant ingen loggfil i denne nettleserprofilen.";
+"browser.import.issue.cookieSourceUnavailable" = "Fant ingen fil med informasjonskapsler i denne nettleserprofilen.";
+"browser.import.issue.bookmarkSourceUnavailable" = "Fant ingen bokmerkefil i denne nettleserprofilen.";
+"browser.import.issue.historyStorageUnavailable" = "Cocxys lagring for nettleserlogg er ikke tilgjengelig.";
+"browser.import.issue.cookieStorageUnavailable" = "Cocxys lagring for informasjonskapsler er ikke tilgjengelig.";
+"browser.import.issue.bookmarkStorageUnavailable" = "Cocxys lagring for bokmerker er ikke tilgjengelig.";
+"browser.import.issue.historyLatestVisitOnly" = "Denne nettleseren lagrer bare det siste besøket på hver side, så bare disse besøkene ble importert.";
+"browser.import.issue.partitionedCookiesSkipped" = "Partisjonerte informasjonskapsler hoppet over fordi partisjonen ikke kan beholdes: %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "Container- eller partisjonerte informasjonskapsler hoppet over fordi isoleringen ikke kan beholdes: %d.";
+"browser.import.issue.historyImportLimit" = "Loggimporten stoppet ved %d besøk; samsvarende besøk hoppet over: %d.";
+"browser.import.issue.historyScanLimit" = "Loggskanningen stoppet etter de %d nyeste besøkene; eldre besøk kan gjenstå.";
 "browser.import.issue.historyWriteFailed" = "Historikkbesøk som ikke ble lagret: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Bokmerker som ikke ble lagret: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Krypterte informasjonskapsler som ble hoppet over: %d.";

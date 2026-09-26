@@ -2438,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "Kolačići se nisu mogli pročitati iz ovog profila preglednika.";
 "browser.import.issue.bookmarkReadFailed" = "Oznake se nisu mogle pročitati iz ovog profila preglednika.";
 "browser.import.issue.auditWriteFailed" = "Uvoz je završen, ali njegov lokalni revizijski zapis nije se mogao sačuvati.";
+"browser.import.issue.historySourceUnavailable" = "U ovom profilu preglednika nije pronađena datoteka historije.";
+"browser.import.issue.cookieSourceUnavailable" = "U ovom profilu preglednika nije pronađena datoteka kolačića.";
+"browser.import.issue.bookmarkSourceUnavailable" = "U ovom profilu preglednika nije pronađena datoteka oznaka.";
+"browser.import.issue.historyStorageUnavailable" = "Cocxy pohrana historije preglednika nije dostupna.";
+"browser.import.issue.cookieStorageUnavailable" = "Cocxy pohrana kolačića preglednika nije dostupna.";
+"browser.import.issue.bookmarkStorageUnavailable" = "Cocxy pohrana oznaka preglednika nije dostupna.";
+"browser.import.issue.historyLatestVisitOnly" = "Ovaj preglednik čuva samo posljednju posjetu svakoj stranici, pa su uvezene samo te posjete.";
+"browser.import.issue.partitionedCookiesSkipped" = "Preskočeni particionirani kolačići jer se njihova particija ne može zadržati: %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "Preskočeni kolačići kontejnera ili particionirani kolačići jer se njihova izolacija ne može zadržati: %d.";
+"browser.import.issue.historyImportLimit" = "Uvoz historije zaustavljen je na %d posjeta; preskočene odgovarajuće posjete: %d.";
+"browser.import.issue.historyScanLimit" = "Pregled historije zaustavljen je nakon %d najnovijih posjeta; starije posjete mogu ostati.";
 "browser.import.issue.historyWriteFailed" = "Nesačuvane posjete historiji: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Nesačuvane oznake: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Preskočeni šifrirani kolačići: %d.";

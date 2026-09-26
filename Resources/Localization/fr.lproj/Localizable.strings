@@ -2438,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "Les cookies n’ont pas pu être lus depuis ce profil de navigateur.";
 "browser.import.issue.bookmarkReadFailed" = "Les signets n’ont pas pu être lus depuis ce profil de navigateur.";
 "browser.import.issue.auditWriteFailed" = "L’importation est terminée, mais son enregistrement d’audit local n’a pas pu être sauvegardé.";
+"browser.import.issue.historySourceUnavailable" = "Aucun fichier d’historique n’a été trouvé dans ce profil de navigateur.";
+"browser.import.issue.cookieSourceUnavailable" = "Aucun fichier de cookies n’a été trouvé dans ce profil de navigateur.";
+"browser.import.issue.bookmarkSourceUnavailable" = "Aucun fichier de signets n’a été trouvé dans ce profil de navigateur.";
+"browser.import.issue.historyStorageUnavailable" = "Le stockage de l’historique du navigateur de Cocxy n’est pas disponible.";
+"browser.import.issue.cookieStorageUnavailable" = "Le stockage des cookies du navigateur de Cocxy n’est pas disponible.";
+"browser.import.issue.bookmarkStorageUnavailable" = "Le stockage des signets du navigateur de Cocxy n’est pas disponible.";
+"browser.import.issue.historyLatestVisitOnly" = "Ce navigateur ne conserve que la dernière visite de chaque page ; seules ces visites ont été importées.";
+"browser.import.issue.partitionedCookiesSkipped" = "Cookies partitionnés ignorés car leur partition ne peut pas être conservée : %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "Cookies de conteneur ou partitionnés ignorés car leur isolation ne peut pas être conservée : %d.";
+"browser.import.issue.historyImportLimit" = "L’importation de l’historique s’est arrêtée à %d visites ; visites correspondantes ignorées : %d.";
+"browser.import.issue.historyScanLimit" = "L’analyse de l’historique s’est arrêtée après les %d visites les plus récentes ; des visites plus anciennes peuvent rester.";
 "browser.import.issue.historyWriteFailed" = "Visites de l’historique non enregistrées : %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Signets non enregistrés : %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Cookies chiffrés ignorés : %d.";

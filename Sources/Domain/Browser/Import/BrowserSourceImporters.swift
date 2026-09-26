@@ -25,18 +25,18 @@ private enum BrowserSourceImportSupport {
 
     static func issue(
         _ location: BrowserImportLocation,
-        _ message: String, kind: BrowserImportIssueKind? = nil
+        _ message: String, kind: BrowserImportIssueKind
     ) -> BrowserImportIssue {
         BrowserImportIssue(source: location.source, profileName: location.profileName, message: message, kind: kind)
     }
     static func appendMissingIssue(
         path: URL?,
-        component: String,
+        data: BrowserImportDataKind,
         location: BrowserImportLocation,
         preview: inout BrowserImportPreview
     ) -> Bool {
         guard let path, FileManager.default.fileExists(atPath: path.path) else {
-            preview.errors.append(issue(location, "\(component) source file is unavailable"))
+            preview.errors.append(.sourceFileUnavailable(location, data))
             return true
         }
         return false
@@ -171,20 +171,11 @@ private enum BrowserSourceImportSupport {
         }
 
         if matchingOverflowCount > 0 || scannedCount > maximumScannedHistoryRowCount {
-            var details: [String] = []
-            if matchingOverflowCount > 0 {
-                details.append(
-                    "skipped \(matchingOverflowCount) additional matching visits after the \(maximumImportedHistoryVisitCount)-visit import limit"
-                )
-            }
-            if scannedCount > maximumScannedHistoryRowCount {
-                details.append(
-                    "stopped after scanning the \(maximumScannedHistoryRowCount) most recent source visits; older visits may remain"
-                )
-            }
-            preview.errors.append(issue(
+            preview.errors.append(.historySafetyLimit(
                 location,
-                "History safety limit reached: \(details.joined(separator: "; "))"
+                skipped: matchingOverflowCount,
+                importLimit: maximumImportedHistoryVisitCount,
+                scanLimit: scannedCount > maximumScannedHistoryRowCount ? maximumScannedHistoryRowCount : nil
             ))
         }
         return rows
@@ -223,7 +214,7 @@ struct ChromiumBrowserImporter: BrowserSourceImporting {
     ) throws {
         if BrowserSourceImportSupport.appendMissingIssue(
             path: location.historyPath,
-            component: "History",
+            data: .history,
             location: location,
             preview: &preview
         ) { return }
@@ -261,10 +252,7 @@ struct ChromiumBrowserImporter: BrowserSourceImporting {
                         preview: &preview
                     )
                     preview.history.append(contentsOf: rows)
-                    preview.errors.append(BrowserSourceImportSupport.issue(
-                        location,
-                        "Per-visit history is unavailable in this source; imported only the latest visit for each URL"
-                    ))
+                    preview.errors.append(.latestHistoryVisitsOnly(location))
                     return
                 } catch {
                     try BrowserSourceImportSupport.rethrowCancellation(error)
@@ -280,12 +268,12 @@ struct ChromiumBrowserImporter: BrowserSourceImporting {
         preview: inout BrowserImportPreview
     ) throws {
         guard let cookiesPath = location.cookiesPath else {
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "Cookie source file is unavailable"))
+            preview.errors.append(.sourceFileUnavailable(location, .cookies))
             return
         }
         if BrowserSourceImportSupport.appendMissingIssue(
             path: cookiesPath,
-            component: "Cookie",
+            data: .cookies,
             location: location,
             preview: &preview
         ) { return }
@@ -378,10 +366,7 @@ struct ChromiumBrowserImporter: BrowserSourceImporting {
             )
             preview.cookies.append(contentsOf: rows)
             if partitionedCookieCount > 0 {
-                preview.errors.append(BrowserSourceImportSupport.issue(
-                    location,
-                    "Skipped \(partitionedCookieCount) partitioned cookies because WebKit cannot preserve their partition key"
-                ))
+                preview.errors.append(.skippedPartitionedCookies(location, count: partitionedCookieCount))
             }
             if decryptionFailureCount > 0 {
                 preview.errors.append(BrowserSourceImportSupport.issue(
@@ -402,12 +387,12 @@ struct ChromiumBrowserImporter: BrowserSourceImporting {
         preview: inout BrowserImportPreview
     ) throws {
         guard let bookmarksPath = location.bookmarksPath else {
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "Bookmark source file is unavailable"))
+            preview.errors.append(.sourceFileUnavailable(location, .bookmarks))
             return
         }
         if BrowserSourceImportSupport.appendMissingIssue(
             path: bookmarksPath,
-            component: "Bookmark",
+            data: .bookmarks,
             location: location,
             preview: &preview
         ) { return }
@@ -471,7 +456,7 @@ struct FirefoxBrowserImporter: BrowserSourceImporting {
     ) throws {
         if BrowserSourceImportSupport.appendMissingIssue(
             path: location.historyPath,
-            component: "History",
+            data: .history,
             location: location,
             preview: &preview
         ) { return }
@@ -509,10 +494,7 @@ struct FirefoxBrowserImporter: BrowserSourceImporting {
                         preview: &preview
                     )
                     preview.history.append(contentsOf: rows)
-                    preview.errors.append(BrowserSourceImportSupport.issue(
-                        location,
-                        "Per-visit history is unavailable in this source; imported only the latest visit for each URL"
-                    ))
+                    preview.errors.append(.latestHistoryVisitsOnly(location))
                     return
                 } catch {
                     try BrowserSourceImportSupport.rethrowCancellation(error)
@@ -528,12 +510,12 @@ struct FirefoxBrowserImporter: BrowserSourceImporting {
         preview: inout BrowserImportPreview
     ) throws {
         guard let cookiesPath = location.cookiesPath else {
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "Cookie source file is unavailable"))
+            preview.errors.append(.sourceFileUnavailable(location, .cookies))
             return
         }
         if BrowserSourceImportSupport.appendMissingIssue(
             path: cookiesPath,
-            component: "Cookie",
+            data: .cookies,
             location: location,
             preview: &preview
         ) { return }
@@ -589,10 +571,7 @@ struct FirefoxBrowserImporter: BrowserSourceImporting {
             )
             preview.cookies.append(contentsOf: rows)
             if isolatedCookieCount > 0 {
-                preview.errors.append(BrowserSourceImportSupport.issue(
-                    location,
-                    "Skipped \(isolatedCookieCount) container or partitioned cookies because their isolation context cannot be preserved"
-                ))
+                preview.errors.append(.skippedIsolatedCookies(location, count: isolatedCookieCount))
             }
         } catch {
             try BrowserSourceImportSupport.rethrowCancellation(error)
@@ -606,12 +585,12 @@ struct FirefoxBrowserImporter: BrowserSourceImporting {
         preview: inout BrowserImportPreview
     ) throws {
         guard let bookmarksPath = location.bookmarksPath else {
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "Bookmark source file is unavailable"))
+            preview.errors.append(.sourceFileUnavailable(location, .bookmarks))
             return
         }
         if BrowserSourceImportSupport.appendMissingIssue(
             path: bookmarksPath,
-            component: "Bookmark",
+            data: .bookmarks,
             location: location,
             preview: &preview
         ) { return }
@@ -717,7 +696,7 @@ struct SafariBrowserImporter: BrowserSourceImporting {
     ) throws {
         if BrowserSourceImportSupport.appendMissingIssue(
             path: location.historyPath,
-            component: "History",
+            data: .history,
             location: location,
             preview: &preview
         ) { return }
@@ -802,10 +781,7 @@ struct SafariBrowserImporter: BrowserSourceImporting {
                 plan: plan,
                 preview: &preview
             )
-            preview.errors.append(BrowserSourceImportSupport.issue(
-                location,
-                "Per-visit history is unavailable in this source; imported only the latest visit for each URL"
-            ))
+            preview.errors.append(.latestHistoryVisitsOnly(location))
             return rows
         }
     }
@@ -816,12 +792,12 @@ struct SafariBrowserImporter: BrowserSourceImporting {
         preview: inout BrowserImportPreview
     ) throws {
         guard let cookiesPath = location.cookiesPath else {
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "Cookie source file is unavailable"))
+            preview.errors.append(.sourceFileUnavailable(location, .cookies))
             return
         }
         if BrowserSourceImportSupport.appendMissingIssue(
             path: cookiesPath,
-            component: "Cookie",
+            data: .cookies,
             location: location,
             preview: &preview
         ) { return }
@@ -898,7 +874,8 @@ struct SafariBrowserImporter: BrowserSourceImporting {
             preview.errors.append(BrowserImportIssue(
                 source: .orion,
                 profileName: "Orion",
-                message: "Skipped \(encryptedCookieCount) encrypted Orion cookies because their key format is unavailable"
+                message: "Skipped \(encryptedCookieCount) encrypted Orion cookies because their key format is unavailable",
+                kind: .cookieDecryptionFailed(count: encryptedCookieCount)
             ))
         }
         return rows
@@ -910,12 +887,12 @@ struct SafariBrowserImporter: BrowserSourceImporting {
         preview: inout BrowserImportPreview
     ) throws {
         guard let bookmarksPath = location.bookmarksPath else {
-            preview.errors.append(BrowserSourceImportSupport.issue(location, "Bookmark source file is unavailable"))
+            preview.errors.append(.sourceFileUnavailable(location, .bookmarks))
             return
         }
         if BrowserSourceImportSupport.appendMissingIssue(
             path: bookmarksPath,
-            component: "Bookmark",
+            data: .bookmarks,
             location: location,
             preview: &preview
         ) { return }

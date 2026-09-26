@@ -2438,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "Không thể đọc cookie từ hồ sơ trình duyệt này.";
 "browser.import.issue.bookmarkReadFailed" = "Không thể đọc dấu trang từ hồ sơ trình duyệt này.";
 "browser.import.issue.auditWriteFailed" = "Quá trình nhập đã xong, nhưng không thể lưu bản ghi kiểm tra cục bộ của nó.";
+"browser.import.issue.historySourceUnavailable" = "Không tìm thấy tệp lịch sử trong hồ sơ trình duyệt này.";
+"browser.import.issue.cookieSourceUnavailable" = "Không tìm thấy tệp cookie trong hồ sơ trình duyệt này.";
+"browser.import.issue.bookmarkSourceUnavailable" = "Không tìm thấy tệp dấu trang trong hồ sơ trình duyệt này.";
+"browser.import.issue.historyStorageUnavailable" = "Bộ nhớ lịch sử trình duyệt của Cocxy không khả dụng.";
+"browser.import.issue.cookieStorageUnavailable" = "Bộ nhớ cookie trình duyệt của Cocxy không khả dụng.";
+"browser.import.issue.bookmarkStorageUnavailable" = "Bộ nhớ dấu trang trình duyệt của Cocxy không khả dụng.";
+"browser.import.issue.historyLatestVisitOnly" = "Trình duyệt này chỉ lưu lần truy cập gần nhất của mỗi trang, nên chỉ những lần truy cập đó được nhập.";
+"browser.import.issue.partitionedCookiesSkipped" = "Cookie phân vùng bị bỏ qua vì không thể giữ phân vùng của chúng: %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "Cookie vùng chứa hoặc phân vùng bị bỏ qua vì không thể giữ sự cô lập của chúng: %d.";
+"browser.import.issue.historyImportLimit" = "Quá trình nhập lịch sử dừng ở %d lượt truy cập; lượt truy cập phù hợp bị bỏ qua: %d.";
+"browser.import.issue.historyScanLimit" = "Quá trình quét lịch sử dừng sau %d lượt truy cập gần nhất; các lượt truy cập cũ hơn có thể vẫn còn.";
 "browser.import.issue.historyWriteFailed" = "Lượt truy cập lịch sử chưa lưu: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Dấu trang chưa lưu: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Cookie mã hóa đã bỏ qua: %d.";

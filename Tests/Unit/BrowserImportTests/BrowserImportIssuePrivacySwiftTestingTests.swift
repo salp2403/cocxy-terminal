@@ -182,6 +182,144 @@ struct BrowserImportIssuePrivacySwiftTestingTests {
         #expect(!issue.message.contains(Self.privateErrorDetail))
     }
 
+    @Test("missing browser sources and unavailable storage reach the wizard in the app language")
+    @MainActor
+    func missingSourcesAndStorageAreLocalized() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BrowserImportMissing-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let preview = try ChromiumBrowserImporter().preview(plan: BrowserImportPlan(
+            source: .chrome,
+            profileID: UUID(),
+            explicitLocations: [BrowserImportLocation(
+                source: .chrome,
+                profileName: "Default",
+                historyPath: root.appendingPathComponent("History"),
+                cookiesPath: nil,
+                bookmarksPath: nil
+            )]
+        ))
+        let storage = try BrowserImporter(
+            sourceImporter: PrivacyPreviewImporter(preview: BrowserImportPreview(
+                history: [BrowserImportedHistoryVisit(url: "https://example.com", title: nil, visitedAt: Date())],
+                cookies: [BrowserImportedCookie(
+                    domain: "example.com",
+                    name: "session",
+                    path: "/",
+                    value: "value",
+                    expiresAt: nil,
+                    isSecure: true,
+                    isHTTPOnly: true
+                )],
+                bookmarks: [BrowserImportedBookmark(title: "Example", url: "https://example.com")],
+                errors: []
+            )),
+            historyStore: nil,
+            bookmarkStore: nil,
+            cookieStore: nil
+        ).importData(BrowserImportPlan(source: .chrome, profileID: UUID()))
+        let localizer = try spanishLocalizer()
+        let messages = (preview.errors + storage.errors).map {
+            BrowserImportWizardView.localizedIssueMessage($0, localizer: localizer)
+        }
+
+        #expect(Set(messages) == [
+            "No se encontró ningún archivo de historial en este perfil del navegador.",
+            "No se encontró ningún archivo de cookies en este perfil del navegador.",
+            "No se encontró ningún archivo de marcadores en este perfil del navegador.",
+            "El almacenamiento del historial del navegador de Cocxy no está disponible.",
+            "El almacenamiento de cookies del navegador de Cocxy no está disponible.",
+            "El almacenamiento de marcadores del navegador de Cocxy no está disponible.",
+        ])
+        #expect(!messages.contains { $0.contains(root.lastPathComponent) })
+    }
+
+    @Test("source limitations reach the wizard in the app language")
+    @MainActor
+    func sourceLimitationsAreLocalized() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BrowserImportLimits-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let history = try makeDatabase(root.appendingPathComponent("History"), """
+            CREATE TABLE urls(id INTEGER PRIMARY KEY, url TEXT, title TEXT, last_visit_time INTEGER);
+            INSERT INTO urls VALUES(1, 'https://example.com', 'Example', 13300000000000000);
+            """)
+        let chromiumCookies = try makeDatabase(root.appendingPathComponent("Cookies"), """
+            CREATE TABLE cookies(host_key TEXT, name TEXT, path TEXT, value TEXT,
+                expires_utc INTEGER, is_secure INTEGER, is_httponly INTEGER, top_frame_site_key TEXT);
+            INSERT INTO cookies VALUES('.example.com', 'id', '/', 'v', 0, 1, 1, 'https://top.example');
+            """)
+        let firefoxCookies = try makeDatabase(root.appendingPathComponent("cookies.sqlite"), """
+            CREATE TABLE moz_cookies(host TEXT, name TEXT, path TEXT, value TEXT, expiry INTEGER,
+                isSecure INTEGER, isHttpOnly INTEGER, originAttributes TEXT);
+            INSERT INTO moz_cookies VALUES('.example.com', 'id', '/', 'v', 0, 1, 1, '^userContextId=1');
+            """)
+        let chromium = try ChromiumBrowserImporter().preview(plan: BrowserImportPlan(
+            source: .chrome,
+            profileID: UUID(),
+            importBookmarks: false,
+            explicitLocations: [BrowserImportLocation(
+                source: .chrome,
+                profileName: "Default",
+                historyPath: history,
+                cookiesPath: chromiumCookies,
+                bookmarksPath: nil
+            )]
+        ))
+        let firefox = try FirefoxBrowserImporter().preview(plan: BrowserImportPlan(
+            source: .firefox,
+            profileID: UUID(),
+            importHistory: false,
+            importBookmarks: false,
+            explicitLocations: [BrowserImportLocation(
+                source: .firefox,
+                profileName: "Default",
+                historyPath: root.appendingPathComponent("places.sqlite"),
+                cookiesPath: firefoxCookies,
+                bookmarksPath: nil
+            )]
+        ))
+        let localizer = try spanishLocalizer()
+        let messages = Set((chromium.errors + firefox.errors).map {
+            BrowserImportWizardView.localizedIssueMessage($0, localizer: localizer)
+        })
+        let safetyLimit = BrowserImportWizardView.localizedIssueMessage(
+            .historySafetyLimit(
+                BrowserImportLocation(
+                    source: .chrome,
+                    profileName: "Default",
+                    historyPath: history,
+                    cookiesPath: nil,
+                    bookmarksPath: nil
+                ),
+                skipped: 2,
+                importLimit: 50_000,
+                scanLimit: 60_000
+            ),
+            localizer: localizer
+        )
+
+        #expect(messages == [
+            "Este navegador solo guarda la última visita a cada página, así que solo se importaron esas visitas.",
+            "Cookies particionadas omitidas porque no se puede conservar su partición: 1.",
+            "Cookies de contenedor o particionadas omitidas porque no se puede conservar su aislamiento: 1.",
+        ])
+        #expect(safetyLimit == "La importación del historial se detuvo en 50000 visitas; visitas coincidentes omitidas: 2. El análisis del historial se detuvo tras las 60000 visitas más recientes; puede haber visitas anteriores sin importar.")
+    }
+
+    private func makeDatabase(_ url: URL, _ sql: String) throws -> URL {
+        var handle: OpaquePointer?
+        guard sqlite3_open(url.path, &handle) == SQLITE_OK, let handle else {
+            throw PrivateBrowserImportFailure.operation("fixture open failed")
+        }
+        defer { sqlite3_close(handle) }
+        guard sqlite3_exec(handle, sql, nil, nil, nil) == SQLITE_OK else {
+            throw PrivateBrowserImportFailure.operation("fixture SQL failed")
+        }
+        return url
+    }
+
     @MainActor
     private func spanishLocalizer() throws -> AppLocalizer {
         let localizationURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

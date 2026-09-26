@@ -2438,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "이 브라우저 프로필에서 쿠키를 읽을 수 없습니다.";
 "browser.import.issue.bookmarkReadFailed" = "이 브라우저 프로필에서 북마크를 읽을 수 없습니다.";
 "browser.import.issue.auditWriteFailed" = "가져오기는 완료되었지만 로컬 감사 기록을 저장할 수 없습니다.";
+"browser.import.issue.historySourceUnavailable" = "이 브라우저 프로필에서 방문 기록 파일을 찾을 수 없습니다.";
+"browser.import.issue.cookieSourceUnavailable" = "이 브라우저 프로필에서 쿠키 파일을 찾을 수 없습니다.";
+"browser.import.issue.bookmarkSourceUnavailable" = "이 브라우저 프로필에서 북마크 파일을 찾을 수 없습니다.";
+"browser.import.issue.historyStorageUnavailable" = "Cocxy의 브라우저 방문 기록 저장소를 사용할 수 없습니다.";
+"browser.import.issue.cookieStorageUnavailable" = "Cocxy의 브라우저 쿠키 저장소를 사용할 수 없습니다.";
+"browser.import.issue.bookmarkStorageUnavailable" = "Cocxy의 브라우저 북마크 저장소를 사용할 수 없습니다.";
+"browser.import.issue.historyLatestVisitOnly" = "이 브라우저는 각 페이지의 마지막 방문만 보관하므로 해당 방문만 가져왔습니다.";
+"browser.import.issue.partitionedCookiesSkipped" = "파티션을 유지할 수 없어 건너뛴 파티션 쿠키: %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "격리를 유지할 수 없어 건너뛴 컨테이너 또는 파티션 쿠키: %d.";
+"browser.import.issue.historyImportLimit" = "방문 기록 가져오기가 %d개 방문에서 중지되었습니다. 건너뛴 일치 방문: %d.";
+"browser.import.issue.historyScanLimit" = "방문 기록 검사가 최근 방문 %d개 이후 중지되었습니다. 이전 방문이 남아 있을 수 있습니다.";
 "browser.import.issue.historyWriteFailed" = "저장하지 못한 방문 기록: %d개.";
 "browser.import.issue.bookmarkWriteFailed" = "저장하지 못한 북마크: %d개.";
 "browser.import.issue.cookieDecryptionFailed" = "건너뛴 암호화 쿠키: %d개.";
