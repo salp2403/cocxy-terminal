@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   initNavigation();
+  initAnchorNavigation();
   initCopyButtons();
   initReleasePagination();
   initDocsSearch();
@@ -12,36 +13,90 @@ function initNavigation() {
   const menu = document.getElementById('site-menu');
   if (!button || !menu) return;
 
+  const close = ({ restoreFocus = false } = {}) => {
+    if (!menu.classList.contains('is-open')) return;
+    menu.classList.remove('is-open');
+    button.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) button.focus();
+  };
+
   button.addEventListener('click', () => {
     const isOpen = menu.classList.toggle('is-open');
     button.setAttribute('aria-expanded', String(isOpen));
   });
 
   menu.addEventListener('click', (event) => {
-    if (event.target instanceof HTMLAnchorElement) {
-      menu.classList.remove('is-open');
-      button.setAttribute('aria-expanded', 'false');
+    if (event.target instanceof HTMLAnchorElement) close();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') close({ restoreFocus: true });
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!menu.contains(event.target) && !button.contains(event.target)) close();
+  });
+}
+
+function initAnchorNavigation() {
+  const root = document.documentElement;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  const jumpTo = (hash, behavior, moveFocus) => {
+    const id = decodeURIComponent(hash.slice(1));
+    const target = id ? document.getElementById(id) : null;
+    if (!target) return false;
+    root.classList.add('is-anchoring');
+    target.scrollIntoView({ behavior, block: 'start' });
+    if (moveFocus) {
+      if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+      target.focus({ preventScroll: true });
+    }
+    return true;
+  };
+
+  if (location.hash) jumpTo(location.hash, 'instant', false);
+
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target instanceof Element ? event.target.closest('a[href*="#"]') : null;
+    if (!link || !link.hash || link.origin !== location.origin || link.pathname !== location.pathname) return;
+    if (jumpTo(link.hash, reducedMotion.matches ? 'instant' : 'smooth', true)) {
+      event.preventDefault();
+      if (location.hash !== link.hash) history.pushState(null, '', link.hash);
     }
   });
 }
 
 function initCopyButtons() {
+  const spanish = document.documentElement.lang.startsWith('es');
+  const labels = spanish
+    ? { copied: 'Copiado', manual: 'Selecciona', copiedStatus: 'Comando copiado', manualStatus: 'Comando seleccionado; cópialo con Cmd+C' }
+    : { copied: 'Copied', manual: 'Select', copiedStatus: 'Command copied', manualStatus: 'Command selected; copy it with Cmd+C' };
+
   document.querySelectorAll('.code-block').forEach((block) => {
     const button = block.querySelector('.copy-button');
     const code = block.querySelector('code');
+    const status = block.querySelector('[data-copy-status]');
     if (!button || !code) return;
+    const original = button.textContent;
+    let resetTimer = 0;
 
     button.addEventListener('click', async () => {
-      const original = button.textContent;
+      let copied = true;
       try {
         await navigator.clipboard.writeText(code.textContent.trim());
-        button.textContent = 'Copied';
       } catch (_) {
-        button.textContent = 'Select';
+        copied = false;
+        window.getSelection()?.selectAllChildren(code);
       }
-      window.setTimeout(() => {
+      button.textContent = copied ? labels.copied : labels.manual;
+      if (status) status.textContent = copied ? labels.copiedStatus : labels.manualStatus;
+      window.clearTimeout(resetTimer);
+      resetTimer = window.setTimeout(() => {
         button.textContent = original;
-      }, 1400);
+        if (status) status.textContent = '';
+      }, 1600);
     });
   });
 }

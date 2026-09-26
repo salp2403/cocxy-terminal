@@ -107,7 +107,8 @@ async function verifyInteractions(page) {
   await page.locator('[data-doc-search-results] a[href="/docs/ssh-remote.html"]').waitFor({ state: 'visible', timeout: 2500 });
 
   await page.goto(`${baseURL}/`, { waitUntil: 'networkidle' });
-  const before = await page.evaluate(() => document.documentElement.dataset.theme || 'dark');
+  const before = await page.evaluate(() => document.documentElement.dataset.theme
+    || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
   await page.locator('.theme-toggle').click();
   const after = await page.evaluate(() => ({
     theme: document.documentElement.dataset.theme,

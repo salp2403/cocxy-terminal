@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,9 @@ const appInfoPlistPath = path.join(repoRoot, 'Resources', 'Info.plist');
 const pngPath = path.join(imageRoot, 'cocxy-preview.png');
 const webpPath = path.join(imageRoot, 'cocxy-preview.webp');
 const avifPath = path.join(imageRoot, 'cocxy-preview.avif');
+const compactWebpPath = path.join(imageRoot, 'cocxy-preview-compact.webp');
+const compactAvifPath = path.join(imageRoot, 'cocxy-preview-compact.avif');
+const compactWidth = 800;
 const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 const requiredRealCaptureNames = [
@@ -390,9 +394,21 @@ async function main() {
 
   run('/usr/local/bin/cwebp', ['-quiet', '-q', '82', pngPath, '-o', webpPath]);
   run('/usr/local/bin/avifenc', ['--min', '28', '--max', '46', '--speed', '6', pngPath, avifPath]);
-  console.log(`Rendered ${path.relative(webRoot, pngPath)}`);
-  console.log(`Rendered ${path.relative(webRoot, webpPath)}`);
-  console.log(`Rendered ${path.relative(webRoot, avifPath)}`);
+
+  // Phones get a narrow encode so the hero image fits in a single round trip.
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cocxy-preview-'));
+  const compactPngPath = path.join(scratch, 'cocxy-preview-compact.png');
+  try {
+    run('/usr/bin/sips', ['--resampleWidth', String(compactWidth), pngPath, '--out', compactPngPath]);
+    run('/usr/local/bin/cwebp', ['-quiet', '-q', '82', compactPngPath, '-o', compactWebpPath]);
+    run('/usr/local/bin/avifenc', ['--min', '28', '--max', '46', '--speed', '6', compactPngPath, compactAvifPath]);
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+
+  for (const output of [pngPath, webpPath, avifPath, compactWebpPath, compactAvifPath]) {
+    console.log(`Rendered ${path.relative(webRoot, output)}`);
+  }
 }
 
 main().catch((error) => {

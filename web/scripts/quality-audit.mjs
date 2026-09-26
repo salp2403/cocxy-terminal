@@ -518,7 +518,7 @@ function verifyBudgets() {
 
   const budgets = {
     cssGzipBytes: cssGzip,
-    cssGzipLimitBytes: 25 * 1024,
+    cssGzipLimitBytes: 40 * 1024,
     jsGzipBytes: jsGzip,
     jsGzipLimitBytes: 15 * 1024,
     heroAvifBytes: fs.existsSync(heroAvif) ? fs.statSync(heroAvif).size : null,

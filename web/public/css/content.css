@@ -1,0 +1,333 @@
+/* ---------- Code and install blocks ---------- */
+.code-block {
+  position: relative;
+  margin: 0 0 var(--space-4);
+  border-radius: var(--radius-md);
+  color: var(--term-fg);
+  background: var(--term-bg);
+  box-shadow: inset 0 0 0 1px var(--term-line);
+}
+
+pre.code-block {
+  overflow-x: auto;
+  padding: var(--space-4) 5.75rem var(--space-4) var(--space-4);
+  line-height: 1.6;
+}
+
+.code-block code {
+  font-size: 0.875rem;
+  white-space: pre;
+}
+
+.copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.5rem;
+  min-height: 2rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--term-line);
+  border-radius: var(--radius-sm);
+  color: var(--term-fg);
+  background: rgb(255 255 255 / 0.06);
+  font-family: var(--font-sans);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out), transform var(--dur-press) var(--ease-out);
+}
+
+.copy-button:hover {
+  background: rgb(255 255 255 / 0.12);
+}
+
+.copy-button:active {
+  transform: scale(0.96);
+}
+
+.copy-button:focus-visible {
+  outline-color: var(--term-accent);
+}
+
+pre.code-block .copy-button {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+}
+
+.install {
+  display: grid;
+  overflow: hidden;
+}
+
+.install__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--term-line);
+  background: var(--term-bar);
+  color: var(--term-dim);
+  font-size: var(--text-caption);
+  font-weight: 600;
+}
+
+.install pre {
+  margin: 0;
+  overflow-x: auto;
+  padding: var(--space-4);
+  line-height: 1.6;
+}
+
+.install code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.install code::before {
+  content: "$ ";
+  color: var(--term-accent);
+}
+
+@media (pointer: coarse) {
+  .copy-button {
+    min-height: var(--tap);
+    min-width: var(--tap);
+  }
+}
+
+/* ---------- FAQ ---------- */
+.faq-list {
+  display: grid;
+  max-width: var(--container-narrow);
+  border-top: 1px solid var(--line);
+}
+
+.faq-item {
+  border-bottom: 1px solid var(--line);
+}
+
+.faq-item summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 3.75rem;
+  padding-block: var(--space-4);
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: 1.1875rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  list-style: none;
+  cursor: pointer;
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item summary::after {
+  content: "";
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-inline-end: var(--space-2);
+  border-right: 2px solid var(--fg-3);
+  border-bottom: 2px solid var(--fg-3);
+  transform: translateY(-25%) rotate(45deg);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.faq-item[open] summary::after {
+  transform: translateY(25%) rotate(-135deg);
+}
+
+.faq-item p {
+  max-width: 62ch;
+  padding-block-end: var(--space-5);
+  margin: 0;
+}
+
+/* ---------- Tables ---------- */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  font-size: var(--text-small);
+}
+
+th,
+td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+thead th {
+  color: var(--fg-2);
+  font-weight: 600;
+}
+
+tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+/* ---------- Docs search ---------- */
+.docs-search {
+  display: grid;
+  gap: var(--space-3);
+  margin-block-end: var(--space-8);
+}
+
+.docs-search label {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.docs-search input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  background: var(--surface);
+}
+
+.docs-search-results ul {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.docs-search-results li {
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.docs-search-results a {
+  font-weight: 600;
+}
+
+/* ---------- Releases (shared with the generated releases page) ---------- */
+.rel-card {
+  padding: var(--space-6);
+  margin-block-end: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.rel-card[hidden] {
+  display: none;
+}
+
+.rel-header,
+.rel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.rel-header {
+  margin-block-end: var(--space-4);
+}
+
+.rel-header time {
+  color: var(--fg-2);
+}
+
+.rel-badge {
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  color: var(--on-accent);
+  background: var(--accent);
+  font-size: var(--text-caption);
+  font-weight: 600;
+}
+
+.rel-notes {
+  padding-inline-start: var(--space-4);
+  margin-block-end: var(--space-4);
+  border-left: 2px solid var(--line-strong);
+}
+
+.release-more {
+  display: flex;
+  justify-content: center;
+  margin-block: var(--space-8);
+}
+
+/* ---------- Footer ---------- */
+.site-footer {
+  padding-block: var(--space-16) var(--space-10);
+  border-top: 1px solid var(--line);
+  background: var(--bg-band);
+  font-size: var(--text-small);
+}
+
+.footer-grid {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.footer-grid p {
+  max-width: 34ch;
+  margin-block: var(--space-3) 0;
+}
+
+.footer-grid nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, max-content));
+  gap: 0 var(--space-8);
+  align-content: start;
+}
+
+.footer-grid nav a,
+.footer-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  color: var(--fg-2);
+}
+
+.footer-grid nav a:hover,
+.footer-links a:hover {
+  color: var(--fg);
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-4);
+}
+
+.footer-note,
+.footer-credit {
+  color: var(--fg-3);
+}
+
+@media (min-width: 760px) {
+  .footer-grid {
+    grid-template-columns: 1.3fr 1fr auto;
+    align-items: start;
+  }
+
+  .footer-grid nav {
+    grid-template-columns: repeat(3, minmax(0, max-content));
+  }
+}
