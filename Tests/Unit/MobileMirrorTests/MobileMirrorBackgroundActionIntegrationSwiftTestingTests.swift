@@ -213,6 +213,49 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         #expect(context.coordinator.authority.activePairing() == nil)
     }
 
+    @Test("an approved session is revoked and the phone notified when its lifetime ends")
+    func approvedSessionExpiresOnSchedule() async throws {
+        let sandbox = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let lifetime: TimeInterval = 0.3
+        let authority = MobileMirrorPairingAuthority(clock: {
+            Date().addingTimeInterval(lifetime - MobileMirrorPairingAuthority.sessionTTL)
+        })
+        let context = makeCoordinator(sandbox: sandbox, authority: authority)
+        defer { context.stop() }
+        let eventCapture = MobileMirrorEventCapture()
+        let eventHub = MobileMirrorEventHub { data, _ in
+            eventCapture.append(data)
+            return true
+        }
+        eventHub.add(descriptor: 103, close: {})
+        context.coordinator.gateway = MobileMirrorGateway(eventHub: eventHub) { _, _ in
+            .response(.error("Unavailable", status: 503))
+        }
+        let offer = authority.makeOffer()
+        context.coordinator.pendingPairing = try authority.consumeOffer(
+            token: offer.token,
+            identity: MobileMirrorClientIdentity(
+                remoteAddress: "192.168.50.23",
+                userAgent: "Mobile integration test"
+            )
+        )
+        context.coordinator.state = .awaitingConfirmation
+
+        context.coordinator.approvePendingPairing()
+        #expect(context.coordinator.state == .active)
+        #expect(context.coordinator.activePairing != nil)
+
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while context.coordinator.activePairing != nil, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(context.coordinator.activePairing == nil)
+        #expect(context.coordinator.state == .stopped)
+        #expect(authority.activePairing() == nil)
+        #expect(eventCapture.contains("event: revoked"))
+    }
+
     @Test("background audit failure reaches the desktop in the configured language")
     func backgroundAuditFailureIsLocalized() async throws {
         let sandbox = try makeTemporaryDirectory()
@@ -323,7 +366,8 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         sandbox: URL,
         projectService: any MobileMirrorProjectCreating = MobileMirrorProjectService(),
         auditWriter: MobileMirrorIntegrationAuditWriter = MobileMirrorIntegrationAuditWriter(),
-        localizer: AppLocalizer? = nil
+        localizer: AppLocalizer? = nil,
+        authority: MobileMirrorPairingAuthority = MobileMirrorPairingAuthority()
     ) -> MobileMirrorCoordinatorTestContext {
         let appDelegate = AppDelegate()
         let profileStore = MockRemoteProfileStore()
@@ -356,6 +400,7 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
             auditLog: RelayAuditLog(writer: auditWriter),
             relayManager: relayManager,
             tunnelController: tunnelController,
+            authority: authority,
             projectService: projectService,
             localizer: localizer,
             projectCreationConfirmation: { _, _ in true }
