@@ -90,7 +90,7 @@ async function verifyPage(page, url, viewport) {
   if (!metrics.main) fail(`${url} has no main#main`);
   if (!metrics.themeButton) fail(`${url} has no theme toggle`);
   if (metrics.overflowX > 1) fail(`${url} ${viewport.name} horizontal overflow ${metrics.overflowX}px`);
-  if ((url === '/' || url === '/es/') && metrics.videoSource !== 'video/webm') {
+  if ((url === '/' || url === '/es/') && metrics.videoSource && metrics.videoSource !== 'video/webm') {
     fail(`${url} homepage video does not prefer WebM`);
   }
   if (metrics.imageCount === 0) fail(`${url} loaded no images`);

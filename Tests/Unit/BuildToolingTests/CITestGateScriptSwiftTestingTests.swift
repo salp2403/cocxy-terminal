@@ -6113,11 +6113,8 @@ struct CITestGateScriptSwiftTestingTests {
 
         #expect(english.contains("Launch note draft"))
         #expect(english.contains("Demo outline"))
-        #expect(english.contains("/images/icon.png"))
-        #expect(english.contains("/images/og-image.png"))
-        #expect(english.contains("/images/cocxy-preview.png"))
-        #expect(english.contains("/videos/cocxy-demo.mp4"))
-        #expect(english.contains(#"<video controls preload="metadata" poster="/images/og-image.avif""#))
+        #expect(english.contains(#"<a href="/images/icon.png">"#))
+        #expect(english.contains(#"<a href="/images/og-image.png">"#))
         #expect(english.contains("No telemetry pipeline"))
         #expect(english.contains(#""@type": "Article""#))
         #expect(english.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/press.html">"#))
@@ -6125,11 +6122,17 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(spanish.contains("Borrador de nota de lanzamiento"))
         #expect(spanish.contains("Guion de demo"))
         #expect(spanish.contains("Recursos visuales"))
-        #expect(spanish.contains("/videos/cocxy-demo.mp4"))
-        #expect(spanish.contains("Video demo"))
+        #expect(spanish.contains(#"<a href="/images/icon.png">"#))
         #expect(spanish.contains("Sin sistema de telemetr&iacute;a"))
         #expect(spanish.contains(#""@type": "Article""#))
         #expect(spanish.contains(#"<link rel="alternate" hreflang="en" href="https://cocxy.dev/press.html">"#))
+
+        // Captures that show a personal shell prompt or internal test output stay off the press kit.
+        for page in [english, spanish] {
+            #expect(!page.contains("/images/cocxy-preview"))
+            #expect(!page.contains("/videos/cocxy-demo"))
+            #expect(!page.contains("<video"))
+        }
 
         let video = root.appendingPathComponent("web/public/videos/cocxy-demo.mp4")
         let attributes = try FileManager.default.attributesOfItem(atPath: video.path)

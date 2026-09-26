@@ -16,7 +16,7 @@
   <meta property="og:title" content="Arquitectura - Cocxy Terminal">
   <meta property="og:description" content="Swift, AppKit, SwiftUI, Metal y CocxyCore forman una pila nativa para macOS.">
   <meta property="og:url" content="https://cocxy.dev/es/architecture.html">
-  <meta property="og:image" content="https://cocxy.dev/og/og-architecture.png">
+  <meta property="og:image" content="https://cocxy.dev/og/og-es-architecture.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Arquitectura - Cocxy Terminal">
@@ -24,7 +24,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Arquitectura - Cocxy Terminal">
   <meta name="twitter:description" content="Swift, AppKit, SwiftUI, Metal y CocxyCore forman una pila nativa para macOS.">
-  <meta name="twitter:image" content="https://cocxy.dev/og/og-architecture.png">
+  <meta name="twitter:image" content="https://cocxy.dev/og/og-es-architecture.jpg">
   <link rel="canonical" href="https://cocxy.dev/es/architecture.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/architecture.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/architecture.html">
@@ -81,21 +81,23 @@
     <p class="eyebrow">Cocxy Terminal</p>
     <h1>Arquitectura</h1>
     <p>Swift, AppKit, SwiftUI, Metal y CocxyCore forman una pila nativa para macOS.</p>
-  </div></section><section class="section"><div class="container docs-layout">
+  </div></section>
+<section class="section section--tight"><div class="container docs-layout">
     <nav class="toc" aria-label="Contenido de arquitectura"><strong>Arquitectura</strong><a href="#diagram">Diagrama</a><a href="#stack">Stack</a><a href="#domain">Módulos</a><a href="#privacy-architecture">Privacidad</a><a href="#tests">Pruebas</a></nav>
     <article class="prose">
       <h2 id="diagram">Diagrama estático</h2>
       <img class="architecture-preview" src="/images/architecture-diagram.svg" width="920" height="520" alt="Diagrama de arquitectura Cocxy" loading="lazy">
       <h2 id="stack">Swift + AppKit, SwiftUI, CocxyCore, Metal, PTY</h2>
       <p>Swift + AppKit maneja ventanas y chrome. SwiftUI maneja paneles declarativos. CocxyCore expone ABI C desde Zig. Metal renderiza la terminal y PTY conserva semántica de shell.</p>
-      <h2 id="domain">Domain modules</h2>
+      <h2 id="domain">Módulos de dominio</h2>
       <p>Los servicios de dominio cubren agentes, Bóveda, hooks, navegador, Markdown, remotos, configuración, notificaciones, revisión y diagnósticos.</p>
       <h2 id="privacy-architecture">Arquitectura de privacidad</h2>
       <p>No existe backend obligatorio de Cocxy. El estado principal vive localmente y las rutas de red son acciones explícitas.</p>
-      <h2 id="tests">test suite</h2>
+      <h2 id="tests">Batería de pruebas</h2>
       <p>La cobertura combina Swift Testing, XCTest, scripts de smoke, verificación de bundle y pruebas de pipeline.</p>
     </article>
-  </div></section><section class="section section-band" id="download" aria-labelledby="download-title">
+  </div></section>
+<section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
     <div class="section-header section-header--center" data-reveal="fade-up">
       <p class="eyebrow">Descarga</p>

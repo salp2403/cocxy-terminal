@@ -16,7 +16,7 @@
   <meta property="og:title" content="Security - Cocxy Terminal">
   <meta property="og:description" content="Local secrets, signed updates, encrypted stores, hardened runtime, and explicit network actions.">
   <meta property="og:url" content="https://cocxy.dev/security.html">
-  <meta property="og:image" content="https://cocxy.dev/og/og-security.png">
+  <meta property="og:image" content="https://cocxy.dev/og/og-security.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Security - Cocxy Terminal">
@@ -24,7 +24,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Security - Cocxy Terminal">
   <meta name="twitter:description" content="Local secrets, signed updates, encrypted stores, hardened runtime, and explicit network actions.">
-  <meta name="twitter:image" content="https://cocxy.dev/og/og-security.png">
+  <meta name="twitter:image" content="https://cocxy.dev/og/og-security.jpg">
   <link rel="canonical" href="https://cocxy.dev/security.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/security.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/security.html">
@@ -81,7 +81,9 @@
     <p class="eyebrow">Cocxy Terminal</p>
     <h1>Security</h1>
     <p>Local secrets, signed updates, encrypted stores, hardened runtime, and explicit network actions.</p>
-  </div></section><section class="section"><div class="container detail-grid"><article class="card"><h2>Threat model</h2><p>Terminal output, secrets, sockets, clipboard, paths, and network connections are treated as sensitive.</p></article><article class="card"><h2>Cryptography</h2><p>AES-GCM protects Vault records, EdDSA signs Sparkle updates, HMAC-SHA256 protects relay auth, and Keychain stores secrets.</p></article><article class="card"><h2>Code signing and notarization</h2><p>Public releases use Developer ID Application signing, hardened runtime, secure timestamp, and Apple notarization.</p></article><article class="card"><h2>Dependency hygiene</h2><p>Swift and Apple frameworks are the default, Sparkle is audited, Zig dependencies are pinned, and npm is limited to web tooling.</p></article><article class="card"><h2>SBOM</h2><p>The public SBOM is linked with release artifacts when the release flow produces it.</p></article><article class="card"><h2>Disclosure</h2><p>Report vulnerabilities through GitHub Security Advisory or dev@cocxy.dev.</p></article></div></section><section class="section section-band" id="download" aria-labelledby="download-title">
+  </div></section>
+<section class="section section--tight"><div class="container detail-grid"><article class="card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v11H8l-4 4V4z"/><path d="M8 8h8M8 11h6"/></svg><h2>Threat model</h2><p>Terminal output, secrets, sockets, clipboard, paths, and network connections are treated as sensitive.</p></article><article class="card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v2"/></svg><h2>Cryptography</h2><p>AES-GCM protects Vault records, EdDSA signs Sparkle updates, HMAC-SHA256 protects relay auth, and Keychain stores secrets.</p></article><article class="card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-5"/></svg><h2>Code signing and notarization</h2><p>Public releases use Developer ID Application signing, hardened runtime, secure timestamp, and Apple notarization.</p></article><article class="card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v6M16 3v6M7 9h10v4a5 5 0 0 1-10 0V9z"/><path d="M12 18v3"/></svg><h2>Dependency hygiene</h2><p>Swift and Apple frameworks are the default, Sparkle is audited, Zig dependencies are pinned, and npm is limited to web tooling.</p></article><article class="card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 16h4"/></svg><h2>SBOM</h2><p>The public SBOM is linked with release artifacts when the release flow produces it.</p></article><article class="card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/><path d="M5 14l.9 2.6L8.5 17.5l-2.6.9L5 21l-.9-2.6-2.6-.9 2.6-.9L5 14z"/></svg><h2>Disclosure</h2><p>Report vulnerabilities through GitHub Security Advisory or <!--email_off--><a href="mailto:dev@cocxy.dev">dev@cocxy.dev</a><!--/email_off-->.</p></article></div></section>
+<section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
     <div class="section-header section-header--center" data-reveal="fade-up">
       <p class="eyebrow">Download</p>

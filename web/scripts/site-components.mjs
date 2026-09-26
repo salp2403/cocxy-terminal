@@ -55,41 +55,41 @@ export function stateChips(lang = 'en') {
     .join('')}</ul>`;
 }
 
-export function screenshot({ name, width, height, alt }) {
-  return `<picture>
-      <source srcset="/images/${name}.avif" type="image/avif">
-      <source srcset="/images/${name}.webp" type="image/webp">
-      <img src="/images/${name}.png" width="${width}" height="${height}" alt="${alt}" loading="lazy" decoding="async">
-    </picture>`;
+// Interim artwork shown inside capture slots until real captures exist.
+// Each function returns inner markup; productShot() supplies the frame.
+const mockBar = '<div class="mock__bar"><i></i><i></i><i></i></div>';
+
+function mockRows(states) {
+  return states.map((state) => `<div class="mock-app__row ${state}"><i class="state-dot"></i><span></span></div>`).join('');
 }
 
-// Interim artwork for the review and phone captures. Swap each one for a
-// real capture inside the same frame once it exists.
-export function reviewArtwork(lang = 'en') {
-  const es = lang === 'es';
-  const code = ['', '', 'is-del', 'is-add', 'is-add', '', 'note', '', 'is-add', ''];
-  return `<div class="window mock" role="img" aria-label="${es ? 'Ilustración del panel de revisión: árbol de archivos, diff y un comentario en una línea' : 'Illustration of the review panel: file tree, diff, and a comment on one line'}">
-      <div class="mock__bar"><i></i><i></i><i></i></div>
-      <div class="mock-diff__body">
-        <div class="mock-diff__files">${'<span></span>'.repeat(6)}</div>
-        <div class="mock-diff__code">${code
-          .map((kind) => (kind === 'note'
-            ? '<div class="mock-diff__note"><span></span><span></span></div>'
-            : `<span${kind ? ` class="${kind}"` : ''}></span>`))
-          .join('')}</div>
-      </div>
-    </div>`;
+export function appArtwork(variant = 'hero') {
+  const groups = variant === 'projects'
+    ? `<span class="mock-app__group"></span>${mockRows(['is-working', 'is-done'])}<span class="mock-app__group"></span>${mockRows(['is-waiting', 'is-idle'])}<span class="mock-app__group"></span>${mockRows(['is-done'])}`
+    : mockRows(variant === 'hero'
+      ? ['is-working', 'is-waiting', 'is-done', 'is-idle', 'is-working', 'is-idle', 'is-done', 'is-idle', 'is-waiting', 'is-idle']
+      : ['is-working', 'is-waiting', 'is-done', 'is-idle', 'is-working', 'is-idle']);
+  const side = variant === 'agents' ? '' : `<div class="mock-app__side"><span class="mock-app__label"></span><span class="mock-app__search"></span>${groups}</div>`;
+  const session = ['is-prompt', '', 'is-dim', '', '', 'is-dim', 'is-ok'];
+  const termLines = [...session, ...session, ...(variant === 'hero' ? [...session, ...session] : []), 'is-prompt is-caret'];
+  const term = `<div class="mock-app__term">${termLines.map((kind) => `<span${kind ? ` class="${kind}"` : ''}></span>`).join('')}</div>`;
+  const panelStates = variant === 'hero' || variant === 'agents'
+    ? ['is-working', 'is-waiting', 'is-done', 'is-working', 'is-idle', 'is-done', 'is-waiting', 'is-idle']
+    : ['is-working', 'is-waiting', 'is-done', 'is-idle'];
+  const panelCards = panelStates.map((state) => `<div class="mock-app__card ${state}"><i class="state-dot"></i><span></span><span></span></div>`).join('');
+  const panel = variant === 'projects' ? '' : `<div class="mock-app__panel"><span class="mock-app__label"></span>${panelCards}</div>`;
+  return `${mockBar}<div class="mock-app mock-app--${variant}">${side}${term}${panel}</div>`;
 }
 
-export function phoneArtwork(lang = 'en') {
-  const es = lang === 'es';
-  return `<div class="phone" role="img" aria-label="${es ? 'Ilustración del espejo móvil: sesiones, salida de terminal y una aprobación pendiente' : 'Illustration of the phone mirror: sessions, terminal output, and a pending approval'}">
-      <div class="mock-phone">
-        <span class="mock-phone__title"></span>
-        <div class="mock-phone__row is-working"><i class="state-dot"></i><span></span></div>
-        <div class="mock-phone__row is-waiting"><i class="state-dot"></i><span></span></div>
-        <div class="mock-phone__term">${'<span></span>'.repeat(7)}</div>
-        <div class="mock-phone__approve"><span></span><span></span></div>
-      </div>
-    </div>`;
+export function reviewArtwork() {
+  const code = ['', '', 'is-del', 'is-del', 'is-add', 'is-add', 'is-add', '', 'note', '', '', 'is-del', 'is-add', '', '', 'is-add', ''];
+  return `${mockBar}<div class="mock-diff__body"><div class="mock-diff__files">${'<span></span>'.repeat(10)}</div><div class="mock-diff__code">${code
+    .map((kind) => (kind === 'note'
+      ? '<div class="mock-diff__note"><span></span><span></span></div>'
+      : `<span${kind ? ` class="${kind}"` : ''}></span>`))
+    .join('')}</div></div>`;
+}
+
+export function phoneArtwork() {
+  return `<div class="mock-phone"><span class="mock-phone__title"></span><div class="mock-phone__row is-working"><i class="state-dot"></i><span></span></div><div class="mock-phone__row is-waiting"><i class="state-dot"></i><span></span></div><div class="mock-phone__term">${'<span></span>'.repeat(7)}</div><div class="mock-phone__approve"><span></span><span></span></div></div>`;
 }

@@ -118,39 +118,60 @@ async function initDocsSearch() {
   const input = document.querySelector('[data-doc-search]');
   const results = document.querySelector('[data-doc-search-results]');
   if (!input || !results) return;
+  const spanish = document.documentElement.lang.startsWith('es');
+  const text = spanish
+    ? { unavailable: 'El índice de búsqueda no está disponible.', none: (query) => `Sin resultados para «${query}». Prueba con otra palabra o revisa la lista de guías.`, count: (total) => `${total} ${total === 1 ? 'resultado' : 'resultados'}` }
+    : { unavailable: 'The search index is unavailable.', none: (query) => `No results for “${query}”. Try another word or browse the guides below.`, count: (total) => `${total} ${total === 1 ? 'result' : 'results'}` };
 
   let index = [];
   try {
     const response = await fetch('/docs/search-index.json', { cache: 'force-cache' });
     index = await response.json();
   } catch (_) {
-    results.textContent = 'Search index unavailable';
+    results.textContent = text.unavailable;
     return;
   }
 
-  input.addEventListener('input', () => {
-    const query = input.value.trim().toLowerCase();
+  const render = () => {
+    const raw = input.value.trim();
+    const query = raw.toLowerCase();
     if (query.length < 2) {
       results.replaceChildren();
       return;
     }
-    const lang = document.documentElement.lang.startsWith('es') ? 'es' : 'en';
     const matches = index
       .filter((item) => item.terms.includes(query))
       .slice(0, 8);
+    if (!matches.length) {
+      const empty = document.createElement('p');
+      empty.className = 'docs-search-empty';
+      empty.textContent = text.none(raw);
+      results.replaceChildren(empty);
+      return;
+    }
+    const count = document.createElement('p');
+    count.className = 'docs-search-count';
+    count.textContent = text.count(matches.length);
     const list = document.createElement('ul');
     for (const item of matches) {
       const link = document.createElement('a');
-      link.href = lang === 'es' ? item.urlEs : item.url;
-      link.textContent = lang === 'es' ? item.titleEs : item.title;
+      link.href = spanish ? item.urlEs : item.url;
+      link.textContent = spanish ? item.titleEs : item.title;
       const summary = document.createElement('p');
-      summary.textContent = lang === 'es' ? item.summaryEs : item.summary;
+      summary.textContent = spanish ? item.summaryEs : item.summary;
       const row = document.createElement('li');
       row.append(link, summary);
       list.append(row);
     }
-    results.replaceChildren(list);
-  });
+    results.replaceChildren(count, list);
+  };
+
+  input.addEventListener('input', render);
+  const initial = new URLSearchParams(location.search).get('q');
+  if (initial) {
+    input.value = initial;
+    render();
+  }
 }
 
 function initOfflineSupport() {

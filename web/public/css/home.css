@@ -175,6 +175,7 @@
 .is-working { --state: var(--working); }
 .is-waiting { --state: var(--waiting); }
 .is-done { --state: var(--done); }
+.is-idle { --state: var(--idle); }
 
 .state-dot {
   flex: none;

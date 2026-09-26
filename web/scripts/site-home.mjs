@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
-import { phoneArtwork, reviewArtwork, screenshot } from './site-components.mjs';
+import { appArtwork, phoneArtwork, reviewArtwork } from './site-components.mjs';
+import { productShot, tourVideoPlayer } from './site-shots.mjs';
 
 export function homeMoments(lang = 'en') {
   const es = lang === 'es';
@@ -19,9 +20,12 @@ export function homeMoments(lang = 'en') {
           <a class="text-link" href="${es ? '/es/features/agents.html' : '/features/agents.html'}">${es ? 'Cómo funciona la detección' : 'How detection works'}</a>
         </div>
         <figure class="moment__media" data-reveal="fade-up">
-          <div class="window">
-            ${screenshot({ name: 'getting-started-dashboard', width: 800, height: 489, alt: es ? 'Cocxy con dos paneles de terminal y el panel de agentes mostrando una sesión que edita un archivo' : 'Cocxy with two terminal panes and the agent panel showing a session that is editing a file' })}
-          </div>
+          ${productShot({
+            slot: 'agents',
+            alt: es ? 'Panel de agentes de Cocxy con varias sesiones y su estado' : 'Cocxy agent panel listing several sessions and their state',
+            artworkLabel: es ? 'Ilustración del panel de agentes: sesiones con su estado' : 'Illustration of the agent panel: sessions and their state',
+            artwork: appArtwork('agents'),
+          })}
         </figure>
       </article>
       <article class="moment moment--flip" id="moment-review">
@@ -32,7 +36,12 @@ export function homeMoments(lang = 'en') {
           <a class="text-link" href="${es ? '/es/features/code-review.html' : '/features/code-review.html'}">${es ? 'Ver la revisión de código' : 'Explore code review'}</a>
         </div>
         <figure class="moment__media" data-reveal="fade-up">
-          ${reviewArtwork(lang)}
+          ${productShot({
+            slot: 'review',
+            alt: es ? 'Panel de revisión de Cocxy con árbol de archivos, diff y un comentario en una línea' : 'Cocxy review panel with the file tree, a diff, and a comment on one line',
+            artworkLabel: es ? 'Ilustración del panel de revisión: árbol de archivos, diff y un comentario en una línea' : 'Illustration of the review panel: file tree, diff, and a comment on one line',
+            artwork: reviewArtwork(),
+          })}
         </figure>
       </article>
       <article class="moment" id="moment-projects">
@@ -42,9 +51,12 @@ export function homeMoments(lang = 'en') {
           <p>${es ? 'Cada repositorio tiene su propio espacio para sesiones, notas y tareas. Clónalo una vez y cada agente que inicies ahí queda con el proyecto.' : 'Each repository gets its own home for sessions, notes, and tasks. Clone it once, and every agent you start there stays with the project.'}</p>
         </div>
         <figure class="moment__media" data-reveal="fade-up">
-          <div class="window window--detail">
-            ${screenshot({ name: 'getting-started-sidebar', width: 722, height: 441, alt: es ? 'Barra lateral de Cocxy que agrupa sesiones bajo un proyecto' : 'Cocxy sidebar grouping sessions under a project' })}
-          </div>
+          ${productShot({
+            slot: 'projects',
+            alt: es ? 'Vista de proyectos de Cocxy con sesiones, notas y tareas agrupadas por repositorio' : 'Cocxy projects view grouping sessions, notes, and tasks by repository',
+            artworkLabel: es ? 'Ilustración de proyectos: sesiones agrupadas por repositorio' : 'Illustration of projects: sessions grouped by repository',
+            artwork: appArtwork('projects'),
+          })}
         </figure>
       </article>
       <article class="moment moment--flip" id="moment-mobile">
@@ -54,7 +66,12 @@ export function homeMoments(lang = 'en') {
           <p>${es ? 'Empareja tu teléfono con un código QR y sigue las sesiones desde su navegador: lee la salida, responde a un agente que te espera o aprueba su siguiente paso. Todo viaja cifrado de extremo a extremo, sin cuenta y sin nube de Cocxy de por medio.' : 'Pair your phone with a QR code and follow sessions from its browser: read the output, answer an agent that is waiting, or approve its next step. Everything travels end-to-end encrypted, with no account and no Cocxy cloud in between.'}</p>
         </div>
         <figure class="moment__media" data-reveal="fade-up">
-          ${phoneArtwork(lang)}
+          ${productShot({
+            slot: 'mobile',
+            alt: es ? 'Espejo móvil de Cocxy en un teléfono con sesiones, salida de terminal y una aprobación pendiente' : 'Cocxy phone mirror showing sessions, terminal output, and a pending approval',
+            artworkLabel: es ? 'Ilustración del espejo móvil: sesiones, salida de terminal y una aprobación pendiente' : 'Illustration of the phone mirror: sessions, terminal output, and a pending approval',
+            artwork: phoneArtwork(),
+          })}
         </figure>
       </article>
     </div>
@@ -100,21 +117,24 @@ export function homeArchitecture(lang = 'en') {
 </section>`;
 }
 
-export function homeDemo(lang = 'en', poster) {
+export function homeDemo(lang = 'en') {
   const es = lang === 'es';
+  const steps = es ? [
+    ['is-working', 'Inicia un agente', 'Ábrelo en cualquier pestaña o panel. Cocxy lo detecta sin configurar nada.'],
+    ['is-waiting', 'Síguelo sin vigilarlo', 'El estado aparece en la barra lateral, el panel de agentes y tu teléfono; te avisa cuando te necesita.'],
+    ['is-done', 'Revisa y decide', 'Lee el diff junto a la terminal, comenta y devuelve tus notas a la misma sesión.'],
+  ] : [
+    ['is-working', 'Start an agent', 'Run it in any tab or pane. Cocxy picks it up with no setup.'],
+    ['is-waiting', 'Follow it without watching', 'Its state shows in the sidebar, the agent panel, and your phone, and Cocxy tells you when it needs you.'],
+    ['is-done', 'Review and decide', 'Read the diff beside the terminal, comment, and send your notes back to the same session.'],
+  ];
   return `<section class="section section-band" id="demo" aria-labelledby="demo-title">
   <div class="container">
     <div class="section-header section-header--center" data-reveal="fade-up">
-      <p class="eyebrow">Demo</p>
-      <h2 id="demo-title">${es ? 'Mira una sesión de principio a fin.' : 'Watch a session from start to finish.'}</h2>
-      <p>${es ? 'Un recorrido breve por paneles, navegador, Bóveda y estado local, sin scripts de terceros.' : 'A short tour of panes, the browser, Vault, and local state, with no third-party scripts.'}</p>
+      <p class="eyebrow">${es ? 'Cómo funciona' : 'How it works'}</p>
+      <h2 id="demo-title">${es ? 'De la instrucción a la revisión, en tres pasos.' : 'From prompt to review, in three steps.'}</h2>
     </div>
-    <div class="window demo__window" data-reveal="fade-up">
-      <video controls muted playsinline preload="none" poster="${poster}" width="1280" height="720">
-        <source src="/videos/cocxy-demo.webm" type="video/webm">
-        <source src="/videos/cocxy-demo.mp4" type="video/mp4">
-      </video>
-    </div>
+    <ol class="steps" data-reveal="stagger">${steps.map(([state, title, text]) => `<li class="step ${state}"><span class="state-dot"></span><h3>${title}</h3><p>${text}</p></li>`).join('')}</ol>${tourVideoPlayer(es ? 'Recorrido por Cocxy Terminal' : 'Cocxy Terminal tour')}
   </div>
 </section>`;
 }

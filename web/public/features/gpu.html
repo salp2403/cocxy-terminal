@@ -16,7 +16,7 @@
   <meta property="og:title" content="GPU Terminal Engine - Cocxy Terminal">
   <meta property="og:description" content="CocxyCore combines a Zig terminal core, C ABI, glyph atlas hardening, PTY handling, and Metal rendering for native macOS performance.">
   <meta property="og:url" content="https://cocxy.dev/features/gpu.html">
-  <meta property="og:image" content="https://cocxy.dev/og/og-features-gpu.png">
+  <meta property="og:image" content="https://cocxy.dev/og/og-features-gpu.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="GPU Terminal Engine - Cocxy Terminal">
@@ -24,7 +24,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="GPU Terminal Engine - Cocxy Terminal">
   <meta name="twitter:description" content="CocxyCore combines a Zig terminal core, C ABI, glyph atlas hardening, PTY handling, and Metal rendering for native macOS performance.">
-  <meta name="twitter:image" content="https://cocxy.dev/og/og-features-gpu.png">
+  <meta name="twitter:image" content="https://cocxy.dev/og/og-features-gpu.jpg">
   <link rel="canonical" href="https://cocxy.dev/features/gpu.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/features/gpu.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/gpu.html">
@@ -78,29 +78,36 @@
 </header>
 <main id="main">
 <section class="page-hero"><div class="container">
-    <p class="eyebrow">Feature</p>
-    <h1>GPU Terminal Engine</h1>
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/features.html">Features</a></li><li><span aria-current="page">GPU Terminal Engine</span></li></ol></nav>
+    <span class="page-hero__icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 10h8v4H8zM2 10h2M2 14h2M20 10h2M20 14h2M8 2v4M12 2v4M16 2v4M8 18v4M12 18v4M16 18v4"/></svg></span><h1>GPU Terminal Engine</h1>
     <p>CocxyCore combines a Zig terminal core, C ABI, glyph atlas hardening, PTY handling, and Metal rendering for native macOS performance.</p>
-  </div></section><section class="section"><div class="container docs-layout">
-  <nav class="toc" aria-label="Feature contents"><strong>Contents</strong><a href="#section-1">CocxyCore boundary</a><a href="#section-2">Metal rendering</a><a href="#section-3">PTY correctness</a><a href="#screenshot">Screenshot</a></nav>
-  <article class="prose">
-    <h2>Capabilities</h2>
-    <ul><li>Zig core</li><li>Metal renderer</li><li>PTY semantics</li></ul>
-    <h2 id="section-1">CocxyCore boundary</h2><p>Swift talks to CocxyCore through a C ABI, keeping the terminal engine testable and isolated from UI code.</p>
-<h2 id="section-2">Metal rendering</h2><p>Glyph atlas and renderer paths are tuned for stable frame pacing and native macOS drawing.</p>
-<h2 id="section-3">PTY correctness</h2><p>Resize, shell, and terminal state are handled at the engine layer before UI presentation.</p>
-    <h2 id="screenshot">Workflow screenshot</h2>
-    <picture class="screenshot-frame">
-      <source srcset="/images/cocxy-preview.avif?v=0.0.0" type="image/avif">
-      <source srcset="/images/cocxy-preview.webp?v=0.0.0" type="image/webp">
-      <img src="/images/cocxy-preview.png?v=0.0.0" width="1574" height="808" alt="GPU Terminal Engine in Cocxy Terminal" loading="lazy">
-    </picture>
-    <div class="callout">
-      <h2>Local-first</h2>
-      <p>The feature operates on your Mac or through connections you explicitly start.</p>
-    </div>
-  </article>
-</div></section><section class="section section-band" id="download" aria-labelledby="download-title">
+  </div></section>
+<section class="section section--flush"><div class="container"><div class="window mock feature-shot" role="img" aria-label="Illustration of the Cocxy window: GPU Terminal Engine"><div class="mock__bar"><i></i><i></i><i></i></div><div class="mock-app mock-app--hero"><div class="mock-app__side"><span class="mock-app__label"></span><span class="mock-app__search"></span><div class="mock-app__row is-working"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-waiting"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-done"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-working"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-done"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-waiting"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div></div><div class="mock-app__term"><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt is-caret"></span></div><div class="mock-app__panel"><span class="mock-app__label"></span><div class="mock-app__card is-working"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-waiting"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-done"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-working"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-idle"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-done"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-waiting"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-idle"><i class="state-dot"></i><span></span><span></span></div></div></div></div></div></section>
+<section class="section"><div class="container">
+  <h2 class="sr-only">Capabilities</h2>
+  <ul class="capabilities"><li>Zig core</li><li>Metal renderer</li><li>PTY semantics</li></ul>
+  <div class="detail-columns"><article id="section-1"><h2>CocxyCore boundary</h2><p>Swift talks to CocxyCore through a C ABI, keeping the terminal engine testable and isolated from UI code.</p></article><article id="section-2"><h2>Metal rendering</h2><p>Glyph atlas and renderer paths are tuned for stable frame pacing and native macOS drawing.</p></article><article id="section-3"><h2>PTY correctness</h2><p>Resize, shell, and terminal state are handled at the engine layer before UI presentation.</p></article></div>
+  <div class="note is-done"><h2>Local-first</h2><p>The feature operates on your Mac or through connections you explicitly start.</p></div>
+</div></section>
+<section class="section section-band" aria-labelledby="related-title"><div class="container">
+  <h2 id="related-title" class="section-title">Keep exploring</h2>
+  <div class="feature-tiles"><article class="feature-tile feature-icon--cli">
+  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v12H4z"/><path d="M8 10l2 2-2 2M12 14h4"/></svg>
+  <h3><a class="tile-link" href="/features/cli.html">CLI Companion</a></h3>
+  <p>Script windows, tabs, agents, hooks, Vault, browser, markdown, remotes, configuration, themes, and diagnostics.</p>
+</article>
+<article class="feature-tile feature-icon--shell">
+  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M5 12h14M5 17h9"/><path d="M4 4h16v16H4z"/></svg>
+  <h3><a class="tile-link" href="/features/shell.html">Shell Integration</a></h3>
+  <p>zsh, bash, and fish wrappers preserve user dotfiles while adding cwd, command-boundary, and browser-open signals.</p>
+</article>
+<article class="feature-tile feature-icon--plugin">
+  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v6M16 3v6M7 9h10v4a5 5 0 0 1-10 0V9z"/><path d="M12 18v3"/></svg>
+  <h3><a class="tile-link" href="/features/plugins.html">Plugin System</a></h3>
+  <p>Local plugin hooks extend Cocxy while staying transparent, permissioned, and dependency-light.</p>
+</article></div>
+</div></section>
+<section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
     <div class="section-header section-header--center" data-reveal="fade-up">
       <p class="eyebrow">Download</p>

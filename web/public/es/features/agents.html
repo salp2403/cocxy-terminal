@@ -16,7 +16,7 @@
   <meta property="og:title" content="Detección multicapa de agentes - Cocxy Terminal">
   <meta property="og:description" content="Cocxy detecta agentes locales mediante hooks, señales OSC, semántica de terminal, patrones y heurísticas de tiempo.">
   <meta property="og:url" content="https://cocxy.dev/es/features/agents.html">
-  <meta property="og:image" content="https://cocxy.dev/og/og-features-agents.png">
+  <meta property="og:image" content="https://cocxy.dev/og/og-es-features-agents.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Detección multicapa de agentes - Cocxy Terminal">
@@ -24,7 +24,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Detección multicapa de agentes - Cocxy Terminal">
   <meta name="twitter:description" content="Cocxy detecta agentes locales mediante hooks, señales OSC, semántica de terminal, patrones y heurísticas de tiempo.">
-  <meta name="twitter:image" content="https://cocxy.dev/og/og-features-agents.png">
+  <meta name="twitter:image" content="https://cocxy.dev/og/og-es-features-agents.jpg">
   <link rel="canonical" href="https://cocxy.dev/es/features/agents.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/features/agents.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/agents.html">
@@ -78,14 +78,16 @@
 </header>
 <main id="main">
 <section class="page-hero"><div class="container">
-    <p class="eyebrow">Función</p>
-    <h1>Detección multicapa de agentes</h1>
+    <nav class="breadcrumbs" aria-label="Ruta de navegación"><ol><li><a href="/es/">Inicio</a></li><li><a href="/es/features.html">Funciones</a></li><li><span aria-current="page">Detección multicapa de agentes</span></li></ol></nav>
+    <span class="page-hero__icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/><path d="M5 14l.9 2.6L8.5 17.5l-2.6.9L5 21l-.9-2.6-2.6-.9 2.6-.9L5 14z"/></svg></span><h1>Detección multicapa de agentes</h1>
     <p>Cocxy detecta agentes locales mediante hooks, señales OSC, semántica de terminal, patrones y heurísticas de tiempo.</p>
-  </div></section><section class="section"><div class="container">
-  <div class="table-wrap">
+  </div></section>
+<section class="section section--flush"><div class="container"><div class="window mock feature-shot" role="img" aria-label="Ilustración de la ventana de Cocxy: Detección multicapa de agentes"><div class="mock__bar"><i></i><i></i><i></i></div><div class="mock-app mock-app--agents"><div class="mock-app__term"><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt is-caret"></span></div><div class="mock-app__panel"><span class="mock-app__label"></span><div class="mock-app__card is-working"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-waiting"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-done"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-working"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-idle"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-done"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-waiting"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-idle"><i class="state-dot"></i><span></span><span></span></div></div></div></div></div></section>
+<section class="section"><div class="container">
+  <div class="table-wrap table-wrap--stack">
     <table>
-      <thead><tr><th scope="col">Agente</th><th scope="col">Binary</th><th scope="col">Detección</th><th scope="col">Vault resume</th></tr></thead>
-      <tbody><tr><th scope="row">Claude</th><td><code>claude</code></td><td>OSC and hooks</td><td><code>--resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Codex</th><td><code>codex</code></td><td>OSC and state projection</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">OpenCode</th><td><code>opencode</code></td><td>Local pattern layer</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Pi</th><td><code>pi</code></td><td>Local pattern layer</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Cursor</th><td><code>cursor-agent</code></td><td>OSC-aware profile</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Gemini</th><td><code>gemini</code></td><td>Pattern and timing fallback</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Rovo</th><td><code>rovo</code></td><td>Local pattern layer</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Copilot</th><td><code>copilot</code></td><td>OSC and hooks</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">CodeBuddy</th><td><code>codebuddy</code></td><td>Local pattern layer</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Factory</th><td><code>factory</code></td><td>Local pattern layer</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Qoder</th><td><code>qoder</code></td><td>Local pattern layer</td><td><code>resume &lt;session-id&gt;</code></td></tr></tbody>
+      <thead><tr><th scope="col">Agente</th><th scope="col">Binario</th><th scope="col">Detección</th><th scope="col">Reanudar desde la Bóveda</th></tr></thead>
+      <tbody><tr><th scope="row">Claude</th><td data-label="Binario"><code>claude</code></td><td data-label="Detección">OSC and hooks</td><td data-label="Reanudar desde la Bóveda"><code>--resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Codex</th><td data-label="Binario"><code>codex</code></td><td data-label="Detección">OSC and state projection</td><td data-label="Reanudar desde la Bóveda"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">OpenCode</th><td data-label="Binario"><code>opencode</code></td><td data-label="Detección">Local pattern layer</td><td data-label="Reanudar desde la Bóveda"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Pi</th><td data-label="Binario"><code>pi</code></td><td data-label="Detección">Local pattern layer</td><td data-label="Reanudar desde la Bóveda"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Cursor</th><td data-label="Binario"><code>cursor-agent</code></td><td data-label="Detección">OSC-aware profile</td><td data-label="Reanudar desde la Bóveda"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Gemini</th><td data-label="Binario"><code>gemini</code></td><td data-label="Detección">Pattern and timing fallback</td><td data-label="Reanudar desde la Bóveda"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Rovo</th><td data-label="Binario"><code>rovo</code></td><td data-label="Detección">Local pattern layer</td><td data-label="Reanudar desde la Bóveda"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Copilot</th><td data-label="Binario"><code>copilot</code></td><td data-label="Detección">OSC and hooks</td><td data-label="Reanudar desde la Bóveda"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">CodeBuddy</th><td data-label="Binario"><code>codebuddy</code></td><td data-label="Detección">Local pattern layer</td><td data-label="Reanudar desde la Bóveda"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Factory</th><td data-label="Binario"><code>factory</code></td><td data-label="Detección">Local pattern layer</td><td data-label="Reanudar desde la Bóveda"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Qoder</th><td data-label="Binario"><code>qoder</code></td><td data-label="Detección">Local pattern layer</td><td data-label="Reanudar desde la Bóveda"><code>resume &lt;session-id&gt;</code></td></tr></tbody>
     </table>
   </div>
   <div class="detail-grid section-mini">
@@ -96,16 +98,26 @@ patterns = ["waiting", "working"]</code><button class="copy-button" type="button
     <article class="card"><h2>Cómo funciona</h2><p>Cocxy combina hooks, señales OSC, patrones de proceso y heurísticas de tiempo para mostrar estado local.</p></article>
     <article class="card"><h2>Integración con Bóveda</h2><p>Las sesiones detectadas pueden buscarse y reanudarse desde la Bóveda cifrada.</p></article>
   </div>
-  <picture class="screenshot-frame">
-    <source srcset="/images/cocxy-preview.avif?v=0.0.0" type="image/avif">
-    <source srcset="/images/cocxy-preview.webp?v=0.0.0" type="image/webp">
-    <img src="/images/cocxy-preview.png?v=0.0.0" width="1574" height="808" alt="Cocxy mostrando agentes y paneles locales" loading="lazy">
-  </picture>
-  <div class="callout">
-    <h2>Agentes propios</h2>
-    <p>Define agentes propios en agents.toml con comandos, patrones y reglas de reanudación sin modificar el código de la app.</p>
-  </div>
-</div></section><section class="section section-band" id="download" aria-labelledby="download-title">
+</div></section>
+<section class="section section-band" aria-labelledby="related-title"><div class="container">
+  <h2 id="related-title" class="section-title">Sigue explorando</h2>
+  <div class="feature-tiles"><article class="feature-tile feature-icon--config">
+  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v2"/></svg>
+  <h3><a class="tile-link" href="/es/features/vault.html">Bóveda cifrada</a></h3>
+  <p>Busca, reanuda, fija, previsualiza y exporta sesiones locales sin enviar historial de terminal a un servicio remoto.</p>
+</article>
+<article class="feature-tile feature-icon--review">
+  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v11H8l-4 4V4z"/><path d="M8 8h8M8 11h6"/></svg>
+  <h3><a class="tile-link" href="/es/features/code-review.html">Revisión de código en línea</a></h3>
+  <p>Revisa cambios del agente junto a la terminal, comenta líneas, acepta o rechaza bloques y devuelve observaciones estructuradas.</p>
+</article>
+<article class="feature-tile feature-icon--markdown">
+  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 16h4"/></svg>
+  <h3><a class="tile-link" href="/es/features/markdown.html">Espacio Markdown</a></h3>
+  <p>Un espacio nativo con vista previa, índice, bloques de código, diagramas, matemáticas, exportación y archivos locales.</p>
+</article></div>
+</div></section>
+<section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
     <div class="section-header section-header--center" data-reveal="fade-up">
       <p class="eyebrow">Descarga</p>

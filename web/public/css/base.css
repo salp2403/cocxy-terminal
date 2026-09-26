@@ -67,6 +67,13 @@ a:hover {
   text-decoration: underline;
 }
 
+p a:not([class]),
+li a:not([class]) {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+}
+
 :focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 3px;
