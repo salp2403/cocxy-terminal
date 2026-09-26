@@ -3,6 +3,7 @@
 
 import Combine
 import Foundation
+import os.log
 
 struct ProjectRecord: Codable, Equatable, Sendable, Identifiable {
     let id: ProjectID
@@ -95,13 +96,15 @@ final class ProjectRegistry: ObservableObject {
     @Published private(set) var records: [ProjectRecord]
     @Published private(set) var persistenceErrorDescription: String?
     @Published private(set) var recoveryDiagnostic: ProjectRegistryRecoveryDiagnostic?
+    /// False while a write could lose data the registry has not secured.
+    @Published private(set) var canPersist: Bool
     let recordsDidChange = PassthroughSubject<[ProjectRecord], Never>()
     /// Receives the durable incoming snapshot before `@Published` emits in `willSet`.
     var recordsWillPublish: (([ProjectRecord]) -> Void)?
 
     private let store: ProjectRegistryStore
     private let clock: () -> Date
-    private var canPersist: Bool
+    private static let logger = Logger(subsystem: "dev.cocxy.terminal", category: "ProjectRegistry")
 
     init(
         store: ProjectRegistryStore = ProjectRegistryStore(),
@@ -256,9 +259,16 @@ final class ProjectRegistry: ObservableObject {
                 recoveredWholeDocument: report.recoveredWholeDocument
             )
         }
+        if let repairFailure = report.repairFailure {
+            logger.error(
+                "Project registry repair was not saved: \(String(describing: repairFailure), privacy: .private)"
+            )
+        }
         return LoadOutcome(
             records: report.records.sorted(by: sortRecords),
-            persistenceErrorDescription: report.repairFailure.map { String(describing: $0) },
+            persistenceErrorDescription: report.allowsPersistence
+                ? nil
+                : report.repairFailure.map { String(describing: $0) },
             recoveryDiagnostic: diagnostic,
             canPersist: report.allowsPersistence
         )

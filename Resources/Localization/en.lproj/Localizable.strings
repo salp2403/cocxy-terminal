@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Pin project";
 "projectSidebar.unpin" = "Unpin project";
 "projectSidebar.unavailable" = "Project list unavailable";
+"projectSidebar.readOnly" = "Project changes can't be saved right now.";
 "project.registry.recovery.message" = "Some project metadata could not be read. Cocxy saved the rejected records (%d) in a private recovery file.";
 "project.registry.recovery.document" = "The project list could not be read. Cocxy saved it in a private recovery file and started a new list.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d task";

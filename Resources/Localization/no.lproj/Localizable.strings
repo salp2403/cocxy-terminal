@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Fest prosjekt";
 "projectSidebar.unpin" = "Løsne prosjekt";
 "projectSidebar.unavailable" = "Prosjektlisten er utilgjengelig";
+"projectSidebar.readOnly" = "Prosjektendringer kan ikke lagres akkurat nå.";
 "project.registry.recovery.message" = "Noen prosjektmetadata kunne ikke leses. Cocxy lagret de avviste postene (%d) i en privat gjenopprettingsfil.";
 "project.registry.recovery.document" = "Prosjektlisten kunne ikke leses. Cocxy lagret den i en privat gjenopprettingsfil og startet en ny liste.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d oppgave";

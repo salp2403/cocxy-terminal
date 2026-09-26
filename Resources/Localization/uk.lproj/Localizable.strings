@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Закріпити проєкт";
 "projectSidebar.unpin" = "Відкріпити проєкт";
 "projectSidebar.unavailable" = "Список проєктів недоступний";
+"projectSidebar.readOnly" = "Зараз неможливо зберегти зміни проєктів.";
 "project.registry.recovery.message" = "Не вдалося прочитати частину метаданих проєктів. Cocxy зберіг відхилені записи (%d) у приватному файлі відновлення.";
 "project.registry.recovery.document" = "Не вдалося прочитати список проєктів. Cocxy зберіг його в приватному файлі відновлення й почав новий список.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d завдання";

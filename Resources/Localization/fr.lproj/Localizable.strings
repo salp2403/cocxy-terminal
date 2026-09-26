@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Épingler le projet";
 "projectSidebar.unpin" = "Désépingler le projet";
 "projectSidebar.unavailable" = "Liste des projets indisponible";
+"projectSidebar.readOnly" = "Les modifications des projets ne peuvent pas être enregistrées pour le moment.";
 "project.registry.recovery.message" = "Certaines métadonnées de projet n’ont pas pu être lues. Cocxy a enregistré les entrées rejetées (%d) dans un fichier de récupération privé.";
 "project.registry.recovery.document" = "La liste des projets n’a pas pu être lue. Cocxy l’a enregistrée dans un fichier de récupération privé et a commencé une nouvelle liste.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d tâche";

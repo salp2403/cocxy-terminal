@@ -152,6 +152,7 @@ struct ProjectRegistryResilienceSwiftTestingTests {
 
         #expect(registry.records.map(\.id) == [ProjectID(rawValue: "/tmp/kept-project")])
         #expect(registry.persistenceErrorDescription != nil)
+        #expect(!registry.canPersist)
         #expect(throws: ProjectRegistryError.self) {
             try registry.setPinned(true, projectID: ProjectID(rawValue: "/tmp/kept-project"))
         }
@@ -167,7 +168,7 @@ struct ProjectRegistryResilienceSwiftTestingTests {
         #expect(try String(contentsOf: quarantine, encoding: .utf8).contains("invalid"))
     }
 
-    @Test("a failed repair save keeps projects and the recovery notice, and the next write persists")
+    @Test("a failed repair save keeps projects writable with the recovery notice, and the next write persists")
     func repairSaveFailureKeepsRecordsWritable() throws {
         let sandbox = makeSandbox("RepairSaveFailure")
         defer { try? FileManager.default.removeItem(at: sandbox) }
@@ -179,7 +180,8 @@ struct ProjectRegistryResilienceSwiftTestingTests {
 
         #expect(registry.records.map(\.id) == [ProjectID(rawValue: "/tmp/repaired-project")])
         #expect(registry.recoveryDiagnostic?.discardedRecordCount == 1)
-        #expect(registry.persistenceErrorDescription != nil)
+        #expect(registry.persistenceErrorDescription == nil)
+        #expect(registry.canPersist)
 
         writes.deniedNamePrefix = nil
         try registry.setPinned(true, projectID: ProjectID(rawValue: "/tmp/repaired-project"))

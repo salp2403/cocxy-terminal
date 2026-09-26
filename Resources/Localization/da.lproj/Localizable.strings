@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Fastgør projekt";
 "projectSidebar.unpin" = "Frigør projekt";
 "projectSidebar.unavailable" = "Projektliste utilgængelig";
+"projectSidebar.readOnly" = "Projektændringer kan ikke gemmes lige nu.";
 "project.registry.recovery.message" = "Nogle projektmetadata kunne ikke læses. Cocxy gemte de afviste poster (%d) i en privat gendannelsesfil.";
 "project.registry.recovery.document" = "Projektlisten kunne ikke læses. Cocxy gemte den i en privat gendannelsesfil og startede en ny liste.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d opgave";

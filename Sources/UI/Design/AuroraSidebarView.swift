@@ -100,7 +100,7 @@ extension Design {
                                 registryAvailable: projectRegistryAvailable,
                                 recoveryMessage: projectRegistryRecoveryMessage,
                                 onActivate: onActivateProject,
-                                onSetPinned: projectRegistryAvailable ? onSetProjectPinned : nil,
+                                onSetPinned: onSetProjectPinned,
                                 localizer: localizer
                             )
                             ForEach(workspaces) { workspace in

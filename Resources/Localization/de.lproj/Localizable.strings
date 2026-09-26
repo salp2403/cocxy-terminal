@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Projekt anheften";
 "projectSidebar.unpin" = "Projekt lösen";
 "projectSidebar.unavailable" = "Projektliste nicht verfügbar";
+"projectSidebar.readOnly" = "Projektänderungen können gerade nicht gespeichert werden.";
 "project.registry.recovery.message" = "Einige Projektmetadaten konnten nicht gelesen werden. Cocxy hat die abgelehnten Einträge (%d) in einer privaten Wiederherstellungsdatei gespeichert.";
 "project.registry.recovery.document" = "Die Projektliste konnte nicht gelesen werden. Cocxy hat sie in einer privaten Wiederherstellungsdatei gespeichert und eine neue Liste begonnen.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d Aufgabe";

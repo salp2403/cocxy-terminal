@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Fijar proyecto";
 "projectSidebar.unpin" = "Dejar de fijar proyecto";
 "projectSidebar.unavailable" = "Lista de proyectos no disponible";
+"projectSidebar.readOnly" = "Los cambios en los proyectos no se pueden guardar ahora.";
 "project.registry.recovery.message" = "No se pudieron leer algunos metadatos de proyectos. Cocxy guardó los registros rechazados (%d) en un archivo privado de recuperación.";
 "project.registry.recovery.document" = "No se pudo leer la lista de proyectos. Cocxy la guardó en un archivo privado de recuperación y empezó una lista nueva.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d tarea";

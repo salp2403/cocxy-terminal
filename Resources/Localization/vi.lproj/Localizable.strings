@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Ghim dự án";
 "projectSidebar.unpin" = "Bỏ ghim dự án";
 "projectSidebar.unavailable" = "Danh sách dự án không khả dụng";
+"projectSidebar.readOnly" = "Hiện không thể lưu các thay đổi của dự án.";
 "project.registry.recovery.message" = "Không thể đọc một số siêu dữ liệu dự án. Cocxy đã lưu các bản ghi bị từ chối (%d) vào một tệp khôi phục riêng tư.";
 "project.registry.recovery.document" = "Không thể đọc danh sách dự án. Cocxy đã lưu nó vào một tệp khôi phục riêng tư và bắt đầu một danh sách mới.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d tác vụ";
