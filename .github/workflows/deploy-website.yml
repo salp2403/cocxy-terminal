@@ -100,6 +100,20 @@ jobs:
           esac
           BACKUP_NAME="cocxy-web-backup-${GITHUB_RUN_ID}-$(date -u +%Y%m%d%H%M%S).tar.gz"
 
+          # The runtime lives in the directory that contains the public root,
+          # where pm2 runs it. Anything left inside the public root is served.
+          RUNTIME_PATH="$(ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
+            "set -e; \
+             public_root=\$(readlink -f ${DEPLOY_PATH}); \
+             test \"\$(basename \"\$public_root\")\" = public; \
+             test -f \"\$public_root/index.html\"; \
+             test -f \"\$(dirname \"\$public_root\")/server.js\"; \
+             dirname \"\$public_root\"")"
+          case "$RUNTIME_PATH" in
+            /*) ;;
+            *) echo "::error::Unable to resolve the website runtime directory"; exit 1 ;;
+          esac
+
           ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
             "set -e; \
              mkdir -p ${DEPLOY_PATH} ${DEPLOY_PATH}css ${DEPLOY_PATH}js ${DEPLOY_PATH}images ${DEPLOY_PATH}es ${DEPLOY_PATH}videos ${DEPLOY_PATH}og ${DEPLOY_PATH}features ${DEPLOY_PATH}docs ${DEPLOY_PATH}es/features ${DEPLOY_PATH}es/docs; \
@@ -163,20 +177,35 @@ jobs:
              sed -i 's|Version: [0-9]*\.[0-9]*\.[0-9]*|Version: ${VERSION}|g' ${DEPLOY_PATH}llms.txt; \
              if find ${DEPLOY_PATH} \( -name '*.html' -o -name 'llms.txt' -o -name 'service-worker.js' \) -print0 | xargs -0 grep -F 'v0.0.0'; then echo 'unresolved version placeholder in deployed website'; exit 1; fi"
 
+          RUNTIME_BACKUP="/tmp/cocxy-web-runtime-backup-${GITHUB_RUN_ID}-$(date -u +%Y%m%d%H%M%S).tar.gz"
+          ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
+            "set -e; \
+             cd ${RUNTIME_PATH}; \
+             existing=; \
+             for entry in server.js package.json package-lock.json ecosystem.config.js restart-production-runtime.sh node_modules; do \
+               if [ -e \$entry ]; then existing=\"\$existing \$entry\"; fi; \
+             done; \
+             if [ -n \"\$existing\" ]; then tar -czf ${RUNTIME_BACKUP} \$existing; fi"
           scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/server.js web/package.json web/package-lock.json web/ecosystem.config.js \
             web/scripts/restart-production-runtime.sh \
-            ${DEPLOY_TARGET}:${DEPLOY_PATH}
+            ${DEPLOY_TARGET}:${RUNTIME_PATH}/
           ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
             "set -e; \
              export PATH=\"\$HOME/.npm-global/bin:\$HOME/.npm/bin:\$HOME/.local/bin:\$HOME/.nvm/current/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:\$PATH\"; \
+             export PATH=\"\$PATH:/opt/bitnami/node/bin\"; \
              if [ -s \"\$HOME/.nvm/nvm.sh\" ]; then . \"\$HOME/.nvm/nvm.sh\" >/dev/null 2>&1; fi; \
-             cd ${DEPLOY_PATH}; \
+             cd ${RUNTIME_PATH}; \
+             quarantine=.public-runtime-quarantine-\$(date -u +%Y%m%d%H%M%S); \
+             for artifact in server.js package.json package-lock.json ecosystem.config.js restart-production-runtime.sh cocxy-web.log cocxy-web.err.log .cocxy-web.pid node_modules; do \
+               if [ -e ${DEPLOY_PATH}\$artifact ]; then mkdir -p \$quarantine; mv ${DEPLOY_PATH}\$artifact \$quarantine/; fi; \
+             done; \
              npm ci --omit=dev --ignore-scripts --no-audit --no-fund; \
              chmod +x restart-production-runtime.sh; \
              ./restart-production-runtime.sh"
 
           echo "backup=/tmp/${BACKUP_NAME}" >> "$GITHUB_STEP_SUMMARY"
+          echo "runtime_backup=${RUNTIME_BACKUP}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Production smoke
         run: |
@@ -202,9 +231,14 @@ jobs:
           curl -fsSL https://cocxy.dev/llms.txt -o "$SMOKE_DIR/llms.txt"
           curl -fsSL https://cocxy.dev/feed.xml -o "$SMOKE_DIR/feed.xml"
           curl -fsSL https://cocxy.dev/releases.xml -o "$SMOKE_DIR/releases.xml"
-          curl -fsSL https://cocxy.dev/service-worker.js -o "$SMOKE_DIR/service-worker.js"
+          curl -fsSL "https://cocxy.dev/service-worker.js?deploy=${GITHUB_RUN_ID}" -o "$SMOKE_DIR/service-worker.js"
+          curl -fsSL https://cocxy.dev/appcast.xml -o "$SMOKE_DIR/appcast.xml"
           curl -fsSI https://cocxy.dev/ -o "$SMOKE_DIR/home.headers"
           grep -qi "cache-control: .*no-transform" "$SMOKE_DIR/home.headers"
+          grep -qi "^permissions-policy:" "$SMOKE_DIR/home.headers"
+          for private_path in server.js package.json package-lock.json ecosystem.config.js restart-production-runtime.sh cocxy-web.log cocxy-web.err.log node_modules/express/package.json; do
+            test "$(curl -sS -o /dev/null -w '%{http_code}' "https://cocxy.dev/${private_path}?deploy=${GITHUB_RUN_ID}")" = "404"
+          done
           grep -q "style.css?v=${ASSET_VERSION}" "$SMOKE_DIR/home.html"
           grep -q "main.js?v=${ASSET_VERSION}" "$SMOKE_DIR/home.html"
           grep -q "theme-switcher.js?v=${ASSET_VERSION}" "$SMOKE_DIR/home.html"
@@ -217,6 +251,8 @@ jobs:
           grep -q "<rss version=\"2.0\"" "$SMOKE_DIR/feed.xml"
           grep -q "Cocxy Terminal Releases" "$SMOKE_DIR/releases.xml"
           grep -q "PRECACHE_URLS" "$SMOKE_DIR/service-worker.js"
+          grep -q "xmlns:sparkle=" "$SMOKE_DIR/appcast.xml"
+          grep -q "sparkle:edSignature=" "$SMOKE_DIR/appcast.xml"
           grep -q "cocxy-web-static-v${ASSET_VERSION}" "$SMOKE_DIR/service-worker.js"
           grep -q "style.css?v=${ASSET_VERSION}" "$SMOKE_DIR/service-worker.js"
           grep -q "main.js?v=${ASSET_VERSION}" "$SMOKE_DIR/service-worker.js"
