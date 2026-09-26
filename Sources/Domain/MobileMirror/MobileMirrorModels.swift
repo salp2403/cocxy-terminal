@@ -522,7 +522,12 @@ enum MobileMirrorError: Error, Equatable, Sendable, LocalizedError {
             return ("mobile.mirror.error.noPrivateNetwork", "No private local network is available.")
         case .invalidPairingToken, .invalidSignature:
             return ("mobile.web.status.authenticationFailed", "Authentication failed")
-        case .pairingExpired, .sessionExpired:
+        case .pairingExpired:
+            return (
+                "mobile.mirror.status.expired",
+                "The pairing code expired. Create a new one on the Mac."
+            )
+        case .sessionExpired:
             return ("mobile.web.status.rescanRequired", "Scan a new QR code on the Mac to reconnect")
         case .pairingPending:
             return ("mobile.mirror.status.confirmation", "Desktop confirmation required")

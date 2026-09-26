@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "Forbundet på det private netværk";
 "mobile.mirror.status.activeSSH" = "Forbundet via SSH";
 "mobile.mirror.status.denied" = "Parring afvist";
+"mobile.mirror.status.expired" = "Parringskoden er udløbet. Opret en ny på Mac-computeren.";
 "mobile.mirror.status.starting" = "Åbner privat telefonrelæ";
 "mobile.mirror.status.startingSSH" = "Åbner sikker SSH-forbindelse";
 "mobile.mirror.transport.label" = "Privat telefonrelæ";

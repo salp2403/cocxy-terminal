@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "Połączono w sieci prywatnej";
 "mobile.mirror.status.activeSSH" = "Połączono przez SSH";
 "mobile.mirror.status.denied" = "Odrzucono parowanie";
+"mobile.mirror.status.expired" = "Kod parowania wygasł. Utwórz nowy na Macu.";
 "mobile.mirror.status.starting" = "Otwieranie prywatnego przekaźnika telefonu";
 "mobile.mirror.status.startingSSH" = "Otwieranie bezpiecznego połączenia SSH";
 "mobile.mirror.transport.label" = "Prywatny przekaźnik telefonu";

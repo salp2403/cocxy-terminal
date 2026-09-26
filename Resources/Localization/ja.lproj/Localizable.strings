@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "プライベートネットワークで接続済み";
 "mobile.mirror.status.activeSSH" = "SSH 経由で接続済み";
 "mobile.mirror.status.denied" = "ペアリングが拒否されました";
+"mobile.mirror.status.expired" = "ペアリングコードの有効期限が切れました。Macで新しいコードを作成してください。";
 "mobile.mirror.status.starting" = "電話用プライベートリレーを開いています";
 "mobile.mirror.status.startingSSH" = "安全な SSH 接続を開いています";
 "mobile.mirror.transport.label" = "電話用プライベートリレー";

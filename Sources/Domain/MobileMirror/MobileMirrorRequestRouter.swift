@@ -211,7 +211,10 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         do {
             let pending = try authority.consumeOffer(token: token, identity: identity)
             await pendingPairingHandler(pending)
-            return .response(pairingPage(pendingID: pending.id))
+            return .response(pairingPage(
+                pendingID: pending.id,
+                remainingLifetime: authority.remainingLifetime(until: pending.expiresAt)
+            ))
         } catch {
             return errorResponse(error, identity: identity)
         }
@@ -232,8 +235,10 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                 return .response(.json(["status": "pending"], status: 202))
             case .denied:
                 return .response(.json(
-                    MobileMirrorPairingDenial(
-                        error: currentLocalization().text("mobile.mirror.status.denied")
+                    MobileMirrorPairingOutcome(
+                        status: "denied",
+                        error: currentLocalization().text("mobile.mirror.status.denied"),
+                        code: MobileMirrorResponseCode.authorizationDenied.rawValue
                     ),
                     status: 403
                 ))
@@ -247,6 +252,17 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                     ]
                 ))
             }
+        } catch MobileMirrorError.pairingExpired, MobileMirrorError.invalidPairingToken {
+            let failure = MobileMirrorFailure(MobileMirrorError.pairingExpired)
+            let response = MobileMirrorHTTPResponse.json(
+                MobileMirrorPairingOutcome(
+                    status: "expired",
+                    error: currentLocalization().text(failure.messageKey),
+                    code: failure.code.rawValue
+                ),
+                status: failure.status
+            )
+            return rejected(response, identity: identity)
         } catch {
             return errorResponse(error, identity: identity)
         }
@@ -423,8 +439,13 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         ))
     }
 
-    private func pairingPage(pendingID: UUID) -> MobileMirrorHTTPResponse {
+    private func pairingPage(
+        pendingID: UUID,
+        remainingLifetime: TimeInterval
+    ) -> MobileMirrorHTTPResponse {
         let localization = currentLocalization()
+        let expired = Self.javaScriptLiteral(localization.text("mobile.mirror.status.expired"))
+        let remainingMilliseconds = Int(remainingLifetime * 1_000)
         let nonce = MobileMirrorPairingAuthority.base64URL(RelayToken.generate().secret)
         let confirmTitle = Self.htmlEscaped(localization.text("mobile.mirror.confirm.title"))
         let waiting = Self.htmlEscaped(localization.text("mobile.mirror.status.confirmation"))
@@ -451,8 +472,9 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
           <h1><span class="pulse"></span>\(confirmTitle)</h1>
           <p id="status" role="status">\(waiting)</p>
         </main><script nonce="\(nonce)">
-          const status=document.getElementById('status');
-          const poll=async()=>{try{const r=await fetch('/mobile/api/pair-status?id=\(pendingID.uuidString)',{cache:'no-store'});const v=await r.json();if(v.status==='confirmed'){location.replace((v.redirect||'/')+location.hash);return}if(v.status==='denied'){status.textContent=\(denied);return}}catch{}setTimeout(poll,900)};poll();
+          const status=document.getElementById('status');const deadline=Date.now()+\(remainingMilliseconds);
+          const end=(text)=>{status.textContent=text;document.querySelector('.pulse')?.remove()};
+          const poll=async()=>{if(Date.now()>=deadline){end(\(expired));return}try{const r=await fetch('/mobile/api/pair-status?id=\(pendingID.uuidString)',{cache:'no-store'});const v=await r.json();if(v.status==='confirmed'){location.replace((v.redirect||'/')+location.hash);return}if(v.status==='denied'){end(\(denied));return}if(v.status==='expired'){end(\(expired));return}}catch{}setTimeout(poll,900)};poll();
         </script></body></html>
         """
         return MobileMirrorHTTPResponse(

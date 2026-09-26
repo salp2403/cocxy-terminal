@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "Підключено у приватній мережі";
 "mobile.mirror.status.activeSSH" = "Підключено через SSH";
 "mobile.mirror.status.denied" = "У спарюванні відмовлено";
+"mobile.mirror.status.expired" = "Термін дії коду сполучення минув. Створіть новий код на Mac.";
 "mobile.mirror.status.starting" = "Запуск приватного ретранслятора для телефона";
 "mobile.mirror.status.startingSSH" = "Відкриття захищеного SSH-з’єднання";
 "mobile.mirror.transport.label" = "Приватний ретранслятор для телефона";

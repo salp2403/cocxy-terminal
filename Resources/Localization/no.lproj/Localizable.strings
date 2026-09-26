@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "Tilkoblet på det private nettverket";
 "mobile.mirror.status.activeSSH" = "Tilkoblet via SSH";
 "mobile.mirror.status.denied" = "Sammenkobling avvist";
+"mobile.mirror.status.expired" = "Sammenkoblingskoden har utløpt. Opprett en ny på Macen.";
 "mobile.mirror.status.starting" = "Åpner privat telefonrelé";
 "mobile.mirror.status.startingSSH" = "Åpner sikker SSH-forbindelse";
 "mobile.mirror.transport.label" = "Privat telefonrelé";

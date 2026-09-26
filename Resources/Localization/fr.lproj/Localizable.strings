@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "Connecté au réseau privé";
 "mobile.mirror.status.activeSSH" = "Connecté via SSH";
 "mobile.mirror.status.denied" = "Jumelage refusé";
+"mobile.mirror.status.expired" = "Le code d’appairage a expiré. Créez-en un nouveau sur le Mac.";
 "mobile.mirror.status.starting" = "Ouverture du relais privé pour téléphone";
 "mobile.mirror.status.startingSSH" = "Ouverture d’une connexion SSH sécurisée";
 "mobile.mirror.transport.label" = "Relais privé pour téléphone";

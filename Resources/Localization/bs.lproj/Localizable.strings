@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "Povezano na privatnoj mreži";
 "mobile.mirror.status.activeSSH" = "Povezano putem SSH-a";
 "mobile.mirror.status.denied" = "Uparivanje je odbijeno";
+"mobile.mirror.status.expired" = "Kod za uparivanje je istekao. Kreirajte novi na Macu.";
 "mobile.mirror.status.starting" = "Otvaranje privatnog releja za telefon";
 "mobile.mirror.status.startingSSH" = "Otvaranje sigurne SSH veze";
 "mobile.mirror.transport.label" = "Privatni relej za telefon";

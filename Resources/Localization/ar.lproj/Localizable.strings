@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "متصل على الشبكة الخاصة";
 "mobile.mirror.status.activeSSH" = "متصل عبر SSH";
 "mobile.mirror.status.denied" = "تم رفض الإقران";
+"mobile.mirror.status.expired" = "انتهت صلاحية رمز الاقتران. أنشئ رمزًا جديدًا على جهاز Mac.";
 "mobile.mirror.status.starting" = "جارٍ فتح مرحّل خاص للهاتف";
 "mobile.mirror.status.startingSSH" = "جارٍ فتح اتصال SSH آمن";
 "mobile.mirror.transport.label" = "مرحّل خاص للهاتف";

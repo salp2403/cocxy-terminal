@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "เชื่อมต่อบนเครือข่ายส่วนตัวแล้ว";
 "mobile.mirror.status.activeSSH" = "เชื่อมต่อผ่าน SSH แล้ว";
 "mobile.mirror.status.denied" = "ปฏิเสธการจับคู่แล้ว";
+"mobile.mirror.status.expired" = "รหัสจับคู่หมดอายุแล้ว โปรดสร้างรหัสใหม่บน Mac";
 "mobile.mirror.status.starting" = "กำลังเปิดรีเลย์ส่วนตัวสำหรับโทรศัพท์";
 "mobile.mirror.status.startingSSH" = "กำลังเปิดการเชื่อมต่อ SSH ที่ปลอดภัย";
 "mobile.mirror.transport.label" = "รีเลย์ส่วนตัวสำหรับโทรศัพท์";

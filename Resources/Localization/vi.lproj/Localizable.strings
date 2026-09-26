@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "Đã kết nối trên mạng riêng";
 "mobile.mirror.status.activeSSH" = "Đã kết nối qua SSH";
 "mobile.mirror.status.denied" = "Đã từ chối ghép đôi";
+"mobile.mirror.status.expired" = "Mã ghép nối đã hết hạn. Hãy tạo mã mới trên máy Mac.";
 "mobile.mirror.status.starting" = "Đang mở bộ chuyển tiếp riêng cho điện thoại";
 "mobile.mirror.status.startingSSH" = "Đang mở kết nối SSH bảo mật";
 "mobile.mirror.transport.label" = "Bộ chuyển tiếp riêng cho điện thoại";

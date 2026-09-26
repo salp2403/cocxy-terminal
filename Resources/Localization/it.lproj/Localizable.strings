@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "Connesso alla rete privata";
 "mobile.mirror.status.activeSSH" = "Connesso tramite SSH";
 "mobile.mirror.status.denied" = "Abbinamento negato";
+"mobile.mirror.status.expired" = "Il codice di abbinamento è scaduto. Creane uno nuovo sul Mac.";
 "mobile.mirror.status.starting" = "Apertura del servizio di inoltro privato per il telefono";
 "mobile.mirror.status.startingSSH" = "Apertura della connessione SSH sicura";
 "mobile.mirror.transport.label" = "Servizio di inoltro privato per il telefono";

@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "បានភ្ជាប់នៅលើបណ្ដាញឯកជន";
 "mobile.mirror.status.activeSSH" = "បានភ្ជាប់តាមរយៈ SSH";
 "mobile.mirror.status.denied" = "ការផ្គូផ្គងត្រូវបានបដិសេធ";
+"mobile.mirror.status.expired" = "កូដផ្គូផ្គងបានផុតកំណត់ហើយ។ សូមបង្កើតកូដថ្មីនៅលើ Mac។";
 "mobile.mirror.status.starting" = "កំពុងបើករ៉ឺឡេឯកជនសម្រាប់ទូរសព្ទ";
 "mobile.mirror.status.startingSSH" = "កំពុងបើកការតភ្ជាប់ SSH ដែលមានសុវត្ថិភាព";
 "mobile.mirror.transport.label" = "រ៉ឺឡេឯកជនសម្រាប់ទូរសព្ទ";

@@ -130,11 +130,11 @@ extension MobileMirrorFailure {
     )
 }
 
-/// Pairing-page poll answer after the owner denies the phone. The page script
-/// reads `status`; the remaining fields keep the phone error contract.
-struct MobileMirrorPairingDenial: Encodable, Sendable {
+/// Final pairing-page poll answer. The page script stops on `status`
+/// (`denied` or `expired`); the remaining fields keep the phone error contract.
+struct MobileMirrorPairingOutcome: Encodable, Sendable {
     let ok = false
-    let status = "denied"
+    let status: String
     let error: String
-    let code = MobileMirrorResponseCode.authorizationDenied.rawValue
+    let code: String
 }

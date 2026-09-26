@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "已在私有网络上连接";
 "mobile.mirror.status.activeSSH" = "已通过 SSH 连接";
 "mobile.mirror.status.denied" = "配对已拒绝";
+"mobile.mirror.status.expired" = "配对码已过期。请在 Mac 上创建新的配对码。";
 "mobile.mirror.status.starting" = "正在打开手机私有中继";
 "mobile.mirror.status.startingSSH" = "正在打开安全 SSH 连接";
 "mobile.mirror.transport.label" = "手机私有中继";

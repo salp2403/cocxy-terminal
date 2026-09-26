@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "Im privaten Netzwerk verbunden";
 "mobile.mirror.status.activeSSH" = "Über SSH verbunden";
 "mobile.mirror.status.denied" = "Kopplung abgelehnt";
+"mobile.mirror.status.expired" = "Der Kopplungscode ist abgelaufen. Erstellen Sie auf dem Mac einen neuen.";
 "mobile.mirror.status.starting" = "Privater Telefon-Vermittlungsdienst wird geöffnet";
 "mobile.mirror.status.startingSSH" = "Sichere SSH-Verbindung wird geöffnet";
 "mobile.mirror.transport.label" = "Privater Telefon-Vermittlungsdienst";

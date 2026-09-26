@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "Özel ağda bağlandı";
 "mobile.mirror.status.activeSSH" = "SSH üzerinden bağlandı";
 "mobile.mirror.status.denied" = "Eşleştirme reddedildi";
+"mobile.mirror.status.expired" = "Eşleştirme kodunun süresi doldu. Mac’te yeni bir kod oluşturun.";
 "mobile.mirror.status.starting" = "Özel telefon aktarıcısı açılıyor";
 "mobile.mirror.status.startingSSH" = "Güvenli SSH bağlantısı açılıyor";
 "mobile.mirror.transport.label" = "Özel telefon aktarıcısı";

@@ -59,6 +59,7 @@ struct MobileMirrorWebLocalization: Equatable, Sendable {
         ("mobile.mirror.confirm.title", "Confirm this phone"),
         ("mobile.mirror.status.confirmation", "Desktop confirmation required"),
         ("mobile.mirror.status.denied", "Pairing denied"),
+        ("mobile.mirror.status.expired", "The pairing code expired. Create a new one on the Mac."),
         ("mobile.mirror.audit.unavailable", "The local audit log is unavailable."),
         ("mobile.mirror.error.unavailable", "Mobile mirror is unavailable."),
         ("mobile.mirror.error.noPrivateNetwork", "No private local network is available."),

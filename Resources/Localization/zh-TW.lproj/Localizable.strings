@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "已在私人網路上連線";
 "mobile.mirror.status.activeSSH" = "已透過 SSH 連線";
 "mobile.mirror.status.denied" = "配對遭拒";
+"mobile.mirror.status.expired" = "配對碼已過期。請在 Mac 上建立新的配對碼。";
 "mobile.mirror.status.starting" = "正在開啟手機私人轉送";
 "mobile.mirror.status.startingSSH" = "正在開啟安全 SSH 連線";
 "mobile.mirror.transport.label" = "手機私人轉送";

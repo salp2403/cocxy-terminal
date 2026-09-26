@@ -155,6 +155,10 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
         )
     }
 
+    func remainingLifetime(until deadline: Date) -> TimeInterval {
+        max(0, deadline.timeIntervalSince(clock()))
+    }
+
     func consumeOffer(
         token: String,
         identity: MobileMirrorClientIdentity

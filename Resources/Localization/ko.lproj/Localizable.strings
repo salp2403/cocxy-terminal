@@ -3569,6 +3569,7 @@
 "mobile.mirror.status.active" = "개인 네트워크에서 연결됨";
 "mobile.mirror.status.activeSSH" = "SSH를 통해 연결됨";
 "mobile.mirror.status.denied" = "페어링 거부됨";
+"mobile.mirror.status.expired" = "페어링 코드가 만료되었습니다. Mac에서 새 코드를 만드십시오.";
 "mobile.mirror.status.starting" = "개인 휴대전화 릴레이를 여는 중";
 "mobile.mirror.status.startingSSH" = "보안 SSH 연결을 여는 중";
 "mobile.mirror.transport.label" = "개인 휴대전화 릴레이";

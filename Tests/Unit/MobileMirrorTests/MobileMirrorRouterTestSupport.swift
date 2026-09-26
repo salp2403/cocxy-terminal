@@ -59,11 +59,16 @@ enum MobileMirrorRouterTestError: Error {
 
 final class MobileMirrorPairingSchemeHandler: NSObject, WKURLSchemeHandler {
     private let pairingHTML: Data
+    private let pairStatusBody: Data
     private let lock = NSLock()
     private var _pairStatusRequestCount = 0
 
-    init(pairingHTML: String) {
+    init(
+        pairingHTML: String,
+        pairStatusBody: String = #"{"status":"confirmed","redirect":"/"}"#
+    ) {
         self.pairingHTML = Data(pairingHTML.utf8)
+        self.pairStatusBody = Data(pairStatusBody.utf8)
     }
 
     var pairStatusRequestCount: Int {
@@ -87,7 +92,7 @@ final class MobileMirrorPairingSchemeHandler: NSObject, WKURLSchemeHandler {
             lock.lock()
             _pairStatusRequestCount += 1
             lock.unlock()
-            body = Data(#"{"status":"confirmed","redirect":"/"}"#.utf8)
+            body = pairStatusBody
             contentType = "application/json"
         default:
             body = Data("<!doctype html><title>paired</title>".utf8)
