@@ -39,6 +39,11 @@ final class MobileMirrorPinnedTLSDelegate: NSObject, URLSessionDelegate,
     }
 }
 
+/// A file keychain every test query names explicitly through `kSecUseKeychain`
+/// or `kSecMatchSearchList`, so nothing depends on the user search list.
+/// `SecKeychainCreate` leaves that list untouched on current macOS; the
+/// removals below write to it only if an OS version adds the file, which is
+/// the one case where a killed test process could leave a dangling entry.
 final class TemporaryMobileMirrorKeychain {
     private static let lock = NSLock()
     private static let filePrefix = "cocxy-mobile-tests-"

@@ -187,45 +187,23 @@ struct MobileMirrorTLSKeychainSwiftTestingTests {
         #expect(keyStatus(foreignTag, in: keychain.reference) == errSecSuccess)
     }
 
-    @Test("temporary keychains stay outside the default search list and sweep old residue")
+    @Test("temporary keychains never change the user search list and sweep old residue")
     func temporaryKeychainIsolationAndCleanup() throws {
+        let userSearchList = TemporaryMobileMirrorKeychain.defaultSearchListPaths()
         let staleFile = FileManager.default.temporaryDirectory.appendingPathComponent(
             "cocxy-mobile-tests-v2.2147483647.\(UUID().uuidString).keychain-db"
         )
-        let stalePath = ProjectPathCanonicalizer.canonicalURL(staleFile).path
-        let password = UUID().uuidString
-        var staleKeychain: SecKeychain?
-        let createStatus = password.withCString { pointer in
-            SecKeychainCreate(
-                staleFile.path,
-                UInt32(password.utf8.count),
-                pointer,
-                false,
-                nil,
-                &staleKeychain
-            )
-        }
-        #expect(createStatus == errSecSuccess)
-        let resolvedStaleKeychain = try #require(staleKeychain)
-        var originalSearchList: CFArray?
-        #expect(SecKeychainCopySearchList(&originalSearchList) == errSecSuccess)
-        let originalKeychains = try #require(originalSearchList as? [SecKeychain])
-        defer {
-            SecKeychainSetSearchList(originalKeychains as CFArray)
-            SecKeychainDelete(resolvedStaleKeychain)
-            try? FileManager.default.removeItem(at: staleFile)
-        }
-        #expect(SecKeychainSetSearchList(
-            (originalKeychains + [resolvedStaleKeychain]) as CFArray
-        ) == errSecSuccess)
-        #expect(TemporaryMobileMirrorKeychain.defaultSearchListPaths().contains(stalePath))
+        #expect(FileManager.default.createFile(atPath: staleFile.path, contents: Data()))
+        defer { try? FileManager.default.removeItem(at: staleFile) }
 
-        let keychain = try TemporaryMobileMirrorKeychain()
+        var keychain: TemporaryMobileMirrorKeychain? = try TemporaryMobileMirrorKeychain()
+        let keychainFile = try #require(keychain?.fileURL)
 
         #expect(!FileManager.default.fileExists(atPath: staleFile.path))
-        #expect(!TemporaryMobileMirrorKeychain.defaultSearchListPaths().contains(stalePath))
-        let keychainPath = ProjectPathCanonicalizer.canonicalURL(keychain.fileURL).path
-        #expect(!TemporaryMobileMirrorKeychain.defaultSearchListPaths().contains(keychainPath))
+        #expect(TemporaryMobileMirrorKeychain.defaultSearchListPaths() == userSearchList)
+        keychain = nil
+        #expect(!FileManager.default.fileExists(atPath: keychainFile.path))
+        #expect(TemporaryMobileMirrorKeychain.defaultSearchListPaths() == userSearchList)
     }
 
     private func makeKey(tag: Data, in keychain: SecKeychain) throws -> SecKey {
