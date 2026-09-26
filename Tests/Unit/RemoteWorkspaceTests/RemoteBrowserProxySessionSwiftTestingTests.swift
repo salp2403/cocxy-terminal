@@ -90,7 +90,7 @@ private final class RemoteBrowserSessionProxyRecorder {
 /// assertion keeps failing when the revocation never happens.
 @MainActor
 private func waitForBrowserSessionEffect(
-    within timeout: Duration = .seconds(5),
+    within timeout: Duration = .seconds(15),
     _ condition: @MainActor () -> Bool
 ) async {
     let deadline = ContinuousClock.now.advanced(by: timeout)

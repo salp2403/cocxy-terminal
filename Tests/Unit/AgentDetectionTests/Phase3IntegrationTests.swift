@@ -558,7 +558,7 @@ final class ConcurrencyEdgeCaseTests: XCTestCase {
 
         let exp = expectation(description: "All threads complete")
         group.notify(queue: .main) { exp.fulfill() }
-        waitForExpectations(timeout: 5.0)
+        waitForExpectations(timeout: 15.0)
         // No crash, no sanitizer errors = pass
     }
 

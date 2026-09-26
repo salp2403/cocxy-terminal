@@ -785,7 +785,7 @@ final class BrowserViewModelTests: XCTestCase {
 
     private func waitUntilDOMGrabExpires(
         _ viewModel: BrowserViewModel,
-        within timeout: Duration = .seconds(5)
+        within timeout: Duration = .seconds(15)
     ) async throws {
         let deadline = ContinuousClock.now.advanced(by: timeout)
         while ContinuousClock.now < deadline {

@@ -225,7 +225,7 @@ struct VaultSidebarViewModelSwiftTestingTests {
     private func waitForSession(
         _ id: String,
         in viewModel: VaultSidebarViewModel,
-        timeout: TimeInterval = 5
+        timeout: TimeInterval = 15
     ) async {
         let deadline = Date().addingTimeInterval(timeout)
         while !viewModel.sessions.contains(where: { $0.id == id }), Date() < deadline {

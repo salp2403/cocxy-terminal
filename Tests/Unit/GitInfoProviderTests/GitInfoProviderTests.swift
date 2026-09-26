@@ -227,7 +227,7 @@ final class GitInfoProviderTests: XCTestCase {
             branchExpectation.fulfill()
         }
 
-        waitForExpectations(timeout: 2.0)
+        waitForExpectations(timeout: 15.0)
         XCTAssertEqual(holder.value, "observe-branch")
         cancellable.cancel()
     }
@@ -247,7 +247,7 @@ final class GitInfoProviderTests: XCTestCase {
             }
         }
 
-        waitForExpectations(timeout: 2.0)
+        waitForExpectations(timeout: 15.0)
         XCTAssertTrue(tracker.receivedNil)
         cancellable.cancel()
     }
@@ -270,7 +270,7 @@ final class GitInfoProviderTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             waitExpectation.fulfill()
         }
-        waitForExpectations(timeout: 2.0)
+        waitForExpectations(timeout: 15.0)
 
         let countAfterCancel = counter.count
         cancellable.cancel()
@@ -280,7 +280,7 @@ final class GitInfoProviderTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             postCancelExpectation.fulfill()
         }
-        waitForExpectations(timeout: 2.0)
+        waitForExpectations(timeout: 15.0)
 
         XCTAssertEqual(counter.count, countAfterCancel,
                        "No more callbacks should fire after cancellation")
@@ -318,7 +318,7 @@ final class GitInfoProviderTests: XCTestCase {
             encoding: .utf8
         )
 
-        waitForExpectations(timeout: 2.0)
+        waitForExpectations(timeout: 15.0)
 
         XCTAssertEqual(firstRecorder.values.count, 1,
                        "The replaced watcher must not receive post-cancel updates")

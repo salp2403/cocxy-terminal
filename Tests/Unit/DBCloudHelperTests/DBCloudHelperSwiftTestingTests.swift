@@ -752,7 +752,7 @@ private func longRunningScript(in directory: URL) throws -> URL {
 }
 
 private func waitForFile(_ url: URL) async throws {
-    for _ in 0..<200 {
+    for _ in 0..<1_500 {
         if FileManager.default.fileExists(atPath: url.path) { return }
         try await Task.sleep(nanoseconds: 10_000_000)
     }

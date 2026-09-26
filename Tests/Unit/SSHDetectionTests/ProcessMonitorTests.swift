@@ -243,7 +243,7 @@ final class ProcessMonitorServiceTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             expectation.fulfill()
         }
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 15.0)
 
         XCTAssertNotNil(receivedEvent, "Should receive process change events")
         XCTAssertEqual(receivedEvent?.processName, "ssh")

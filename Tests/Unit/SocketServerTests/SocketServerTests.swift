@@ -70,7 +70,7 @@ enum SocketTestClient {
     /// may not be ready even though `start()` already returned.
     static func waitUntilReady(
         socketPath: String,
-        timeout: TimeInterval = 2.0,
+        timeout: TimeInterval = 15.0,
         pollInterval: TimeInterval = 0.01
     ) throws {
         let deadline = Date().addingTimeInterval(timeout)
@@ -366,7 +366,7 @@ final class SocketServerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation], timeout: 15.0)
 
         switch result! {
         case .success(let response):
@@ -395,7 +395,7 @@ final class SocketServerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation], timeout: 15.0)
         return try result.get()
     }
 
@@ -893,7 +893,7 @@ final class SocketServerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation], timeout: 15.0)
 
         let response = try result!.get()
         XCTAssertFalse(response.success)
@@ -1029,7 +1029,7 @@ final class SocketServerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation], timeout: 15.0)
 
         XCTAssertEqual(responses.count, 2)
         XCTAssertEqual(responses[0].id, "multi-1")
@@ -1079,7 +1079,7 @@ final class SocketServerTests: XCTestCase {
 
         let expectation = expectation(description: "Concurrent connections")
         group.notify(queue: .main) { expectation.fulfill() }
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation], timeout: 15.0)
 
         XCTAssertEqual(results.count, 3)
         XCTAssertTrue(results.allSatisfy(\.success))

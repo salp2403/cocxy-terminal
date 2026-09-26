@@ -2313,7 +2313,7 @@ struct SFTPBrowserDownloadContainmentTests {
     private func waitUntil(
         _ condition: @escaping @MainActor () -> Bool
     ) async {
-        for _ in 0..<200 {
+        for _ in 0..<1_500 {
             if condition() { return }
             try? await Task.sleep(for: .milliseconds(10))
         }

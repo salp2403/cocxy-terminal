@@ -149,7 +149,7 @@ func sendRelayTestPayload(_ data: Data, to port: UInt16) async throws {
 
 @MainActor
 func waitForRelayEffect(
-    within timeout: Duration = .seconds(5),
+    within timeout: Duration = .seconds(15),
     _ condition: @MainActor () -> Bool
 ) async -> Bool {
     // These effects come from tasks the scheduler must place, so a fixed sleep

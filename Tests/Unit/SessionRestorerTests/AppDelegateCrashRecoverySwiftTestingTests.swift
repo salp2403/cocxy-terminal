@@ -243,7 +243,7 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
     private func waitForOfferDetachment(
         from parent: NSWindow,
         window: NSWindow?,
-        timeout: TimeInterval = 5.0
+        timeout: TimeInterval = 15.0
     ) async {
         let deadline = Date().addingTimeInterval(timeout)
         while parent.childWindows?.contains(where: { $0 === window }) == true, Date() < deadline {

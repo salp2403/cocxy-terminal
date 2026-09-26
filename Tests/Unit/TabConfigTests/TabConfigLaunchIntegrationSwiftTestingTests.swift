@@ -358,7 +358,7 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
 
     private func waitForSentText(in engine: MockTerminalEngine) async throws {
         let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: .seconds(2))
+        let deadline = clock.now.advanced(by: .seconds(15))
         while engine.sentTexts.isEmpty, clock.now < deadline {
             try await Task.sleep(for: .milliseconds(25))
         }

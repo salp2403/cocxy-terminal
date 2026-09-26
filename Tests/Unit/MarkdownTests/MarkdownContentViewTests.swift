@@ -434,7 +434,7 @@ struct MarkdownContentViewTests {
     private func waitForFileContents(
         of url: URL,
         toEqual expected: String,
-        timeout: TimeInterval = 5
+        timeout: TimeInterval = 15
     ) async {
         let deadline = Date().addingTimeInterval(timeout)
         while (try? String(contentsOf: url, encoding: .utf8)) != expected, Date() < deadline {

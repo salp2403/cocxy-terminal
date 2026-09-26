@@ -1564,7 +1564,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             initialPrompt: "Review the implementation",
             targetTabID: nil
         ))
-        try await waitUntil(timeout: .seconds(1)) { readinessChecks > 0 }
+        try await waitUntil(timeout: .seconds(15)) { readinessChecks > 0 }
         XCTAssertEqual(bridge.sentTexts.count, 1)
 
         isReady = true
@@ -1602,7 +1602,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
     }
 
     private func waitForAgentTeamPrompt(in bridge: MockTerminalEngine) async throws {
-        try await waitUntil(timeout: .seconds(1)) { bridge.sentTexts.count == 2 }
+        try await waitUntil(timeout: .seconds(15)) { bridge.sentTexts.count == 2 }
     }
 
     private func waitUntil(

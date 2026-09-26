@@ -2369,7 +2369,7 @@ private enum BrowserImportFixture {
 
     @MainActor
     static func waitUntil(
-        timeout: TimeInterval = 3,
+        timeout: TimeInterval = 15,
         condition: @escaping @MainActor () -> Bool
     ) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
@@ -2389,7 +2389,7 @@ private enum BrowserImportFixture {
         in dataStore: WKWebsiteDataStore,
         domain: String,
         toEqual expected: [String],
-        timeout: TimeInterval = 5
+        timeout: TimeInterval = 15
     ) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while true {

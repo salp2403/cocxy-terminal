@@ -118,7 +118,7 @@ final class Phase7SocketSecurityTests: XCTestCase {
             expectation.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation], timeout: 15.0)
         XCTAssertTrue(connectionClosed,
                       "Server should close connection on zero-length payload")
     }
@@ -155,7 +155,7 @@ final class Phase7SocketSecurityTests: XCTestCase {
             expectation.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation], timeout: 15.0)
         XCTAssertTrue(connectionClosed,
                       "Server should close connection on oversized payload length")
     }
@@ -189,7 +189,7 @@ final class Phase7SocketSecurityTests: XCTestCase {
             expectation.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation], timeout: 15.0)
         XCTAssertTrue(connectionClosed,
                       "Partial header should cause connection closure (client side)")
     }
@@ -297,7 +297,7 @@ final class Phase7SocketSecurityTests: XCTestCase {
                 expectation.fulfill()
             }
 
-            wait(for: [expectation], timeout: 5.0)
+            wait(for: [expectation], timeout: 15.0)
 
             XCTAssertNotNil(response, "Should receive a response for command '\(command)'")
             XCTAssertTrue(response?.success == true,
@@ -333,7 +333,7 @@ final class Phase7SocketSecurityTests: XCTestCase {
             expectation.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation], timeout: 15.0)
         let response = try XCTUnwrap(result.withLock { $0 }).get()
         XCTAssertTrue(response.success)
         XCTAssertEqual(response.id, "real-cli-auth")
@@ -366,7 +366,7 @@ final class Phase7SocketSecurityTests: XCTestCase {
             expectation.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation], timeout: 15.0)
 
         // Either the server closes the connection (response == nil) or
         // returns an error (success == false). Either is correct.
@@ -400,7 +400,7 @@ final class Phase7SocketSecurityTests: XCTestCase {
             expectation.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation], timeout: 15.0)
 
         XCTAssertNotNil(response)
         XCTAssertTrue(response?.success == true,

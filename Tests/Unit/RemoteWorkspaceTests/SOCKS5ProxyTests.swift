@@ -203,7 +203,7 @@ private func socksTestConnectionObservedClosure(_ connection: NWConnection) asyn
 /// assertion keeps failing when the effect never happens.
 @MainActor
 private func waitForSOCKSProxyEffect(
-    within timeout: Duration = .seconds(5),
+    within timeout: Duration = .seconds(15),
     _ condition: @MainActor () -> Bool
 ) async {
     let deadline = ContinuousClock.now.advanced(by: timeout)

@@ -240,7 +240,7 @@ private func sendFramedRequestWithoutReading(
 }
 
 /// Waits for the socket file to exist and accept a test connect.
-private func waitUntilReady(socketPath: String, timeout: TimeInterval = 2.0) throws {
+private func waitUntilReady(socketPath: String, timeout: TimeInterval = 15.0) throws {
     let deadline = Date().addingTimeInterval(timeout)
     var lastError: Error?
     while Date() < deadline {

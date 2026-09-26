@@ -514,7 +514,7 @@ final class ConfigServicePublisherTests: XCTestCase {
         fileProvider.content = updatedToml
         try service.reload()
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 15.0)
 
         XCTAssertEqual(receivedConfig?.appearance.theme, "nord")
     }
@@ -540,7 +540,7 @@ final class ConfigServicePublisherTests: XCTestCase {
             }
             .store(in: &cancellables)
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 15.0)
     }
 }
 

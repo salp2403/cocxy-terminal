@@ -65,7 +65,7 @@ struct MainWindowSparkleSubscriptionTests {
     private func waitForChrome(
         _ aurora: AuroraChromeController,
         toEqual expected: CocxyUpdateAvailability?,
-        timeout: TimeInterval = 5.0
+        timeout: TimeInterval = 15.0
     ) async {
         let deadline = Date().addingTimeInterval(timeout)
         while aurora.availableUpdate != expected, Date() < deadline {

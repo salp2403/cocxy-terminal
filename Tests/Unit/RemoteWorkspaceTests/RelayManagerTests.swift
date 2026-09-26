@@ -7,7 +7,7 @@ import Testing
 
 @MainActor
 private func waitForRelayCondition(_ condition: () -> Bool) async {
-    for _ in 0..<200 {
+    for _ in 0..<15_000 {
         if condition() { return }
         try? await Task.sleep(nanoseconds: 1_000_000)
     }

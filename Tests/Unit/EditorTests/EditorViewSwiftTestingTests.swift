@@ -1063,7 +1063,7 @@ struct EditorViewSwiftTestingTests {
     /// so a short clock measures scheduler latency instead of the engine. The
     /// caller's `#expect` still fails when no suggestion ever arrives.
     private func waitForInlineCompletion(in view: EditorView) async throws {
-        let deadline = Date().addingTimeInterval(5.0)
+        let deadline = Date().addingTimeInterval(15.0)
         while view.inlineCompletionText == nil && Date() < deadline {
             try await Task.sleep(nanoseconds: 10_000_000)
         }

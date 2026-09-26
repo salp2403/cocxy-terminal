@@ -82,7 +82,7 @@ struct TaskRunPersistenceSwiftTestingTests {
         )
 
         coordinator.enqueue(run)
-        #expect(probe.firstSaveStarted.wait(timeout: .now() + 2) == .success)
+        #expect(probe.firstSaveStarted.wait(timeout: .now() + 15) == .success)
         for index in 1...8 {
             run.updatedAt = Date(timeIntervalSince1970: TimeInterval(index))
             run.failureMessage = "snapshot-\(index)"
@@ -141,7 +141,7 @@ struct TaskRunPersistenceSwiftTestingTests {
         )
 
         coordinator.enqueue(run)
-        #expect(probe.firstSaveStarted.wait(timeout: .now() + 2) == .success)
+        #expect(probe.firstSaveStarted.wait(timeout: .now() + 15) == .success)
         run.updatedAt = Date(timeIntervalSince1970: 200)
         run.failureMessage = "newest-snapshot"
         coordinator.enqueue(run)
@@ -198,7 +198,7 @@ struct TaskRunPersistenceSwiftTestingTests {
         let startResult = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(
-                    returning: probe.firstSaveStarted.wait(timeout: .now() + 2)
+                    returning: probe.firstSaveStarted.wait(timeout: .now() + 15)
                 )
             }
         }

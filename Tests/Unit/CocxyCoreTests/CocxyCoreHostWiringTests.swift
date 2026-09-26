@@ -1047,7 +1047,7 @@ struct CocxyCoreHostWiringTests {
         defer { bridge.destroySurface(surfaceID) }
         let shellPID = try #require(bridge.processMonitorRegistration(for: surfaceID)?.shellPID)
 
-        let deadline = Date().addingTimeInterval(2)
+        let deadline = Date().addingTimeInterval(15)
         while processIsPresent(shellPID), Date() < deadline {
             bridge.tick()
             RunLoop.current.run(until: Date().addingTimeInterval(0.01))

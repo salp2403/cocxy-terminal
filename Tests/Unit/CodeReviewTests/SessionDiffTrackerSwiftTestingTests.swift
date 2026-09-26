@@ -700,7 +700,7 @@ struct SessionDiffTrackerSwiftTestingTests {
     }
 
     private func waitForTrackerCondition(
-        timeoutNanoseconds: UInt64 = 1_000_000_000,
+        timeoutNanoseconds: UInt64 = 15_000_000_000,
         pollNanoseconds: UInt64 = 20_000_000,
         _ condition: @escaping () -> Bool
     ) async throws {

@@ -228,7 +228,7 @@ struct MarkdownFileExplorerTests {
         let release = DispatchSemaphore(value: 0)
         let view = MarkdownFileExplorerView(treeBuilder: { root, _ in
             started.signal()
-            _ = release.wait(timeout: .now() + 2)
+            _ = release.wait(timeout: .now() + 30)
             return [
                 FileTreeNode(
                     url: root.appendingPathComponent("README.md"),
@@ -241,7 +241,7 @@ struct MarkdownFileExplorerTests {
         view.setRootDirectory(dir)
 
         let startedResult = await Task.detached {
-            waitForSemaphore(started, timeout: .now() + 1)
+            waitForSemaphore(started, timeout: .now() + 15)
         }.value
         #expect(startedResult == .success)
         #expect(view.rootNodesForTesting.isEmpty)

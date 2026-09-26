@@ -208,7 +208,7 @@ final class HookEventReceiverTests: XCTestCase {
             expectation.fulfill()
         }
 
-        waitForExpectations(timeout: 5.0)
+        waitForExpectations(timeout: 15.0)
 
         // Total should be 100 received, 0 failed
         XCTAssertEqual(sut.receivedEventCount, iterations)

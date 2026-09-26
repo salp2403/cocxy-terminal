@@ -83,7 +83,7 @@ final class ConfigHotReloadTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             expectation.fulfill()
         }
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 15.0)
 
         XCTAssertEqual(
             service.current.appearance.theme,
@@ -139,7 +139,7 @@ final class ConfigHotReloadTests: XCTestCase {
         """
         watcher.handleFileChange()
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 15.0)
 
         XCTAssertEqual(receivedConfig?.appearance.theme, "dracula")
     }

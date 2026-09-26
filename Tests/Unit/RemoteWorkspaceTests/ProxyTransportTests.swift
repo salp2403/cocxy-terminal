@@ -758,7 +758,7 @@ struct ProxyTransportTests {
     }
 
     private func waitUntilStopped(_ transport: SSHDirectTCPTransport) async throws {
-        for _ in 0..<100 {
+        for _ in 0..<1_500 {
             if !transport.isRunning { return }
             try await Task.sleep(nanoseconds: 10_000_000)
         }

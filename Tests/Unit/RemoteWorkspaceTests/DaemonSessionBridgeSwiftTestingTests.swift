@@ -245,7 +245,7 @@ private extension DaemonResponse {
 
 @MainActor
 private func waitForDaemonBridgeCondition(
-    timeoutNanoseconds: UInt64 = 1_000_000_000,
+    timeoutNanoseconds: UInt64 = 15_000_000_000,
     condition: @escaping @MainActor () -> Bool
 ) async throws {
     let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds

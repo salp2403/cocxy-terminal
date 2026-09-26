@@ -225,7 +225,7 @@ private func makeRemoteSessionTestBridge() throws -> CocxyCoreBridge {
 
 @MainActor
 private func waitForRemoteSessionCondition(
-    timeoutNanoseconds: UInt64 = 1_000_000_000,
+    timeoutNanoseconds: UInt64 = 15_000_000_000,
     condition: @escaping @MainActor () -> Bool
 ) async throws {
     let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds

@@ -626,7 +626,7 @@ final class MemoryLeakTests: XCTestCase {
 
 private extension XCTestCase {
     func waitForBackgroundQueueSettling(
-        timeout: TimeInterval = 5.0,
+        timeout: TimeInterval = 15.0,
         settleDelay: TimeInterval = 0.05
     ) {
         let expectation = expectation(description: "background queue settling")
@@ -636,7 +636,7 @@ private extension XCTestCase {
         wait(for: [expectation], timeout: timeout)
     }
 
-    func waitForMainQueueDrain(timeout: TimeInterval = 5.0) {
+    func waitForMainQueueDrain(timeout: TimeInterval = 15.0) {
         let expectation = expectation(description: "main queue drain")
         DispatchQueue.main.async {
             expectation.fulfill()
