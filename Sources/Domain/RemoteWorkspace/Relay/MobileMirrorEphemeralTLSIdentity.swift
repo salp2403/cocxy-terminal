@@ -53,27 +53,6 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
         ownerProcessIdentifier: pid_t = getpid(),
         bootSessionIdentifier: String? = MobileMirrorTLSKeychainOwnership.currentBootSessionIdentifier()
     ) throws -> MobileMirrorEphemeralTLSIdentity {
-        keychainLock.lock()
-        defer { keychainLock.unlock() }
-        return try generateIsolated(
-            bindAddress: bindAddress,
-            validFor: validFor,
-            now: now,
-            keychain: keychain,
-            ownerProcessIdentifier: ownerProcessIdentifier,
-            bootSessionIdentifier: bootSessionIdentifier
-        )
-    }
-
-    private static func generateIsolated(
-        bindAddress: String,
-        validFor: TimeInterval,
-        now: Date,
-        keychain: SecKeychain?,
-        ownerProcessIdentifier: pid_t,
-        bootSessionIdentifier: String?
-    ) throws -> MobileMirrorEphemeralTLSIdentity {
-        let addressBytes = try ipv4Bytes(bindAddress)
         guard let bootSessionIdentifier,
               let identifier = MobileMirrorTLSKeychainOwnership.storageIdentifier(
             bootSessionIdentifier: bootSessionIdentifier,
@@ -82,6 +61,28 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
         ) else {
             throw MobileMirrorTLSIdentityError.bootSessionUnavailable
         }
+        return try generate(
+            bindAddress: bindAddress,
+            validFor: validFor,
+            now: now,
+            keychain: keychain,
+            storageIdentifier: identifier
+        )
+    }
+
+    /// Stores the identity under `storageIdentifier` after the tag prefix. The
+    /// startup sweep attributes identities written by earlier tag formats, so
+    /// the format is the caller's choice.
+    static func generate(
+        bindAddress: String,
+        validFor: TimeInterval = MobileMirrorPairingAuthority.sessionTTL + 600,
+        now: Date = Date(),
+        keychain: SecKeychain? = nil,
+        storageIdentifier identifier: String
+    ) throws -> MobileMirrorEphemeralTLSIdentity {
+        keychainLock.lock()
+        defer { keychainLock.unlock() }
+        let addressBytes = try ipv4Bytes(bindAddress)
         let keyTag = Data("\(MobileMirrorTLSKeychainOwnership.keyTagPrefix)\(identifier)".utf8)
         let label = "\(certificateLabelPrefix)\(identifier)"
         let privateKey = try makePrivateKey(
@@ -184,6 +185,8 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
     ) {
         keychainLock.lock()
         defer { keychainLock.unlock() }
+        let bootTime = MobileMirrorTLSKeychainOwnership.currentBootTime()
+        let now = Date()
 
         let taggedIdentities: [(tag: Data, certificatePublicKeyHash: Data)] =
             matchingAttributes(for: kSecClassKey, keychain: keychain).compactMap { attributes in
@@ -192,12 +195,27 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
                       let certificatePublicKeyHash = attributes[
                           kSecAttrApplicationLabel as String
                       ] as? Data,
-                      let owner = MobileMirrorTLSKeychainOwnership.owner(from: value),
-                      MobileMirrorTLSKeychainOwnership.shouldRemove(
-                          owner: owner,
-                          currentBootSessionIdentifier: bootSessionIdentifier,
-                          processIsAlive: processIsAlive
-                      ) else {
+                      let owner = MobileMirrorTLSKeychainOwnership.owner(from: value) else {
+                    return nil
+                }
+                let timeline: MobileMirrorTLSKeychainOwnership.Timeline?
+                if case .session = owner {
+                    timeline = nil
+                } else {
+                    timeline = certificateTimeline(
+                        publicKeyHash: certificatePublicKeyHash,
+                        keychain: keychain
+                    )
+                }
+                guard MobileMirrorTLSKeychainOwnership.shouldRemove(
+                    owner: owner,
+                    timeline: timeline,
+                    currentBootSessionIdentifier: bootSessionIdentifier,
+                    bootTime: bootTime,
+                    now: now,
+                    processIsAlive: processIsAlive,
+                    processStartTime: MobileMirrorTLSKeychainOwnership.processStartTime
+                ) else {
                     return nil
                 }
                 return (
@@ -293,7 +311,9 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
             ]),
         ])
         let validity = DER.sequence([
-            DER.utcTime(now.addingTimeInterval(-300)),
+            DER.utcTime(now.addingTimeInterval(
+                -MobileMirrorTLSKeychainOwnership.Timeline.certificateBackdate
+            )),
             DER.utcTime(now.addingTimeInterval(validFor)),
         ])
         let publicKeyInfo = DER.sequence([
@@ -357,6 +377,33 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
             throw MobileMirrorTLSIdentityError.invalidAddress
         }
         return withUnsafeBytes(of: value.s_addr) { Data($0) }
+    }
+
+    private static func certificateTimeline(
+        publicKeyHash: Data,
+        keychain: SecKeychain?
+    ) -> MobileMirrorTLSKeychainOwnership.Timeline? {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassCertificate,
+            kSecAttrPublicKeyHash as String: publicKeyHash,
+            kSecReturnRef as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        if let keychain {
+            query[kSecMatchSearchList as String] = [keychain]
+        }
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let result,
+              CFGetTypeID(result) == SecCertificateGetTypeID() else {
+            return nil
+        }
+        let certificate = unsafeDowncast(result, to: SecCertificate.self)
+        guard let notBefore = SecCertificateCopyNotValidBeforeDate(certificate) as Date?,
+              let notAfter = SecCertificateCopyNotValidAfterDate(certificate) as Date? else {
+            return nil
+        }
+        return MobileMirrorTLSKeychainOwnership.Timeline(notBefore: notBefore, notAfter: notAfter)
     }
 
     private static func processIsAlive(_ processIdentifier: pid_t) -> Bool {

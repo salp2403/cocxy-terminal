@@ -78,6 +78,115 @@ struct MobileMirrorTLSKeychainSwiftTestingTests {
         #expect(keyStatus(unrelatedTag, in: keychain.reference) == errSecSuccess)
     }
 
+    @Test("pre-boot-session identities are collected only when their owner cannot still run")
+    func legacyIdentitiesFollowTheirCertificateTimeline() throws {
+        let keychain = try TemporaryMobileMirrorKeychain()
+        let now = Date()
+        let boot = try LaunchdBootIdentity.currentLegacyBootTime()
+        let bootTime = Date(timeIntervalSince1970: TimeInterval(try #require(boot.legacySeconds)))
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        child.arguments = ["30"]
+        var retained: [MobileMirrorEphemeralTLSIdentity] = []
+        func legacy(
+            _ suffix: String,
+            createdAt: Date = now,
+            validFor: TimeInterval = MobileMirrorPairingAuthority.sessionTTL + 600
+        ) throws -> Data {
+            let identity = try MobileMirrorEphemeralTLSIdentity.generate(
+                bindAddress: "127.0.0.1",
+                validFor: validFor,
+                now: createdAt,
+                keychain: keychain.reference,
+                storageIdentifier: suffix
+            )
+            retained.append(identity)
+            #expect(keyStatus(identity.storageKeyTag, in: keychain.reference) == errSecSuccess)
+            return identity.storageKeyTag
+        }
+        let owner = getpid()
+        let currentV1 = try legacy(UUID().uuidString.lowercased())
+        let expiredV1 = try legacy(
+            UUID().uuidString.lowercased(),
+            createdAt: now.addingTimeInterval(-120),
+            validFor: 60
+        )
+        let preBootV1 = try legacy(
+            UUID().uuidString.lowercased(),
+            createdAt: bootTime.addingTimeInterval(-3_600),
+            validFor: now.timeIntervalSince(bootTime) + 7_200
+        )
+        let currentV2 = try legacy("v2.\(owner).\(UUID().uuidString.lowercased())")
+        let preBootV2 = try legacy(
+            "v2.\(owner).\(UUID().uuidString.lowercased())",
+            createdAt: bootTime.addingTimeInterval(-3_600),
+            validFor: now.timeIntervalSince(bootTime) + 7_200
+        )
+        let expiredV2 = try legacy(
+            "v2.\(owner).\(UUID().uuidString.lowercased())",
+            createdAt: now.addingTimeInterval(-120),
+            validFor: 60
+        )
+        try child.run()
+        defer {
+            child.terminate()
+            child.waitUntilExit()
+        }
+        let recycledV2 = try legacy(
+            "v2.\(child.processIdentifier).\(UUID().uuidString.lowercased())",
+            createdAt: now.addingTimeInterval(-10)
+        )
+
+        MobileMirrorEphemeralTLSIdentity.removeStaleKeychainItems(keychain: keychain.reference)
+
+        #expect(keyStatus(currentV1, in: keychain.reference) == errSecSuccess)
+        #expect(keyStatus(expiredV1, in: keychain.reference) == errSecItemNotFound)
+        #expect(keyStatus(preBootV1, in: keychain.reference) == errSecItemNotFound)
+        #expect(keyStatus(currentV2, in: keychain.reference) == errSecSuccess)
+        #expect(keyStatus(preBootV2, in: keychain.reference) == errSecItemNotFound)
+        #expect(keyStatus(expiredV2, in: keychain.reference) == errSecItemNotFound)
+        #expect(keyStatus(recycledV2, in: keychain.reference) == errSecItemNotFound)
+        withExtendedLifetime(retained) {}
+    }
+
+    @Test("startup sweep treats a process it may not signal as alive")
+    func unsignalableOwnerStaysAlive() throws {
+        let signalResult = kill(1, 0)
+        let signalError = errno
+        #expect(signalResult == -1 && signalError == EPERM)
+        let keychain = try TemporaryMobileMirrorKeychain()
+        let launchdOwned = try MobileMirrorEphemeralTLSIdentity.generate(
+            bindAddress: "127.0.0.1",
+            keychain: keychain.reference,
+            ownerProcessIdentifier: 1
+        )
+
+        MobileMirrorEphemeralTLSIdentity.removeStaleKeychainItems(keychain: keychain.reference)
+
+        #expect(keyStatus(launchdOwned.storageKeyTag, in: keychain.reference) == errSecSuccess)
+    }
+
+    @Test("startup sweep ignores foreign tags that only share the prefix length")
+    func foreignPrefixIsIgnored() throws {
+        let keychain = try TemporaryMobileMirrorKeychain()
+        let currentBoot = try #require(MobileMirrorTLSKeychainOwnership.currentBootSessionIdentifier())
+        let foreignPrefix = "dev.cocxy.mobile.tlz."
+        #expect(foreignPrefix.count == MobileMirrorTLSKeychainOwnership.keyTagPrefix.count)
+        let foreignTag = Data(
+            "\(foreignPrefix)v3.\(UUID().uuidString.lowercased()).91003.\(UUID().uuidString.lowercased())"
+                .utf8
+        )
+        _ = try makeKey(tag: foreignTag, in: keychain.reference)
+
+        MobileMirrorEphemeralTLSIdentity.removeStaleKeychainItems(
+            keychain: keychain.reference,
+            bootSessionIdentifier: currentBoot,
+            processIsAlive: { _ in false }
+        )
+
+        #expect(keyStatus(foreignTag, in: keychain.reference) == errSecSuccess)
+    }
+
     @Test("temporary keychains stay outside the default search list and sweep old residue")
     func temporaryKeychainIsolationAndCleanup() throws {
         let staleFile = FileManager.default.temporaryDirectory.appendingPathComponent(
