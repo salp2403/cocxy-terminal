@@ -24,12 +24,7 @@ struct RenameSheetControllerTests {
         )
     )
     func renamePanelLifecycle() async {
-        let parent = NSWindow(
-            contentRect: NSRect(x: 120, y: 120, width: 900, height: 600),
-            styleMask: [.titled, .resizable],
-            backing: .buffered,
-            defer: false
-        )
+        let parent = makeParentWindow()
         defer { parent.close() }
 
         var results: [RenameSheetResult] = []
@@ -63,12 +58,7 @@ struct RenameSheetControllerTests {
         )
     )
     func cancelAndBlankConfirmationAreDistinct() throws {
-        let parent = NSWindow(
-            contentRect: NSRect(x: 120, y: 120, width: 900, height: 600),
-            styleMask: [.titled, .resizable],
-            backing: .buffered,
-            defer: false
-        )
+        let parent = makeParentWindow()
         defer { parent.close() }
         var results: [RenameSheetResult] = []
 
@@ -105,12 +95,7 @@ struct RenameSheetControllerTests {
         )
     )
     func parentWindowCloseDoesNotCompleteRename() async {
-        let parent = NSWindow(
-            contentRect: NSRect(x: 120, y: 120, width: 900, height: 600),
-            styleMask: [.titled, .resizable],
-            backing: .buffered,
-            defer: false
-        )
+        let parent = makeParentWindow()
         var completionCount = 0
         let panel = RenameSheetController.present(
             on: parent,
@@ -127,5 +112,18 @@ struct RenameSheetControllerTests {
 
         #expect(RenameSheetController.hasRetainedCoordinator(for: panel) == false)
         #expect(completionCount == 0)
+    }
+
+    /// A standalone `NSWindow(contentRect:)` releases itself on `close()` by
+    /// default, which under ARC over-releases it and crashes the process later.
+    private func makeParentWindow() -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 120, y: 120, width: 900, height: 600),
+            styleMask: [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        return window
     }
 }

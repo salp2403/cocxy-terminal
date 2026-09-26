@@ -370,6 +370,9 @@ struct ApplicationLayoutDirectionSwiftTestingTests {
             backing: .buffered,
             defer: false
         )
+        // A standalone window releases itself on close() by default, which
+        // under ARC over-releases it and crashes the process later.
+        window.isReleasedWhenClosed = false
         let root = NSView(frame: window.contentView?.bounds ?? .zero)
         root.addSubview(NSHostingView(rootView: Text("Direction")))
         window.contentView = root
