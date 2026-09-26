@@ -61,7 +61,7 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
         ) else {
             throw MobileMirrorTLSIdentityError.bootSessionUnavailable
         }
-        return try generate(
+        return try generateIdentity(
             bindAddress: bindAddress,
             validFor: validFor,
             now: now,
@@ -70,14 +70,29 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
         )
     }
 
-    /// Stores the identity under `storageIdentifier` after the tag prefix. The
-    /// startup sweep attributes identities written by earlier tag formats, so
-    /// the format is the caller's choice.
-    static func generate(
+    /// Writes an identity under a tag format this build no longer produces, so
+    /// the startup sweep can be exercised against identities left by older builds.
+    static func generateForTesting(
         bindAddress: String,
-        validFor: TimeInterval = MobileMirrorPairingAuthority.sessionTTL + 600,
-        now: Date = Date(),
-        keychain: SecKeychain? = nil,
+        validFor: TimeInterval,
+        now: Date,
+        keychain: SecKeychain,
+        storageIdentifier: String
+    ) throws -> MobileMirrorEphemeralTLSIdentity {
+        try generateIdentity(
+            bindAddress: bindAddress,
+            validFor: validFor,
+            now: now,
+            keychain: keychain,
+            storageIdentifier: storageIdentifier
+        )
+    }
+
+    private static func generateIdentity(
+        bindAddress: String,
+        validFor: TimeInterval,
+        now: Date,
+        keychain: SecKeychain?,
         storageIdentifier identifier: String
     ) throws -> MobileMirrorEphemeralTLSIdentity {
         keychainLock.lock()

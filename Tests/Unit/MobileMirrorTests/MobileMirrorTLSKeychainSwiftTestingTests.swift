@@ -93,7 +93,7 @@ struct MobileMirrorTLSKeychainSwiftTestingTests {
             createdAt: Date = now,
             validFor: TimeInterval = MobileMirrorPairingAuthority.sessionTTL + 600
         ) throws -> Data {
-            let identity = try MobileMirrorEphemeralTLSIdentity.generate(
+            let identity = try MobileMirrorEphemeralTLSIdentity.generateForTesting(
                 bindAddress: "127.0.0.1",
                 validFor: validFor,
                 now: createdAt,
