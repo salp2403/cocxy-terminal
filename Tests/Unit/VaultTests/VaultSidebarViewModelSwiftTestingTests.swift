@@ -252,7 +252,7 @@ struct VaultSidebarViewModelSwiftTestingTests {
     }
 
     private func makePreferences() throws -> VaultSidebarPreferences {
-        let defaults = try #require(UserDefaults(suiteName: "VaultSidebarViewModelTests-\(UUID().uuidString)"))
+        let defaults = try #require(UserDefaults(suiteName: HermeticUserDefaults.suiteName()))
         defaults.removePersistentDomain(forName: defaultsSuiteName(defaults))
         return VaultSidebarPreferences(defaults: defaults)
     }

@@ -250,7 +250,7 @@ struct ProjectRegistrySwiftTestingTests {
 
     @Test("workspace alias persistence publishes a project refresh signal")
     func aliasPublishesRefreshSignal() throws {
-        let suiteName = "ProjectAliasSignalTests.\(UUID().uuidString)"
+        let suiteName = HermeticUserDefaults.suiteName()
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = AuroraWorkspaceTitleStore(defaults: defaults, storageKey: "titles")

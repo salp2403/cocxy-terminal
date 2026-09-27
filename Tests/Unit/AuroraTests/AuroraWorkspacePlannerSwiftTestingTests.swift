@@ -58,7 +58,7 @@ struct AuroraWorkspacePlannerSwiftTestingTests {
 
     @Test("renaming preserves identity and blank title restores the automatic name")
     func titleStorePersistsRenameAndExplicitReset() throws {
-        let suiteName = "AuroraWorkspaceTitleStoreTests.\(UUID().uuidString)"
+        let suiteName = HermeticUserDefaults.suiteName()
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let storageKey = "titles"
@@ -88,7 +88,7 @@ struct AuroraWorkspacePlannerSwiftTestingTests {
 
     @Test("legacy per-tab workspace title migrates once per identity")
     func legacyTitlesMigrateWithoutReplication() throws {
-        let suiteName = "AuroraWorkspaceTitleMigrationTests.\(UUID().uuidString)"
+        let suiteName = HermeticUserDefaults.suiteName()
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let first = Tab(
