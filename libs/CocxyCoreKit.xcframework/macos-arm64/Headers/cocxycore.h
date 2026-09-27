@@ -224,7 +224,12 @@ typedef struct cocxycore_terminal cocxycore_terminal;
  */
 cocxycore_terminal* cocxycore_terminal_create(uint16_t rows, uint16_t cols);
 
-/** Destroy a terminal instance and free all memory. */
+/**
+ * Destroy a terminal instance and free all memory.
+ * Every web server attached to the terminal must be detached first, with
+ * cocxycore_web_detach_terminal or cocxycore_web_destroy: a server still
+ * streaming it would read freed memory. Debug builds assert it.
+ */
 void cocxycore_terminal_destroy(cocxycore_terminal* term);
 
 /* -- Data flow -- */
@@ -2763,7 +2768,8 @@ void cocxycore_web_stop(cocxycore_web_server* server);
 /**
  * Attach a terminal to the server for frame streaming.
  * The server streams frames from this terminal and relays input to its PTY.
- * Only one terminal per server (1:1 mapping).
+ * Only one terminal per server (1:1 mapping). Detach it before destroying
+ * the terminal.
  */
 bool cocxycore_web_attach_terminal(
     cocxycore_web_server* server,
