@@ -24,7 +24,7 @@ Cocxy knows when your coding agent is thinking, working, waiting for input, or d
 - [Install](#install)
 - [Features](#features)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
-- [Supported Agents](#supported-agents)
+- [Agent Profile Coverage](#agent-profile-coverage)
 - [Configuration](#configuration)
 - [CLI Companion](#cli-companion)
 - [Building from Source](#building-from-source)
@@ -37,7 +37,7 @@ Cocxy knows when your coding agent is thinking, working, waiting for input, or d
 
 Every terminal shows you text. Cocxy is a native macOS workspace built around how developers work with AI coding agents. It detects multiple coding agents across four independent layers, gives you a live dashboard of every session, lets you review an agent's changes inline before shipping them, runs your own local AI workspace (multi-provider Agent Mode, MCP servers, codebase indexing, skills, inline completions, sandboxed Computer Use), executes notebooks and workflows on-device, and ships with a native Markdown workspace for notes, plans, and docs. When your agent finishes a task at 3 AM, Cocxy knows — and you know.
 
-Built from scratch in Swift and Metal. No Electron. No web view wrapping a terminal. No data leaves your machine. Just a fast, native macOS app designed for the way developers work in 2026.
+Built from scratch in Swift and Metal. No Electron. No web view wrapping a terminal. No telemetry. Just a fast, native macOS app designed for the way developers work in 2026.
 
 ## Install
 
