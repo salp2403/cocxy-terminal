@@ -57,7 +57,7 @@ brew update && brew upgrade --cask cocxy
 
 ### Direct Download
 
-Download the latest `.dmg` from the [Releases](https://github.com/salp2403/cocxy-terminal/releases) page. Universal builds for Apple Silicon (native) and Intel.
+Download the latest `.dmg` from the [Releases](https://github.com/salp2403/cocxy-terminal/releases) page. Builds are for Apple Silicon Macs.
 
 ### Nightly Channel
 

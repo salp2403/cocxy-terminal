@@ -365,6 +365,7 @@ jobs:
             homepage "https://cocxy.dev/channels.html"
 
             depends_on macos: ">= :sequoia"
+            depends_on arch: :arm64
 
             app "Cocxy Terminal Nightly.app"
 

@@ -124,7 +124,8 @@ function translateRequirement(line) {
   if (locale !== 'es') return line;
   return line
     .replace(/ or later$/, ' o posterior')
-    .replace(/^Apple Silicon or Intel Mac$/, 'Mac con Apple Silicon o Intel');
+    .replace(/^Apple Silicon or Intel Mac$/, 'Mac con Apple Silicon o Intel')
+    .replace(/^Apple Silicon Mac$/, 'Mac con Apple Silicon');
 }
 
 function parseBody(body) {

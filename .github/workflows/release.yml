@@ -369,7 +369,7 @@ jobs:
 
             ### System Requirements
             - macOS 15.0 (Sequoia) or later
-            - Apple Silicon or Intel Mac
+            - Apple Silicon Mac
           generate_release_notes: true
 
       - name: Update CHANGELOG on main
@@ -1021,6 +1021,7 @@ jobs:
             end
 
             depends_on macos: ">= :sequoia"
+            depends_on arch: :arm64
 
             app "Cocxy Terminal.app"
 
