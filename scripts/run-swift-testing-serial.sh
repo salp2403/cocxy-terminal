@@ -36,16 +36,32 @@ for arg in "$@"; do
 done
 
 source "$(dirname "${BASH_SOURCE[0]}")/test-home-sandbox.sh"
-cocxy_test_home_begin
 trap cocxy_test_home_cleanup EXIT
+cocxy_test_home_begin
 
 list_args=("${common_args[@]}")
 if [[ ${#list_extra_args[@]} -gt 0 ]]; then
   list_args+=("${list_extra_args[@]}")
 fi
 
+# `swift test list` ignores --skip, so skipped suites are dropped here instead
+# of running as empty passes.
+skip_patterns=()
+previous_arg=""
+for arg in "${list_args[@]}"; do
+  if [[ "$previous_arg" == "--skip" ]]; then
+    skip_patterns+=("$arg")
+  fi
+  previous_arg="$arg"
+done
+
 suites=()
 while IFS= read -r suite; do
+  for pattern in ${skip_patterns[@]+"${skip_patterns[@]}"}; do
+    if [[ "$suite" =~ $pattern ]]; then
+      continue 2
+    fi
+  done
   suites+=("$suite")
 done < <(
   swift test list "${list_args[@]}" \
@@ -120,8 +136,13 @@ run_bounded() {
     rm -f "$output_path"
     return "$status"
   fi
+  if grep -Eq 'Test run with 0 tests' "$output_path"; then
+    echo "error: Swift Testing suite '${suite}' ran no tests; its filter matches nothing." >&2
+    rm -f "$output_path"
+    return 125
+  fi
   if ! grep -Eq \
-    'Test run with [0-9]+ tests? in [0-9]+ suites? passed after [0-9.]+ seconds[.]$' \
+    'Test run with [1-9][0-9]* tests? in [0-9]+ suites? passed after [0-9.]+ seconds[.]$' \
     "$output_path"; then
     echo "error: Swift Testing suite '${suite}' exited without a complete passing test-run summary." >&2
     rm -f "$output_path"

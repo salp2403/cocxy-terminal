@@ -11,6 +11,7 @@ struct TestHomeSandboxSwiftTestingTests {
         case none
         case preference
         case hostDomains
+        case ownedPreference
         case config
     }
 
@@ -107,6 +108,17 @@ struct TestHomeSandboxSwiftTestingTests {
         #expect(result.status == 0, "\(result.stderr)")
     }
 
+    @Test("a rewritten Cocxy preference domain fails the run unless a Cocxy app owns it")
+    func cocxyPreferenceChangeFailsWithoutApp() throws {
+        let unattended = try runSandbox(.ownedPreference, appRunning: false)
+        #expect(unattended.status != 0)
+        #expect(unattended.stderr.contains("dev.cocxy.terminal.plist"))
+
+        let appOwned = try runSandbox(.ownedPreference, appRunning: true)
+        #expect(appOwned.status == 0, "\(appOwned.stderr)")
+        #expect(appOwned.stderr.contains("warning:"))
+    }
+
     @Test("a change under the real cocxy config fails unless a Cocxy app owns it")
     func configChangeFailsWithoutApp() throws {
         let unattended = try runSandbox(.config, appRunning: false)
@@ -139,6 +151,7 @@ struct TestHomeSandboxSwiftTestingTests {
             withIntermediateDirectories: true
         )
         try Data("existing".utf8).write(to: preferences.appendingPathComponent("existing.plist"))
+        try Data("existing".utf8).write(to: preferences.appendingPathComponent("dev.cocxy.terminal.plist"))
         try Data("[]".utf8).write(to: config.appendingPathComponent("registry.json"))
         let report = fixture.appendingPathComponent("private-home.txt")
 
@@ -156,6 +169,7 @@ struct TestHomeSandboxSwiftTestingTests {
           preference) printf x > "$REAL/Library/Preferences/leaked.suite.plist" ;;
           hostDomains) for name in com.apple.dt.xctest.tool swiftpm-testing-helper; do
               printf x > "$REAL/Library/Preferences/$name.plist"; done ;;
+          ownedPreference) printf 'rewritten' > "$REAL/Library/Preferences/dev.cocxy.terminal.plist" ;;
           config) printf '[{}]' > "$REAL/.config/cocxy/projects/registry.json" ;;
         esac
         cocxy_test_home_end

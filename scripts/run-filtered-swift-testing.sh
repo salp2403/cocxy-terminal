@@ -16,9 +16,9 @@ common_args=(
   --skip CocxyCorePerformanceBenchmarks
 )
 source "$(dirname "${BASH_SOURCE[0]}")/test-home-sandbox.sh"
-cocxy_test_home_begin
 test_list="$(mktemp "${TMPDIR:-/tmp}/cocxy-swift-test-list.XXXXXX")"
 trap 'rm -f "$test_list"; cocxy_test_home_cleanup' EXIT
+cocxy_test_home_begin
 
 "$swift_bin" test list "${common_args[@]}" "$@" > "$test_list"
 

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Sourced by the test runners: tests get a private home directory and the real
-# one is checked afterwards, so a run cannot leave state in the user's account.
+# one is checked afterwards, so a run that leaves Cocxy state in the user's
+# account fails.
 #
 # Foundation ignores HOME on macOS; CFFIXED_USER_HOME is what moves
 # NSHomeDirectory(), homeDirectoryForCurrentUser and "~" expansion. HOME is set
 # as well for the shells, git and interpreters that tests launch. cfprefsd
-# ignores both, so new preference domains are detected by listing files.
+# ignores both, so preference domains are checked by listing files.
 
 cocxy_test_home_begin() {
   if [[ -n "${COCXY_TEST_HOME:-}" ]]; then
@@ -23,6 +24,7 @@ cocxy_test_home_begin() {
     ln -s "$cocxy_test_home_real/Library/Keychains" "$cocxy_test_home_state/home/Library/Keychains"
   fi
   cocxy_test_home_preferences > "$cocxy_test_home_state/preferences.before"
+  cocxy_test_home_owned_preferences > "$cocxy_test_home_state/owned-preferences.before"
   cocxy_test_home_config > "$cocxy_test_home_state/config.before"
   export COCXY_TEST_HOME="$cocxy_test_home_state/home"
   export CFFIXED_USER_HOME="$COCXY_TEST_HOME"
@@ -36,10 +38,19 @@ cocxy_test_home_preferences() {
   # macOS services create com.apple.* domains at any time, and AppKit saves
   # window frames into the test host's own domain, which a fresh machine does
   # not have yet; neither is state a test left in the user's account.
-  ls -1 "$directory" \
+  ls -1A "$directory" \
     | { grep '\.plist$' || true; } \
     | { grep -Ev '^(com\.apple\..*|swiftpm-testing-helper\.plist)$' || true; } \
     | LC_ALL=C sort
+}
+
+# Other apps rewrite their own domains during a long run, so contents are only
+# compared for the domains that belong to Cocxy.
+cocxy_test_home_owned_preferences() {
+  local directory="$cocxy_test_home_real/Library/Preferences"
+  [[ -d "$directory" ]] || return 0
+  { find "$directory" -maxdepth 1 -iname '*cocxy*.plist' -print0 \
+      | xargs -0 stat -f '%m %z %N' 2>/dev/null || true; } | LC_ALL=C sort
 }
 
 cocxy_test_home_config() {
@@ -70,6 +81,15 @@ cocxy_test_home_end() {
     echo "error: the test run created preference files in $cocxy_test_home_real/Library/Preferences:" >&2
     printf '%s\n' "$created" | head -20 >&2 || true
     status=1
+  fi
+  if ! cocxy_test_home_owned_preferences | cmp -s "$cocxy_test_home_state/owned-preferences.before" -; then
+    if cocxy_test_home_app_running; then
+      echo "warning: Cocxy preference files changed while a Cocxy app was running; the change is not attributed to the tests." >&2
+    else
+      echo "error: the test run changed Cocxy preference files in $cocxy_test_home_real/Library/Preferences:" >&2
+      cocxy_test_home_owned_preferences | diff "$cocxy_test_home_state/owned-preferences.before" - | head -20 >&2 || true
+      status=1
+    fi
   fi
   if ! cocxy_test_home_config | cmp -s "$cocxy_test_home_state/config.before" -; then
     if cocxy_test_home_app_running; then

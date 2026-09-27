@@ -478,5 +478,8 @@ static void cocxy_test_runtime_install_signal_guards(void) {
     }
 
     int home_code = cocxy_install_private_home();
-    if (home_code != 0) _exit(home_code);
+    if (home_code != 0) {
+        dprintf(STDERR_FILENO, "cocxy test runtime: cannot create a private home under /tmp: %s\n", strerror(home_code));
+        _exit(home_code);
+    }
 }

@@ -16,13 +16,7 @@ struct RenameSheetControllerTests {
         #expect(host.acceptsFirstMouse(for: nil))
     }
 
-    @Test(
-        "rename panel stays attached, focusable, and releases its coordinator on close",
-        .disabled(
-            if: ProcessInfo.processInfo.environment["CI"] != nil,
-            "Allocates real AppKit windows; CI runners without a window server abort the suite."
-        )
-    )
+    @Test("rename panel stays attached, focusable, and releases its coordinator on close")
     func renamePanelLifecycle() async {
         let parent = makeParentWindow()
         defer { parent.close() }
@@ -50,13 +44,7 @@ struct RenameSheetControllerTests {
         #expect(results == [.cancelled])
     }
 
-    @Test(
-        "cancel preserves the name while Done with blank input clears it",
-        .disabled(
-            if: ProcessInfo.processInfo.environment["CI"] != nil,
-            "Allocates real AppKit windows; CI runners without a window server abort the suite."
-        )
-    )
+    @Test("cancel preserves the name while Done with blank input clears it")
     func cancelAndBlankConfirmationAreDistinct() throws {
         let parent = makeParentWindow()
         defer { parent.close() }
@@ -87,13 +75,7 @@ struct RenameSheetControllerTests {
         #expect(results == [.cancelled, .confirmed(nil)])
     }
 
-    @Test(
-        "closing the parent window does not report rename cancellation",
-        .disabled(
-            if: ProcessInfo.processInfo.environment["CI"] != nil,
-            "Allocates real AppKit windows; CI runners without a window server abort the suite."
-        )
-    )
+    @Test("closing the parent window does not report rename cancellation")
     func parentWindowCloseDoesNotCompleteRename() async {
         let parent = makeParentWindow()
         var completionCount = 0

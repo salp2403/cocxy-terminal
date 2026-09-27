@@ -29,8 +29,8 @@ if [[ -f web/scripts/build-site.mjs ]]; then
 fi
 
 source "$ROOT_DIR/scripts/test-home-sandbox.sh"
-cocxy_test_home_begin
 trap cocxy_test_home_cleanup EXIT
+cocxy_test_home_begin
 
 echo "Running XCTest suite..."
 swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks \
