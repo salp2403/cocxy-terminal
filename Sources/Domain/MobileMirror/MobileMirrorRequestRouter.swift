@@ -460,6 +460,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
           <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
           <meta name="color-scheme" content="light dark">
           <title>Cocxy Terminal</title>
+          <link rel="icon" href="data:,">
           <style nonce="\(nonce)">
             :root{font-family:-apple-system,BlinkMacSystemFont,sans-serif;color-scheme:light dark}
             body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#101217;color:#f5f7fa}
