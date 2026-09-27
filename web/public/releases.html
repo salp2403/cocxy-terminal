@@ -4,25 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Releases - Cocxy Terminal</title>
-  <meta name="description" content="Release history for Cocxy Terminal.">
+  <meta name="description" content="Release history and changelog for Cocxy Terminal.">
   <meta name="author" content="Said Arturo Lopez">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
-  <meta name="theme-color" content="#101018">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b0c10" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="/css/style.css?v=0.0.0">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cocxy Terminal">
   <meta property="og:title" content="Releases - Cocxy Terminal">
-  <meta property="og:description" content="Release history for Cocxy Terminal.">
+  <meta property="og:description" content="Release history and changelog for Cocxy Terminal.">
   <meta property="og:url" content="https://cocxy.dev/releases.html">
-  <meta property="og:image" content="https://cocxy.dev/og/og-releases.png">
+  <meta property="og:image" content="https://cocxy.dev/og/og-releases.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Releases - Cocxy Terminal">
   <meta property="og:locale" content="en_US">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Releases - Cocxy Terminal">
-  <meta name="twitter:description" content="Release history for Cocxy Terminal.">
-  <meta name="twitter:image" content="https://cocxy.dev/og/og-releases.png">
   <link rel="canonical" href="https://cocxy.dev/releases.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/releases.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html">
@@ -33,40 +32,35 @@
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
-  <script>
-  (() => {
-    try {
-      const saved = localStorage.getItem('cocxy-theme');
-      if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
-    } catch (_) {}
-  })();
-  </script>
+  <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to main content</a>
 <header class="site-header">
   <nav class="nav container" aria-label="Main navigation">
     <a class="nav-logo" href="/" aria-label="Cocxy Terminal">
-      <picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="32" height="32" alt=""></picture>
+      <img src="/images/icon-192.png" width="28" height="28" alt="">
       <span>Cocxy</span>
     </a>
-    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
-      <span></span><span></span><span></span>
-      <span class="sr-only">Open navigation</span>
-    </button>
     <div class="nav-links" id="site-menu">
       <a  href="/features.html">Features</a>
       <a  href="/features/agents.html">Agents</a>
       <a  href="/privacy.html">Privacy</a>
       <a  href="/security.html">Security</a>
       <a  href="/docs/">Docs</a>
-      <a class="nav-cta" href="#download">Download</a>
-      <button class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
-        <span class="theme-toggle__sun" aria-hidden="true">☀</span>
-        <span class="theme-toggle__moon" aria-hidden="true">◐</span>
-      </button>
       <a href="/es/releases.html" hreflang="es" lang="es">Español</a>
       <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a class="nav-cta" href="#download">Download</a>
+    </div>
+    <div class="nav-actions">
+      <button class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+        <span class="theme-toggle__sun"></span>
+        <span class="theme-toggle__moon"></span>
+      </button>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
+        <span></span><span></span><span></span>
+        <span class="sr-only">Open navigation</span>
+      </button>
     </div>
   </nav>
 </header>
@@ -74,28 +68,34 @@
 <section class="page-hero"><div class="container">
     <p class="eyebrow">Releases</p>
     <h1>Releases</h1>
-    <p>The release workflow replaces this page with live release notes when publishing.</p>
-  </div></section><section class="section section-band" id="download" aria-labelledby="download-title">
+    <p>Release history, notes, and downloads for Cocxy Terminal.</p>
+    <div class="page-hero__actions"><a class="button button-secondary" href="https://github.com/salp2403/cocxy-terminal/releases" target="_blank" rel="noopener noreferrer">All releases on GitHub</a></div>
+  </div></section>
+<section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
-    <div class="section-header" data-reveal="fade-up">
+    <div class="section-header section-header--center" data-reveal="fade-up">
       <p class="eyebrow">Download</p>
-      <h2 id="download-title">Install Cocxy on macOS</h2>
-      <p>The site keeps version placeholders so the release workflow can rewrite them when publishing.</p>
+      <h2 id="download-title">Install Cocxy on your Mac</h2>
+      <p>Signed with a Developer ID and notarized by Apple. Updates arrive through the built-in updater.</p>
     </div>
     <div class="download-grid" data-reveal="stagger">
-      <article class="card">
-        <h3>DMG</h3>
-        <p>Direct download from GitHub Releases.</p>
+      <article class="card download-card download-card--primary">
+        <h3>Direct download</h3>
+        <p>The signed disk image from GitHub Releases.</p>
         <a class="button button-primary" href="https://github.com/salp2403/cocxy-terminal/releases/download/v0.0.0/CocxyTerminal-0.0.0.dmg">Download v0.0.0</a>
       </article>
-      <article class="card">
+      <article class="card download-card">
         <h3>Homebrew</h3>
-        <p>Reproducible install from the official tap.</p>
-        <pre class="code-block"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code><button class="copy-button" type="button">Copy</button></pre>
+        <p>Install and upgrade from the official tap.</p>
+        <div class="code-block install">
+  <div class="install__bar"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copy Homebrew command">Copy</button></div>
+  <pre><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code></pre>
+  <span class="sr-only" aria-live="polite" data-copy-status></span>
+</div>
       </article>
-      <article class="card">
-        <h3>Channels</h3>
-        <p>Stable, preview, and nightly are documented with clear risk levels.</p>
+      <article class="card download-card">
+        <h3>Release channels</h3>
+        <p>Stable for daily work; preview and nightly for early testing.</p>
         <a class="button button-secondary" href="/channels.html">View channels</a>
       </article>
     </div>
@@ -104,76 +104,36 @@
 </main>
 <script type="application/ld+json">
 {
-  "@context": "https://schema.org",
-  "@type": "BreadcrumbList",
-  "itemListElement": [
-    {
-      "@type": "ListItem",
-      "position": 1,
-      "name": "Home",
-      "item": "https://cocxy.dev/"
-    },
-    {
-      "@type": "ListItem",
-      "position": 2,
-      "name": "Releases",
-      "item": "https://cocxy.dev/releases.html"
-    }
-  ]
-}
-</script>
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "CollectionPage",
-  "@id": "https://cocxy.dev/releases.html#releases",
-  "name": "Cocxy Terminal Releases",
-  "url": "https://cocxy.dev/releases.html",
-  "mainEntity": {
-    "@type": "ItemList",
-    "itemListElement": []
+ "@context": "https://schema.org",
+ "@type": "BreadcrumbList",
+ "itemListElement": [
+  {
+   "@type": "ListItem",
+   "position": 1,
+   "name": "Home",
+   "item": "https://cocxy.dev/"
   },
-  "about": {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "Cocxy Terminal",
-    "applicationCategory": "DeveloperApplication",
-    "applicationSubCategory": "Terminal Emulator",
-    "operatingSystem": "macOS 15.0+",
-    "url": "https://cocxy.dev",
-    "downloadUrl": "https://github.com/salp2403/cocxy-terminal/releases/latest",
-    "softwareVersion": "0.0.0",
-    "license": "https://opensource.org/licenses/MIT",
-    "isAccessibleForFree": true,
-    "inLanguage": "en",
-    "featureList": [
-      "Real-time local agent detection",
-      "Encrypted session Vault",
-      "Inline code review panel",
-      "Native Markdown workspace",
-      "GPU terminal rendering",
-      "Remote workspaces",
-      "Built-in browser",
-      "Plugin hooks",
-      "Shell integration",
-      "Zero telemetry"
-    ],
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "USD",
-      "availability": "https://schema.org/InStock"
-    },
-    "author": {
-      "@type": "Person",
-      "name": "Said Arturo Lopez",
-      "url": "https://github.com/salp2403"
-    }
+  {
+   "@type": "ListItem",
+   "position": 2,
+   "name": "Releases",
+   "item": "https://cocxy.dev/releases.html"
   }
+ ]
 }
 </script>
 <script type="application/ld+json">
 {
+ "@context": "https://schema.org",
+ "@type": "CollectionPage",
+ "@id": "https://cocxy.dev/releases.html#releases",
+ "name": "Cocxy Terminal Releases",
+ "url": "https://cocxy.dev/releases.html",
+ "mainEntity": {
+  "@type": "ItemList",
+  "itemListElement": []
+ },
+ "about": {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "Cocxy Terminal",
@@ -187,41 +147,86 @@
   "isAccessibleForFree": true,
   "inLanguage": "en",
   "featureList": [
-    "Real-time local agent detection",
-    "Encrypted session Vault",
-    "Inline code review panel",
-    "Native Markdown workspace",
-    "GPU terminal rendering",
-    "Remote workspaces",
-    "Built-in browser",
-    "Plugin hooks",
-    "Shell integration",
-    "Zero telemetry"
+   "Real-time local agent detection",
+   "Encrypted session Vault",
+   "Inline code review panel",
+   "Native Markdown workspace",
+   "GPU terminal rendering",
+   "Remote workspaces",
+   "Built-in browser",
+   "Plugin hooks",
+   "Shell integration",
+   "Zero telemetry"
   ],
   "offers": {
-    "@type": "Offer",
-    "price": "0",
-    "priceCurrency": "USD",
-    "availability": "https://schema.org/InStock"
+   "@type": "Offer",
+   "price": "0",
+   "priceCurrency": "USD",
+   "availability": "https://schema.org/InStock"
   },
   "author": {
-    "@type": "Person",
-    "name": "Said Arturo Lopez",
-    "url": "https://github.com/salp2403"
+   "@type": "Person",
+   "name": "Said Arturo Lopez",
+   "url": "https://github.com/salp2403"
   }
+ }
+}
+</script>
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "SoftwareApplication",
+ "name": "Cocxy Terminal",
+ "applicationCategory": "DeveloperApplication",
+ "applicationSubCategory": "Terminal Emulator",
+ "operatingSystem": "macOS 15.0+",
+ "url": "https://cocxy.dev",
+ "downloadUrl": "https://github.com/salp2403/cocxy-terminal/releases/latest",
+ "softwareVersion": "0.0.0",
+ "license": "https://opensource.org/licenses/MIT",
+ "isAccessibleForFree": true,
+ "inLanguage": "en",
+ "featureList": [
+  "Real-time local agent detection",
+  "Encrypted session Vault",
+  "Inline code review panel",
+  "Native Markdown workspace",
+  "GPU terminal rendering",
+  "Remote workspaces",
+  "Built-in browser",
+  "Plugin hooks",
+  "Shell integration",
+  "Zero telemetry"
+ ],
+ "offers": {
+  "@type": "Offer",
+  "price": "0",
+  "priceCurrency": "USD",
+  "availability": "https://schema.org/InStock"
+ },
+ "author": {
+  "@type": "Person",
+  "name": "Said Arturo Lopez",
+  "url": "https://github.com/salp2403"
+ }
 }
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">
     <div>
-      <a class="footer-brand" href="/"><picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="28" height="28" alt=""></picture><span>Cocxy Terminal</span></a>
+      <a class="footer-brand" href="/"><img src="/images/icon-192.png" width="28" height="28" alt=""><span>Cocxy Terminal</span></a>
       <p>Native macOS terminal, local-first, MIT licensed, and zero telemetry.</p>
     </div>
     <nav aria-label="Footer links">
+      <a href="/features.html">Features</a>
+      <a href="/features/agents.html">Agents</a>
+      <a href="/docs/">Docs</a>
       <a href="/privacy.html">Privacy</a>
       <a href="/security.html">Security</a>
       <a href="/releases.html">Releases</a>
-      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT</a>
+      <a href="/channels.html">Channels</a>
+      <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
     </nav>
     <p class="footer-note">Made by Said Arturo Lopez.</p>
   </div>

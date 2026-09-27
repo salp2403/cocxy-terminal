@@ -136,8 +136,9 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-app.use((_req, res) => {
-  res.status(404).sendFile(path.join(PUBLIC_ROOT, "index.html"), (error) => {
+app.use((req, res) => {
+  const notFoundPage = req.path.startsWith("/es/") ? "es/404.html" : "404.html";
+  res.status(404).sendFile(path.join(PUBLIC_ROOT, notFoundPage), (error) => {
     if (error && !res.headersSent) {
       res.status(404).type("text/plain").send("Not found");
     }

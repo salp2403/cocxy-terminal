@@ -7,22 +7,21 @@
   <meta name="description" content="Secretos locales, updates firmados, almacenes cifrados, ejecución reforzada y red explícita.">
   <meta name="author" content="Said Arturo Lopez">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
-  <meta name="theme-color" content="#101018">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b0c10" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="/css/style.css?v=0.0.0">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cocxy Terminal">
   <meta property="og:title" content="Seguridad - Cocxy Terminal">
   <meta property="og:description" content="Secretos locales, updates firmados, almacenes cifrados, ejecución reforzada y red explícita.">
   <meta property="og:url" content="https://cocxy.dev/es/security.html">
-  <meta property="og:image" content="https://cocxy.dev/og/og-security.png">
+  <meta property="og:image" content="https://cocxy.dev/og/og-es-security.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Seguridad - Cocxy Terminal">
   <meta property="og:locale" content="es_HN">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Seguridad - Cocxy Terminal">
-  <meta name="twitter:description" content="Secretos locales, updates firmados, almacenes cifrados, ejecución reforzada y red explícita.">
-  <meta name="twitter:image" content="https://cocxy.dev/og/og-security.png">
   <link rel="canonical" href="https://cocxy.dev/es/security.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/security.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/security.html">
@@ -33,40 +32,35 @@
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
-  <script>
-  (() => {
-    try {
-      const saved = localStorage.getItem('cocxy-theme');
-      if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
-    } catch (_) {}
-  })();
-  </script>
+  <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
 <a class="skip-link" href="#main">Saltar al contenido</a>
 <header class="site-header">
   <nav class="nav container" aria-label="Navegación principal">
     <a class="nav-logo" href="/es/" aria-label="Cocxy Terminal">
-      <picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="32" height="32" alt=""></picture>
+      <img src="/images/icon-192.png" width="28" height="28" alt="">
       <span>Cocxy</span>
     </a>
-    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
-      <span></span><span></span><span></span>
-      <span class="sr-only">Abrir navegación</span>
-    </button>
     <div class="nav-links" id="site-menu">
       <a  href="/es/features.html">Funciones</a>
       <a  href="/es/features/agents.html">Agentes</a>
       <a  href="/es/privacy.html">Privacidad</a>
       <a aria-current="page" href="/es/security.html">Seguridad</a>
       <a  href="/es/docs/">Documentación</a>
-      <a class="nav-cta" href="#download">Descargar</a>
-      <button class="theme-toggle" type="button" aria-label="Cambiar tema" title="Cambiar tema">
-        <span class="theme-toggle__sun" aria-hidden="true">☀</span>
-        <span class="theme-toggle__moon" aria-hidden="true">◐</span>
-      </button>
       <a href="/security.html" hreflang="en" lang="en">English</a>
       <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a class="nav-cta" href="#download">Descargar</a>
+    </div>
+    <div class="nav-actions">
+      <button class="theme-toggle" type="button" aria-label="Cambiar tema" title="Cambiar tema">
+        <span class="theme-toggle__sun"></span>
+        <span class="theme-toggle__moon"></span>
+      </button>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
+        <span></span><span></span><span></span>
+        <span class="sr-only">Abrir navegación</span>
+      </button>
     </div>
   </nav>
 </header>
@@ -75,27 +69,33 @@
     <p class="eyebrow">Cocxy Terminal</p>
     <h1>Seguridad</h1>
     <p>Secretos locales, updates firmados, almacenes cifrados, ejecución reforzada y red explícita.</p>
-  </div></section><section class="section"><div class="container detail-grid"><article class="card"><h2>Modelo de amenazas</h2><p>Resumen público: terminal output, secretos, sockets, portapapeles, rutas y conexiones se tratan como sensibles.</p></article><article class="card"><h2>Criptografía</h2><p>AES-GCM para Bóveda, EdDSA para updates Sparkle, HMAC-SHA256 para relay y Keychain para secretos.</p></article><article class="card"><h2>Firma y notarización</h2><p>Developer ID Application, ejecución reforzada, timestamp seguro y notarización de Apple en releases públicos.</p></article><article class="card"><h2>Higiene de dependencias</h2><p>Swift y bibliotecas de Apple por defecto, Sparkle auditado, Zig pinneado y npm solo para web.</p></article><article class="card"><h2>SBOM</h2><p>El SBOM público acompaña releases cuando el flujo lo genera.</p></article><article class="card"><h2>Disclosure</h2><p>Reporta vulnerabilidades mediante GitHub Security Advisory o dev@cocxy.dev.</p></article></div></section><section class="section section-band" id="download" aria-labelledby="download-title">
+  </div></section>
+<section class="section section--tight"><div class="container detail-grid"><article class="card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v11H8l-4 4V4z"/><path d="M8 8h8M8 11h6"/></svg><h2>Modelo de amenazas</h2><p>Resumen público: salida de terminal, secretos, sockets, portapapeles, rutas y conexiones se tratan como sensibles.</p></article><article class="card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v2"/></svg><h2>Criptografía</h2><p>AES-GCM para la Bóveda, EdDSA para las actualizaciones de Sparkle, HMAC-SHA256 para el relay y Keychain para los secretos.</p></article><article class="card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-5"/></svg><h2>Firma y notarización</h2><p>Developer ID Application, ejecución reforzada, sello de tiempo seguro y notarización de Apple en las versiones públicas.</p></article><article class="card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v6M16 3v6M7 9h10v4a5 5 0 0 1-10 0V9z"/><path d="M12 18v3"/></svg><h2>Higiene de dependencias</h2><p>Swift y bibliotecas de Apple por defecto, Sparkle auditado, Zig fijado y npm solo para el sitio web.</p></article><article class="card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 16h4"/></svg><h2>SBOM</h2><p>El SBOM público acompaña a las versiones cuando el flujo de publicación lo genera.</p></article><article class="card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/><path d="M5 14l.9 2.6L8.5 17.5l-2.6.9L5 21l-.9-2.6-2.6-.9 2.6-.9L5 14z"/></svg><h2>Divulgación responsable</h2><p>Reporta vulnerabilidades mediante GitHub Security Advisory o <!--email_off--><a href="mailto:dev@cocxy.dev">dev@cocxy.dev</a><!--/email_off-->.</p></article></div></section>
+<section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
-    <div class="section-header" data-reveal="fade-up">
+    <div class="section-header section-header--center" data-reveal="fade-up">
       <p class="eyebrow">Descarga</p>
-      <h2 id="download-title">Instala Cocxy en macOS</h2>
-      <p>El sitio conserva placeholders de versión para que el release workflow los reescriba al publicar.</p>
+      <h2 id="download-title">Instala Cocxy en tu Mac</h2>
+      <p>Firmada con Developer ID y notarizada por Apple. Las actualizaciones llegan por el actualizador integrado.</p>
     </div>
     <div class="download-grid" data-reveal="stagger">
-      <article class="card">
-        <h3>DMG</h3>
-        <p>Descarga directa desde GitHub Releases.</p>
+      <article class="card download-card download-card--primary">
+        <h3>Descarga directa</h3>
+        <p>La imagen de disco firmada, desde GitHub Releases.</p>
         <a class="button button-primary" href="https://github.com/salp2403/cocxy-terminal/releases/download/v0.0.0/CocxyTerminal-0.0.0.dmg">Descargar v0.0.0</a>
       </article>
-      <article class="card">
+      <article class="card download-card">
         <h3>Homebrew</h3>
-        <p>Instalación reproducible desde el tap oficial.</p>
-        <pre class="code-block"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code><button class="copy-button" type="button">Copiar</button></pre>
+        <p>Instala y actualiza desde el tap oficial.</p>
+        <div class="code-block install">
+  <div class="install__bar"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copiar comando de Homebrew">Copiar</button></div>
+  <pre><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code></pre>
+  <span class="sr-only" aria-live="polite" data-copy-status></span>
+</div>
       </article>
-      <article class="card">
+      <article class="card download-card">
         <h3>Canales</h3>
-        <p>Canal estable, validación y nocturno documentados con sus riesgos.</p>
+        <p>Estable para el día a día; validación y nocturno para probar antes.</p>
         <a class="button button-secondary" href="/es/channels.html">Ver canales</a>
       </article>
     </div>
@@ -104,35 +104,40 @@
 </main>
 <script type="application/ld+json">
 {
-  "@context": "https://schema.org",
-  "@type": "BreadcrumbList",
-  "itemListElement": [
-    {
-      "@type": "ListItem",
-      "position": 1,
-      "name": "Inicio",
-      "item": "https://cocxy.dev/es/"
-    },
-    {
-      "@type": "ListItem",
-      "position": 2,
-      "name": "Seguridad",
-      "item": "https://cocxy.dev/security.html"
-    }
-  ]
+ "@context": "https://schema.org",
+ "@type": "BreadcrumbList",
+ "itemListElement": [
+  {
+   "@type": "ListItem",
+   "position": 1,
+   "name": "Inicio",
+   "item": "https://cocxy.dev/es/"
+  },
+  {
+   "@type": "ListItem",
+   "position": 2,
+   "name": "Seguridad",
+   "item": "https://cocxy.dev/security.html"
+  }
+ ]
 }
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">
     <div>
-      <a class="footer-brand" href="/es/"><picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="28" height="28" alt=""></picture><span>Cocxy Terminal</span></a>
+      <a class="footer-brand" href="/es/"><img src="/images/icon-192.png" width="28" height="28" alt=""><span>Cocxy Terminal</span></a>
       <p>Terminal nativa para macOS, local primero, MIT y sin telemetría.</p>
     </div>
     <nav aria-label="Enlaces de pie">
+      <a href="/es/features.html">Funciones</a>
+      <a href="/es/features/agents.html">Agentes</a>
+      <a href="/es/docs/">Documentación</a>
       <a href="/es/privacy.html">Privacidad</a>
       <a href="/es/security.html">Seguridad</a>
-      <a href="/es/releases.html">Releases</a>
-      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT</a>
+      <a href="/es/releases.html">Versiones</a>
+      <a href="/es/channels.html">Canales</a>
+      <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">Licencia MIT</a>
     </nav>
     <p class="footer-note">Hecho por Said Arturo Lopez.</p>
   </div>

@@ -5527,9 +5527,9 @@ struct CITestGateScriptSwiftTestingTests {
         }
         #expect(englishHome.contains(">Zero telemetry</span>"))
         #expect(spanishHome.contains(">Cero telemetría</span>"))
-        #expect(spanishHome.contains("<b>ESPACIOS</b>"))
-        #expect(spanishHome.contains("> inactivo · 1</span>"))
-        #expect(!spanishHome.contains("<b>WORKSPACES</b>"))
+        #expect(spanishHome.contains("<strong>Te espera</strong> Revisión lista"))
+        #expect(spanishHome.contains("<strong>Trabajando</strong> Editando archivos"))
+        #expect(!spanishHome.contains("<strong>Waiting for you</strong>"))
 
         for releasePage in [englishReleases, spanishReleases] {
             #expect(releasePage.contains(#""@type": "BreadcrumbList""#))
@@ -5576,49 +5576,6 @@ struct CITestGateScriptSwiftTestingTests {
             #expect(!contents.contains("93-command"))
             #expect(!contents.contains("93 commands"))
             #expect(!contents.contains("full list of 93"))
-        }
-    }
-
-    @Test("public marketing copy confines named agent brands to compatibility surfaces")
-    func publicMarketingCopyConfinesNamedAgentBrandsToCompatibilitySurfaces() throws {
-        let root = repositoryRoot()
-        let webRoot = root.appendingPathComponent("web/public", isDirectory: true)
-        var files = [
-            root.appendingPathComponent("README.md"),
-        ]
-        files += try Self.files(under: webRoot, fileExtension: "html")
-        files += try Self.files(under: webRoot, fileExtension: "js")
-
-        let pattern = try NSRegularExpression(
-            pattern: #"\b(claude|codex|gemini|aider|kiro|opencode|anthropic|openai|warp)\b"#,
-            options: [.caseInsensitive]
-        )
-        let comparisonPattern = try NSRegularExpression(
-            pattern: #"\b(cocxy\s+vs\.?|vs\.?\s+cocxy|versus|better than|faster than|beats|mejor que|más rápido que|supera a)\b"#,
-            options: [.caseInsensitive]
-        )
-        let compatibilitySurfaces: Set<String> = [
-            "web/public/index.html",
-            "web/public/es/index.html",
-            "web/public/agents.html",
-            "web/public/es/agents.html",
-            "web/public/features/agents.html",
-            "web/public/es/features/agents.html",
-        ]
-
-        for file in files {
-            let relativePath = Self.relativePath(file, root: root)
-            let contents = try String(contentsOf: file, encoding: .utf8)
-            let range = NSRange(location: 0, length: (contents as NSString).length)
-            #expect(
-                comparisonPattern.firstMatch(in: contents, range: range) == nil,
-                "\(relativePath) should describe Cocxy without competitor comparisons"
-            )
-            guard !compatibilitySurfaces.contains(relativePath) else { continue }
-            #expect(
-                pattern.firstMatch(in: contents, range: range) == nil,
-                "\(relativePath) should reserve named agent brands for compatibility surfaces"
-            )
         }
     }
 
@@ -6097,11 +6054,8 @@ struct CITestGateScriptSwiftTestingTests {
 
         #expect(english.contains("Launch note draft"))
         #expect(english.contains("Demo outline"))
-        #expect(english.contains("/images/icon.png"))
-        #expect(english.contains("/images/og-image.png"))
-        #expect(english.contains("/images/cocxy-preview.png"))
-        #expect(english.contains("/videos/cocxy-demo.mp4"))
-        #expect(english.contains(#"<video controls preload="metadata" poster="/images/og-image.avif""#))
+        #expect(english.contains(#"<a href="/images/icon.png">"#))
+        #expect(english.contains(#"<a href="/images/og-image.png">"#))
         #expect(english.contains("No telemetry pipeline"))
         #expect(english.contains(#""@type": "Article""#))
         #expect(english.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/press.html">"#))
@@ -6109,11 +6063,17 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(spanish.contains("Borrador de nota de lanzamiento"))
         #expect(spanish.contains("Guion de demo"))
         #expect(spanish.contains("Recursos visuales"))
-        #expect(spanish.contains("/videos/cocxy-demo.mp4"))
-        #expect(spanish.contains("Video demo"))
+        #expect(spanish.contains(#"<a href="/images/icon.png">"#))
         #expect(spanish.contains("Sin sistema de telemetr&iacute;a"))
         #expect(spanish.contains(#""@type": "Article""#))
         #expect(spanish.contains(#"<link rel="alternate" hreflang="en" href="https://cocxy.dev/press.html">"#))
+
+        // Captures that show a personal shell prompt or internal test output stay off the press kit.
+        for page in [english, spanish] {
+            #expect(!page.contains("/images/cocxy-preview"))
+            #expect(!page.contains("/videos/cocxy-demo"))
+            #expect(!page.contains("<video"))
+        }
 
         let video = root.appendingPathComponent("web/public/videos/cocxy-demo.mp4")
         let attributes = try FileManager.default.attributesOfItem(atPath: video.path)

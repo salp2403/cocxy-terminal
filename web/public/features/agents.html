@@ -7,22 +7,21 @@
   <meta name="description" content="Cocxy detects local coding agents through hooks, OSC signals, terminal semantics, pattern matching, and timing heuristics.">
   <meta name="author" content="Said Arturo Lopez">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
-  <meta name="theme-color" content="#101018">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b0c10" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="/css/style.css?v=0.0.0">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cocxy Terminal">
   <meta property="og:title" content="Multi-Layer Agent Detection - Cocxy Terminal">
   <meta property="og:description" content="Cocxy detects local coding agents through hooks, OSC signals, terminal semantics, pattern matching, and timing heuristics.">
   <meta property="og:url" content="https://cocxy.dev/features/agents.html">
-  <meta property="og:image" content="https://cocxy.dev/og/og-features-agents.png">
+  <meta property="og:image" content="https://cocxy.dev/og/og-features-agents.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Multi-Layer Agent Detection - Cocxy Terminal">
   <meta property="og:locale" content="en_US">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Multi-Layer Agent Detection - Cocxy Terminal">
-  <meta name="twitter:description" content="Cocxy detects local coding agents through hooks, OSC signals, terminal semantics, pattern matching, and timing heuristics.">
-  <meta name="twitter:image" content="https://cocxy.dev/og/og-features-agents.png">
   <link rel="canonical" href="https://cocxy.dev/features/agents.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/features/agents.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/agents.html">
@@ -33,53 +32,50 @@
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
-  <script>
-  (() => {
-    try {
-      const saved = localStorage.getItem('cocxy-theme');
-      if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
-    } catch (_) {}
-  })();
-  </script>
+  <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to main content</a>
 <header class="site-header">
   <nav class="nav container" aria-label="Main navigation">
     <a class="nav-logo" href="/" aria-label="Cocxy Terminal">
-      <picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="32" height="32" alt=""></picture>
+      <img src="/images/icon-192.png" width="28" height="28" alt="">
       <span>Cocxy</span>
     </a>
-    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
-      <span></span><span></span><span></span>
-      <span class="sr-only">Open navigation</span>
-    </button>
     <div class="nav-links" id="site-menu">
       <a  href="/features.html">Features</a>
       <a aria-current="page" href="/features/agents.html">Agents</a>
       <a  href="/privacy.html">Privacy</a>
       <a  href="/security.html">Security</a>
       <a  href="/docs/">Docs</a>
-      <a class="nav-cta" href="#download">Download</a>
-      <button class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
-        <span class="theme-toggle__sun" aria-hidden="true">☀</span>
-        <span class="theme-toggle__moon" aria-hidden="true">◐</span>
-      </button>
       <a href="/es/features/agents.html" hreflang="es" lang="es">Español</a>
       <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a class="nav-cta" href="#download">Download</a>
+    </div>
+    <div class="nav-actions">
+      <button class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+        <span class="theme-toggle__sun"></span>
+        <span class="theme-toggle__moon"></span>
+      </button>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
+        <span></span><span></span><span></span>
+        <span class="sr-only">Open navigation</span>
+      </button>
     </div>
   </nav>
 </header>
 <main id="main">
 <section class="page-hero"><div class="container">
-    <p class="eyebrow">Feature</p>
-    <h1>Multi-Layer Agent Detection</h1>
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li><li><a href="/features.html">Features</a></li><li><span aria-current="page">Multi-Layer Agent Detection</span></li></ol></nav>
+    <span class="page-hero__icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/><path d="M5 14l.9 2.6L8.5 17.5l-2.6.9L5 21l-.9-2.6-2.6-.9 2.6-.9L5 14z"/></svg></span><h1>Multi-Layer Agent Detection</h1>
     <p>Cocxy detects local coding agents through hooks, OSC signals, terminal semantics, pattern matching, and timing heuristics.</p>
-  </div></section><section class="section"><div class="container">
-  <div class="table-wrap">
+  </div></section>
+<section class="section section--flush"><div class="container"><div class="window mock feature-shot" role="img" aria-label="Illustration of the Cocxy window: Multi-Layer Agent Detection"><div class="mock__bar"><i></i><i></i><i></i></div><div class="mock-app mock-app--agents"><div class="mock-app__term"><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt is-caret"></span></div><div class="mock-app__panel"><span class="mock-app__label"></span><div class="mock-app__card is-working"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-waiting"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-done"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-idle"><i class="state-dot"></i><span></span><span></span></div></div></div></div></div></section>
+<section class="section"><div class="container">
+  <div class="table-wrap table-wrap--stack">
     <table>
       <thead><tr><th scope="col">Agent</th><th scope="col">Binary</th><th scope="col">Detection</th><th scope="col">Vault resume</th></tr></thead>
-      <tbody><tr><th scope="row">Claude</th><td><code>claude</code></td><td>OSC and hooks</td><td><code>--resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Codex</th><td><code>codex</code></td><td>OSC and state projection</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">OpenCode</th><td><code>opencode</code></td><td>Local pattern layer</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Pi</th><td><code>pi</code></td><td>Local pattern layer</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Cursor</th><td><code>cursor-agent</code></td><td>OSC-aware profile</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Gemini</th><td><code>gemini</code></td><td>Pattern and timing fallback</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Rovo</th><td><code>rovo</code></td><td>Local pattern layer</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Copilot</th><td><code>copilot</code></td><td>OSC and hooks</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">CodeBuddy</th><td><code>codebuddy</code></td><td>Local pattern layer</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Factory</th><td><code>factory</code></td><td>Local pattern layer</td><td><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Qoder</th><td><code>qoder</code></td><td>Local pattern layer</td><td><code>resume &lt;session-id&gt;</code></td></tr></tbody>
+      <tbody><tr><th scope="row">Claude</th><td data-label="Binary"><code>claude</code></td><td data-label="Detection">OSC and hooks</td><td data-label="Vault resume"><code>--resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Codex</th><td data-label="Binary"><code>codex</code></td><td data-label="Detection">OSC and state projection</td><td data-label="Vault resume"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">OpenCode</th><td data-label="Binary"><code>opencode</code></td><td data-label="Detection">Local pattern layer</td><td data-label="Vault resume"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Pi</th><td data-label="Binary"><code>pi</code></td><td data-label="Detection">Local pattern layer</td><td data-label="Vault resume"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Cursor</th><td data-label="Binary"><code>cursor-agent</code></td><td data-label="Detection">OSC-aware profile</td><td data-label="Vault resume"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Gemini</th><td data-label="Binary"><code>gemini</code></td><td data-label="Detection">Pattern and timing fallback</td><td data-label="Vault resume"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Rovo</th><td data-label="Binary"><code>rovo</code></td><td data-label="Detection">Local pattern layer</td><td data-label="Vault resume"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Copilot</th><td data-label="Binary"><code>copilot</code></td><td data-label="Detection">OSC and hooks</td><td data-label="Vault resume"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">CodeBuddy</th><td data-label="Binary"><code>codebuddy</code></td><td data-label="Detection">Local pattern layer</td><td data-label="Vault resume"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Factory</th><td data-label="Binary"><code>factory</code></td><td data-label="Detection">Local pattern layer</td><td data-label="Vault resume"><code>resume &lt;session-id&gt;</code></td></tr><tr><th scope="row">Qoder</th><td data-label="Binary"><code>qoder</code></td><td data-label="Detection">Local pattern layer</td><td data-label="Vault resume"><code>resume &lt;session-id&gt;</code></td></tr></tbody>
     </table>
   </div>
   <div class="detail-grid section-mini">
@@ -90,36 +86,50 @@ patterns = ["waiting", "working"]</code><button class="copy-button" type="button
     <article class="card"><h2>How detection works</h2><p>Cocxy combines hooks, OSC signals, process patterns, and timing heuristics to show local state.</p></article>
     <article class="card"><h2>Vault integration</h2><p>Detected sessions can be searched and resumed from the encrypted Vault.</p></article>
   </div>
-  <picture class="screenshot-frame">
-    <source srcset="/images/cocxy-preview.avif?v=0.0.0" type="image/avif">
-    <source srcset="/images/cocxy-preview.webp?v=0.0.0" type="image/webp">
-    <img src="/images/cocxy-preview.png?v=0.0.0" width="1574" height="808" alt="Cocxy showing agents and local panes" loading="lazy">
-  </picture>
-  <div class="callout">
-    <h2>Custom agents</h2>
-    <p>Define custom agents in agents.toml with commands, patterns, and resume rules without changing app code.</p>
-  </div>
-</div></section><section class="section section-band" id="download" aria-labelledby="download-title">
+</div></section>
+<section class="section section-band" aria-labelledby="related-title"><div class="container">
+  <h2 id="related-title" class="section-title">Keep exploring</h2>
+  <div class="feature-tiles"><article class="feature-tile feature-icon--config">
+  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v2"/></svg>
+  <h3><a class="tile-link" href="/features/vault.html">Encrypted Vault</a></h3>
+  <p>Search, resume, pin, preview, and export local agent sessions without sending terminal history to a remote service.</p>
+</article>
+<article class="feature-tile feature-icon--review">
+  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v11H8l-4 4V4z"/><path d="M8 8h8M8 11h6"/></svg>
+  <h3><a class="tile-link" href="/features/code-review.html">Inline Code Review</a></h3>
+  <p>Review agent changes beside the terminal, comment on lines, accept or reject hunks, and return structured feedback to the session.</p>
+</article>
+<article class="feature-tile feature-icon--markdown">
+  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 16h4"/></svg>
+  <h3><a class="tile-link" href="/features/markdown.html">Markdown Workspace</a></h3>
+  <p>A native writing surface with preview, outline, code blocks, diagrams, math, exports, and local file workflows.</p>
+</article></div>
+</div></section>
+<section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
-    <div class="section-header" data-reveal="fade-up">
+    <div class="section-header section-header--center" data-reveal="fade-up">
       <p class="eyebrow">Download</p>
-      <h2 id="download-title">Install Cocxy on macOS</h2>
-      <p>The site keeps version placeholders so the release workflow can rewrite them when publishing.</p>
+      <h2 id="download-title">Install Cocxy on your Mac</h2>
+      <p>Signed with a Developer ID and notarized by Apple. Updates arrive through the built-in updater.</p>
     </div>
     <div class="download-grid" data-reveal="stagger">
-      <article class="card">
-        <h3>DMG</h3>
-        <p>Direct download from GitHub Releases.</p>
+      <article class="card download-card download-card--primary">
+        <h3>Direct download</h3>
+        <p>The signed disk image from GitHub Releases.</p>
         <a class="button button-primary" href="https://github.com/salp2403/cocxy-terminal/releases/download/v0.0.0/CocxyTerminal-0.0.0.dmg">Download v0.0.0</a>
       </article>
-      <article class="card">
+      <article class="card download-card">
         <h3>Homebrew</h3>
-        <p>Reproducible install from the official tap.</p>
-        <pre class="code-block"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code><button class="copy-button" type="button">Copy</button></pre>
+        <p>Install and upgrade from the official tap.</p>
+        <div class="code-block install">
+  <div class="install__bar"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copy Homebrew command">Copy</button></div>
+  <pre><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code></pre>
+  <span class="sr-only" aria-live="polite" data-copy-status></span>
+</div>
       </article>
-      <article class="card">
-        <h3>Channels</h3>
-        <p>Stable, preview, and nightly are documented with clear risk levels.</p>
+      <article class="card download-card">
+        <h3>Release channels</h3>
+        <p>Stable for daily work; preview and nightly for early testing.</p>
         <a class="button button-secondary" href="/channels.html">View channels</a>
       </article>
     </div>
@@ -128,108 +138,113 @@ patterns = ["waiting", "working"]</code><button class="copy-button" type="button
 </main>
 <script type="application/ld+json">
 {
-  "@context": "https://schema.org",
-  "@type": "BreadcrumbList",
-  "itemListElement": [
-    {
-      "@type": "ListItem",
-      "position": 1,
-      "name": "Home",
-      "item": "https://cocxy.dev/"
-    },
-    {
-      "@type": "ListItem",
-      "position": 2,
-      "name": "Features",
-      "item": "https://cocxy.dev/features.html"
-    },
-    {
-      "@type": "ListItem",
-      "position": 3,
-      "name": "Multi-Layer Agent Detection",
-      "item": "https://cocxy.dev/features/agents.html"
-    }
-  ]
+ "@context": "https://schema.org",
+ "@type": "BreadcrumbList",
+ "itemListElement": [
+  {
+   "@type": "ListItem",
+   "position": 1,
+   "name": "Home",
+   "item": "https://cocxy.dev/"
+  },
+  {
+   "@type": "ListItem",
+   "position": 2,
+   "name": "Features",
+   "item": "https://cocxy.dev/features.html"
+  },
+  {
+   "@type": "ListItem",
+   "position": 3,
+   "name": "Multi-Layer Agent Detection",
+   "item": "https://cocxy.dev/features/agents.html"
+  }
+ ]
 }
 </script>
 <script type="application/ld+json">
 {
-  "@context": "https://schema.org",
-  "@type": "ItemList",
-  "name": "Multi-Layer Agent Detection",
-  "description": "Cocxy detects local coding agents through hooks, OSC signals, terminal semantics, pattern matching, and timing heuristics.",
-  "inLanguage": "en",
-  "numberOfItems": 11,
-  "itemListElement": [
-    {
-      "@type": "ListItem",
-      "position": 1,
-      "name": "Claude"
-    },
-    {
-      "@type": "ListItem",
-      "position": 2,
-      "name": "Codex"
-    },
-    {
-      "@type": "ListItem",
-      "position": 3,
-      "name": "OpenCode"
-    },
-    {
-      "@type": "ListItem",
-      "position": 4,
-      "name": "Pi"
-    },
-    {
-      "@type": "ListItem",
-      "position": 5,
-      "name": "Cursor"
-    },
-    {
-      "@type": "ListItem",
-      "position": 6,
-      "name": "Gemini"
-    },
-    {
-      "@type": "ListItem",
-      "position": 7,
-      "name": "Rovo"
-    },
-    {
-      "@type": "ListItem",
-      "position": 8,
-      "name": "Copilot"
-    },
-    {
-      "@type": "ListItem",
-      "position": 9,
-      "name": "CodeBuddy"
-    },
-    {
-      "@type": "ListItem",
-      "position": 10,
-      "name": "Factory"
-    },
-    {
-      "@type": "ListItem",
-      "position": 11,
-      "name": "Qoder"
-    }
-  ]
+ "@context": "https://schema.org",
+ "@type": "ItemList",
+ "name": "Multi-Layer Agent Detection",
+ "description": "Cocxy detects local coding agents through hooks, OSC signals, terminal semantics, pattern matching, and timing heuristics.",
+ "inLanguage": "en",
+ "numberOfItems": 11,
+ "itemListElement": [
+  {
+   "@type": "ListItem",
+   "position": 1,
+   "name": "Claude"
+  },
+  {
+   "@type": "ListItem",
+   "position": 2,
+   "name": "Codex"
+  },
+  {
+   "@type": "ListItem",
+   "position": 3,
+   "name": "OpenCode"
+  },
+  {
+   "@type": "ListItem",
+   "position": 4,
+   "name": "Pi"
+  },
+  {
+   "@type": "ListItem",
+   "position": 5,
+   "name": "Cursor"
+  },
+  {
+   "@type": "ListItem",
+   "position": 6,
+   "name": "Gemini"
+  },
+  {
+   "@type": "ListItem",
+   "position": 7,
+   "name": "Rovo"
+  },
+  {
+   "@type": "ListItem",
+   "position": 8,
+   "name": "Copilot"
+  },
+  {
+   "@type": "ListItem",
+   "position": 9,
+   "name": "CodeBuddy"
+  },
+  {
+   "@type": "ListItem",
+   "position": 10,
+   "name": "Factory"
+  },
+  {
+   "@type": "ListItem",
+   "position": 11,
+   "name": "Qoder"
+  }
+ ]
 }
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">
     <div>
-      <a class="footer-brand" href="/"><picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="28" height="28" alt=""></picture><span>Cocxy Terminal</span></a>
+      <a class="footer-brand" href="/"><img src="/images/icon-192.png" width="28" height="28" alt=""><span>Cocxy Terminal</span></a>
       <p>Native macOS terminal, local-first, MIT licensed, and zero telemetry.</p>
     </div>
     <nav aria-label="Footer links">
+      <a href="/features.html">Features</a>
+      <a href="/features/agents.html">Agents</a>
+      <a href="/docs/">Docs</a>
       <a href="/privacy.html">Privacy</a>
       <a href="/security.html">Security</a>
       <a href="/releases.html">Releases</a>
-      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT</a>
+      <a href="/channels.html">Channels</a>
+      <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
     </nav>
     <p class="footer-note">Made by Said Arturo Lopez.</p>
   </div>

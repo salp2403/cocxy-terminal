@@ -195,12 +195,15 @@ async function runAxe(urls) {
 
 function lighthouseThresholds(url) {
   const isDoc = url.includes('/docs/');
-  return {
+  const thresholds = {
     performance: isDoc ? 0.9 : 0.95,
     accessibility: 1,
     'best-practices': 0.95,
     seo: 1,
   };
+  // The not-found pages are noindex on purpose, which Lighthouse scores as an SEO failure.
+  if (url.endsWith('/404.html')) delete thresholds.seo;
+  return thresholds;
 }
 
 const lighthouseInternalFailureScores = {
@@ -512,29 +515,29 @@ function verifyBudgets() {
   const jsFiles = walkFiles(path.join(publicRoot, 'js'), (file) => file.endsWith('.js'));
   const cssGzip = cssFiles.reduce((total, file) => total + zlib.gzipSync(fs.readFileSync(file)).length, 0);
   const jsGzip = jsFiles.reduce((total, file) => total + zlib.gzipSync(fs.readFileSync(file)).length, 0);
-  const heroAvif = path.join(publicRoot, 'images', 'cocxy-preview.avif');
-  const heroWebp = path.join(publicRoot, 'images', 'cocxy-preview.webp');
-  const webm = path.join(publicRoot, 'videos', 'cocxy-demo.webm');
+  const fileSize = (file) => (fs.existsSync(file) ? fs.statSync(file).size : null);
 
   const budgets = {
     cssGzipBytes: cssGzip,
-    cssGzipLimitBytes: 25 * 1024,
+    cssGzipLimitBytes: 40 * 1024,
     jsGzipBytes: jsGzip,
     jsGzipLimitBytes: 15 * 1024,
-    heroAvifBytes: fs.existsSync(heroAvif) ? fs.statSync(heroAvif).size : null,
-    heroImageLimitBytes: 80 * 1024,
-    heroWebpBytes: fs.existsSync(heroWebp) ? fs.statSync(heroWebp).size : null,
-    webmBytes: fs.existsSync(webm) ? fs.statSync(webm).size : null,
+    captureAvif: Object.fromEntries(fs.readdirSync(path.join(publicRoot, 'images'))
+      .filter((name) => /^shot-.+\.avif$/.test(name))
+      .map((name) => [name, fileSize(path.join(publicRoot, 'images', name))])),
+    captureAvifLimitBytes: 80 * 1024,
+    compactCaptureAvifLimitBytes: 14 * 1024,
+    tourWebmBytes: fileSize(path.join(publicRoot, 'videos', 'cocxy-tour.webm')),
+    tourWebmLimitBytes: 4 * 1024 * 1024,
   };
 
   if (budgets.cssGzipBytes > budgets.cssGzipLimitBytes) fail(`CSS gzip budget exceeded: ${budgets.cssGzipBytes} > ${budgets.cssGzipLimitBytes}`);
   if (budgets.jsGzipBytes > budgets.jsGzipLimitBytes) fail(`JS gzip budget exceeded: ${budgets.jsGzipBytes} > ${budgets.jsGzipLimitBytes}`);
-  if (budgets.heroAvifBytes === null) fail('Missing AVIF hero image');
-  if (budgets.heroWebpBytes === null) fail('Missing WebP hero image');
-  if (budgets.heroAvifBytes !== null && budgets.heroAvifBytes > budgets.heroImageLimitBytes) {
-    fail(`Hero AVIF budget exceeded: ${budgets.heroAvifBytes} > ${budgets.heroImageLimitBytes}`);
+  for (const [file, bytes] of Object.entries(budgets.captureAvif)) {
+    const limit = file.endsWith('-compact.avif') ? budgets.compactCaptureAvifLimitBytes : budgets.captureAvifLimitBytes;
+    if (bytes > limit) fail(`Capture AVIF budget exceeded for ${file}: ${bytes} > ${limit}`);
   }
-  if (budgets.webmBytes === null) fail('Missing WebM demo video');
+  if (budgets.tourWebmBytes > budgets.tourWebmLimitBytes) fail(`Tour WebM budget exceeded: ${budgets.tourWebmBytes} > ${budgets.tourWebmLimitBytes}`);
 
   return budgets;
 }

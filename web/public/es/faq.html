@@ -7,22 +7,21 @@
   <meta name="description" content="Respuestas sobre instalación, privacidad, agentes, updates, remotos y código fuente.">
   <meta name="author" content="Said Arturo Lopez">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
-  <meta name="theme-color" content="#101018">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b0c10" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="/css/style.css?v=0.0.0">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cocxy Terminal">
   <meta property="og:title" content="Preguntas frecuentes - Cocxy Terminal">
   <meta property="og:description" content="Respuestas sobre instalación, privacidad, agentes, updates, remotos y código fuente.">
   <meta property="og:url" content="https://cocxy.dev/es/faq.html">
-  <meta property="og:image" content="https://cocxy.dev/og/og-faq.png">
+  <meta property="og:image" content="https://cocxy.dev/og/og-es-faq.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Preguntas frecuentes - Cocxy Terminal">
   <meta property="og:locale" content="es_HN">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Preguntas frecuentes - Cocxy Terminal">
-  <meta name="twitter:description" content="Respuestas sobre instalación, privacidad, agentes, updates, remotos y código fuente.">
-  <meta name="twitter:image" content="https://cocxy.dev/og/og-faq.png">
   <link rel="canonical" href="https://cocxy.dev/es/faq.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/faq.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/faq.html">
@@ -33,40 +32,35 @@
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
-  <script>
-  (() => {
-    try {
-      const saved = localStorage.getItem('cocxy-theme');
-      if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
-    } catch (_) {}
-  })();
-  </script>
+  <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
 <a class="skip-link" href="#main">Saltar al contenido</a>
 <header class="site-header">
   <nav class="nav container" aria-label="Navegación principal">
     <a class="nav-logo" href="/es/" aria-label="Cocxy Terminal">
-      <picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="32" height="32" alt=""></picture>
+      <img src="/images/icon-192.png" width="28" height="28" alt="">
       <span>Cocxy</span>
     </a>
-    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
-      <span></span><span></span><span></span>
-      <span class="sr-only">Abrir navegación</span>
-    </button>
     <div class="nav-links" id="site-menu">
       <a  href="/es/features.html">Funciones</a>
       <a  href="/es/features/agents.html">Agentes</a>
       <a  href="/es/privacy.html">Privacidad</a>
       <a  href="/es/security.html">Seguridad</a>
       <a  href="/es/docs/">Documentación</a>
-      <a class="nav-cta" href="#download">Descargar</a>
-      <button class="theme-toggle" type="button" aria-label="Cambiar tema" title="Cambiar tema">
-        <span class="theme-toggle__sun" aria-hidden="true">☀</span>
-        <span class="theme-toggle__moon" aria-hidden="true">◐</span>
-      </button>
       <a href="/faq.html" hreflang="en" lang="en">English</a>
       <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a class="nav-cta" href="#download">Descargar</a>
+    </div>
+    <div class="nav-actions">
+      <button class="theme-toggle" type="button" aria-label="Cambiar tema" title="Cambiar tema">
+        <span class="theme-toggle__sun"></span>
+        <span class="theme-toggle__moon"></span>
+      </button>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
+        <span></span><span></span><span></span>
+        <span class="sr-only">Abrir navegación</span>
+      </button>
     </div>
   </nav>
 </header>
@@ -75,27 +69,33 @@
     <p class="eyebrow">Cocxy Terminal</p>
     <h1>Preguntas frecuentes</h1>
     <p>Respuestas sobre instalación, privacidad, agentes, updates, remotos y código fuente.</p>
-  </div></section><section class="section"><div class="container faq-list"><details class="faq-item"><summary>¿Cocxy requiere cuenta?</summary><p>No. Puedes instalar y usar Cocxy sin iniciar sesión.</p></details><details class="faq-item"><summary>¿Sube mis sesiones?</summary><p>No. Las sesiones y la Bóveda viven localmente.</p></details><details class="faq-item"><summary>¿Cómo se instala?</summary><p>DMG firmado o Homebrew.</p></details><details class="faq-item"><summary>¿Qué agentes soporta?</summary><p>11 perfiles integrados y agentes propios por configuración.</p></details><details class="faq-item"><summary>¿Qué datos guarda la Bóveda?</summary><p>Metadatos y contenido de sesiones locales según las acciones que habilites.</p></details><details class="faq-item"><summary>¿Puedo usar SSH?</summary><p>Sí. Las conexiones SSH se inician explícitamente por el usuario.</p></details><details class="faq-item"><summary>¿El navegador carga scripts externos de Cocxy?</summary><p>No. El sitio evita JavaScript de terceros.</p></details><details class="faq-item"><summary>¿Dónde está la documentación?</summary><p>En el hub de documentación local del sitio.</p></details><details class="faq-item"><summary>¿Cómo reporto seguridad?</summary><p>Usa GitHub Security Advisory o dev@cocxy.dev.</p></details><details class="faq-item"><summary>¿La licencia cambia?</summary><p>No. Cocxy se mantiene MIT.</p></details></div></section><section class="section section-band" id="download" aria-labelledby="download-title">
+  </div></section>
+<section class="section section--tight"><div class="container"><div class="faq-list faq-list--page"><details class="faq-item"><summary>¿Cocxy requiere cuenta?</summary><p>No. Puedes instalar y usar Cocxy sin iniciar sesión.</p></details><details class="faq-item"><summary>¿Sube mis sesiones?</summary><p>No. Las sesiones y la Bóveda viven localmente.</p></details><details class="faq-item"><summary>¿Cómo se instala?</summary><p>DMG firmado o Homebrew.</p></details><details class="faq-item"><summary>¿Qué agentes soporta?</summary><p>11 perfiles integrados y agentes propios por configuración.</p></details><details class="faq-item"><summary>¿Qué datos guarda la Bóveda?</summary><p>Metadatos y contenido de sesiones locales según las acciones que habilites.</p></details><details class="faq-item"><summary>¿Puedo usar SSH?</summary><p>Sí. Las conexiones SSH se inician explícitamente por el usuario.</p></details><details class="faq-item"><summary>¿El navegador carga scripts externos de Cocxy?</summary><p>No. El sitio evita JavaScript de terceros.</p></details><details class="faq-item"><summary>¿Dónde está la documentación?</summary><p>En el hub de documentación local del sitio.</p></details><details class="faq-item"><summary>¿Cómo reporto seguridad?</summary><p>Usa GitHub Security Advisory o <!--email_off--><a href="mailto:dev@cocxy.dev">dev@cocxy.dev</a><!--/email_off-->.</p></details><details class="faq-item"><summary>¿La licencia cambia?</summary><p>No. Cocxy se mantiene MIT.</p></details></div></div></section>
+<section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
-    <div class="section-header" data-reveal="fade-up">
+    <div class="section-header section-header--center" data-reveal="fade-up">
       <p class="eyebrow">Descarga</p>
-      <h2 id="download-title">Instala Cocxy en macOS</h2>
-      <p>El sitio conserva placeholders de versión para que el release workflow los reescriba al publicar.</p>
+      <h2 id="download-title">Instala Cocxy en tu Mac</h2>
+      <p>Firmada con Developer ID y notarizada por Apple. Las actualizaciones llegan por el actualizador integrado.</p>
     </div>
     <div class="download-grid" data-reveal="stagger">
-      <article class="card">
-        <h3>DMG</h3>
-        <p>Descarga directa desde GitHub Releases.</p>
+      <article class="card download-card download-card--primary">
+        <h3>Descarga directa</h3>
+        <p>La imagen de disco firmada, desde GitHub Releases.</p>
         <a class="button button-primary" href="https://github.com/salp2403/cocxy-terminal/releases/download/v0.0.0/CocxyTerminal-0.0.0.dmg">Descargar v0.0.0</a>
       </article>
-      <article class="card">
+      <article class="card download-card">
         <h3>Homebrew</h3>
-        <p>Instalación reproducible desde el tap oficial.</p>
-        <pre class="code-block"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code><button class="copy-button" type="button">Copiar</button></pre>
+        <p>Instala y actualiza desde el tap oficial.</p>
+        <div class="code-block install">
+  <div class="install__bar"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copiar comando de Homebrew">Copiar</button></div>
+  <pre><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code></pre>
+  <span class="sr-only" aria-live="polite" data-copy-status></span>
+</div>
       </article>
-      <article class="card">
+      <article class="card download-card">
         <h3>Canales</h3>
-        <p>Canal estable, validación y nocturno documentados con sus riesgos.</p>
+        <p>Estable para el día a día; validación y nocturno para probar antes.</p>
         <a class="button button-secondary" href="/es/channels.html">Ver canales</a>
       </article>
     </div>
@@ -104,123 +104,128 @@
 </main>
 <script type="application/ld+json">
 {
-  "@context": "https://schema.org",
-  "@type": "BreadcrumbList",
-  "itemListElement": [
-    {
-      "@type": "ListItem",
-      "position": 1,
-      "name": "Inicio",
-      "item": "https://cocxy.dev/es/"
-    },
-    {
-      "@type": "ListItem",
-      "position": 2,
-      "name": "Preguntas frecuentes",
-      "item": "https://cocxy.dev/faq.html"
-    }
-  ]
+ "@context": "https://schema.org",
+ "@type": "BreadcrumbList",
+ "itemListElement": [
+  {
+   "@type": "ListItem",
+   "position": 1,
+   "name": "Inicio",
+   "item": "https://cocxy.dev/es/"
+  },
+  {
+   "@type": "ListItem",
+   "position": 2,
+   "name": "Preguntas frecuentes",
+   "item": "https://cocxy.dev/faq.html"
+  }
+ ]
 }
 </script>
 <script type="application/ld+json">
 {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {
-      "@type": "Question",
-      "name": "¿Cocxy requiere cuenta?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. Puedes instalar y usar Cocxy sin iniciar sesión."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "¿Sube mis sesiones?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. Las sesiones y la Bóveda viven localmente."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "¿Cómo se instala?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "DMG firmado o Homebrew."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "¿Qué agentes soporta?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "11 perfiles integrados y agentes propios por configuración."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "¿Qué datos guarda la Bóveda?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Metadatos y contenido de sesiones locales según las acciones que habilites."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "¿Puedo usar SSH?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Sí. Las conexiones SSH se inician explícitamente por el usuario."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "¿El navegador carga scripts externos de Cocxy?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. El sitio evita JavaScript de terceros."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "¿Dónde está la documentación?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "En el hub de documentación local del sitio."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "¿Cómo reporto seguridad?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Usa GitHub Security Advisory o dev@cocxy.dev."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "¿La licencia cambia?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. Cocxy se mantiene MIT."
-      }
-    }
-  ]
+ "@context": "https://schema.org",
+ "@type": "FAQPage",
+ "mainEntity": [
+  {
+   "@type": "Question",
+   "name": "¿Cocxy requiere cuenta?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "No. Puedes instalar y usar Cocxy sin iniciar sesión."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "¿Sube mis sesiones?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "No. Las sesiones y la Bóveda viven localmente."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "¿Cómo se instala?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "DMG firmado o Homebrew."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "¿Qué agentes soporta?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "11 perfiles integrados y agentes propios por configuración."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "¿Qué datos guarda la Bóveda?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Metadatos y contenido de sesiones locales según las acciones que habilites."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "¿Puedo usar SSH?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Sí. Las conexiones SSH se inician explícitamente por el usuario."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "¿El navegador carga scripts externos de Cocxy?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "No. El sitio evita JavaScript de terceros."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "¿Dónde está la documentación?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "En el hub de documentación local del sitio."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "¿Cómo reporto seguridad?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Usa GitHub Security Advisory o dev@cocxy.dev."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "¿La licencia cambia?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "No. Cocxy se mantiene MIT."
+   }
+  }
+ ]
 }
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">
     <div>
-      <a class="footer-brand" href="/es/"><picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="28" height="28" alt=""></picture><span>Cocxy Terminal</span></a>
+      <a class="footer-brand" href="/es/"><img src="/images/icon-192.png" width="28" height="28" alt=""><span>Cocxy Terminal</span></a>
       <p>Terminal nativa para macOS, local primero, MIT y sin telemetría.</p>
     </div>
     <nav aria-label="Enlaces de pie">
+      <a href="/es/features.html">Funciones</a>
+      <a href="/es/features/agents.html">Agentes</a>
+      <a href="/es/docs/">Documentación</a>
       <a href="/es/privacy.html">Privacidad</a>
       <a href="/es/security.html">Seguridad</a>
-      <a href="/es/releases.html">Releases</a>
-      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT</a>
+      <a href="/es/releases.html">Versiones</a>
+      <a href="/es/channels.html">Canales</a>
+      <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">Licencia MIT</a>
     </nav>
     <p class="footer-note">Hecho por Said Arturo Lopez.</p>
   </div>
