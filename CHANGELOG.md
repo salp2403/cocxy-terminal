@@ -28,8 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   agents, each in its own Git worktree, and Compare Parallel Task shows each
   candidate's status, cost, branch, and diff before you promote one and clean
   up the rest.
-- Parallel task runs warn about planned files that would collide, are saved
-  across restarts, and are also available as `cocxy task-run`,
+- Added collision warnings for planned files in parallel task runs, which are
+  saved across restarts and also available as `cocxy task-run`,
   `task-run-list`, and `task-run promote`.
 - Added a persistent Task Queue for local agent pipelines that run manually,
   on a cron schedule, or on terminal events, managed from the command palette
@@ -42,15 +42,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added the phone mirror. View > Pair Phone... shows a single-use QR code that
   expires after 90 seconds, and the phone gets access only after you allow it
   on the Mac; access ends after eight hours or as soon as you revoke it.
-- From the paired phone's browser you can see local projects and live agents,
-  follow a terminal with pinch and double-tap zoom, type keys and paste text,
-  reply to a waiting agent, approve or reject agent approvals, and receive
-  local notifications. New projects can be created from the phone in a folder
-  chosen on the Mac, after you confirm them there.
-- The phone connects over your private local network through a TLS relay, or
-  optionally through a connected SSH profile, while terminal servers stay on
-  loopback. Terminal traffic and phone actions are end-to-end encrypted with a
-  key carried in the QR code, with no account or cloud service involved.
+- Added phone controls. From the paired phone's browser you can see local
+  projects and live agents, follow a terminal with pinch and double-tap zoom,
+  type keys and paste text, reply to a waiting agent, approve or reject agent
+  approvals, receive local notifications, and create a project in a folder
+  chosen on the Mac after you confirm it there.
+- Added end-to-end encryption for the phone mirror: terminal traffic and phone
+  actions are encrypted with a key carried in the QR code. The phone connects
+  over your private local network through a TLS relay, or optionally through a
+  connected SSH profile, while terminal servers stay on loopback and no
+  account or cloud service is involved.
 - Added keyboard content hints (`Cmd+Shift+L`) that open URLs, links, and file
   paths at their line, or copy IP addresses, commit hashes, and email
   addresses shown in the terminal.
@@ -111,14 +112,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command output being lost when the command finished.
 - Fixed scrollback search reporting overlapping results for literal matches
   and ignoring invalid regular expressions without a message.
-- Fixed restored tmux sessions losing their cursor position.
-- Fixed the agent dashboard and menu bar keeping sessions from closed
-  windows.
-- Fixed inline workspace and session renames losing focus or the typed name.
-- Fixed agent exit codes being lost and task queue steps not completing when
-  the agent process exited.
-- Fixed terminal scroll commands in the menu acting when the terminal was not
-  focused.
+- Fixed remote tmux sessions losing their cursor position when their screen
+  was restored.
+- Fixed agent dashboard rows and the Dock badge outliving a closed window.
+- Fixed cancelling a session or workspace rename resetting its name, and the
+  rename panel disappearing when Cocxy lost focus.
+- Fixed agent team and pipeline steps being marked successful when the agent
+  exited with an error or without an exit status, and the agent's exit code
+  being lost.
 
 ### Security
 - Phone actions carry a sequence number and a timestamp and are rejected when
