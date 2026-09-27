@@ -50,6 +50,26 @@ struct TestHomeSandboxSwiftTestingTests {
         }
     }
 
+    @Test("only an app bundle counts as a running Cocxy app")
+    func appDetectionIgnoresTestProcesses() throws {
+        let sandbox = repositoryRoot().appendingPathComponent("scripts/test-home-sandbox.sh").path
+        func matches(_ commandLine: String) throws -> Bool {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+            process.arguments = [
+                "-c", #"source "$1"; printf '%s' "$2" | grep -Eq "$cocxy_test_home_app_pattern""#,
+                "match", sandbox, commandLine,
+            ]
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        }
+
+        #expect(try matches("/Applications/Cocxy Terminal.app/Contents/MacOS/CocxyTerminal"))
+        #expect(try matches("/repo/build/CocxyTerminal.app/Contents/MacOS/CocxyTerminal -ApplePersistenceIgnoreState YES"))
+        #expect(try !matches("/repo/.build/debug/CocxyTerminalPackageTests.xctest/Contents/MacOS/CocxyTerminalPackageTests"))
+    }
+
     @Test("an untouched real home passes and the private home is removed")
     func untouchedHomePasses() throws {
         let result = try runSandbox(.none, appRunning: false)
