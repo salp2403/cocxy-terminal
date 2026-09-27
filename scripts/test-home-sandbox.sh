@@ -12,7 +12,9 @@ cocxy_test_home_begin() {
     return 0
   fi
   cocxy_test_home_real="${HOME:?HOME must name the real home to guard it}"
-  cocxy_test_home_state="$(mktemp -d "${TMPDIR:-/tmp}/cocxy-test-home.XXXXXX")"
+  # Short on purpose: SSH control sockets live under the home and a Unix
+  # socket path must fit in 104 bytes, which a TMPDIR-based home exceeds.
+  cocxy_test_home_state="$(mktemp -d /tmp/cxh.XXXXXX)"
   mkdir "$cocxy_test_home_state/home"
   # Keychain Services looks for the user's file keychains under the home and
   # blocks on a dialog when they are missing, so the private home links them.
@@ -63,7 +65,7 @@ cocxy_test_home_end() {
       echo "warning: $cocxy_test_home_real/.config/cocxy changed while a Cocxy app was running; the change is not attributed to the tests." >&2
     else
       echo "error: the test run changed $cocxy_test_home_real/.config/cocxy:" >&2
-      cocxy_test_home_config | diff "$cocxy_test_home_state/config.before" - | head -20 >&2
+      cocxy_test_home_config | diff "$cocxy_test_home_state/config.before" - | head -20 >&2 || true
       status=1
     fi
   fi

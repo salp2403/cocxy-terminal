@@ -58,21 +58,9 @@ static int cocxy_install_private_home(void) {
     const char *existing = getenv("CFFIXED_USER_HOME");
     if (existing != NULL && existing[0] != '\0') return 0;
 
-    const char *temporary = getenv("TMPDIR");
-    if (temporary == NULL || temporary[0] == '\0') temporary = "/tmp";
-    size_t length = strlen(temporary);
-    while (length > 1 && temporary[length - 1] == '/') length--;
-    int count = snprintf(
-        cocxy_owned_home,
-        sizeof(cocxy_owned_home),
-        "%.*s/cocxy-test-home.XXXXXX",
-        (int)length,
-        temporary
-    );
-    if (count <= 0 || count >= (int)sizeof(cocxy_owned_home)) {
-        cocxy_owned_home[0] = '\0';
-        return EOVERFLOW;
-    }
+    // Short on purpose: SSH control sockets live under the home and a Unix
+    // socket path must fit in 104 bytes, which a TMPDIR-based home exceeds.
+    strlcpy(cocxy_owned_home, "/tmp/cxh.XXXXXX", sizeof(cocxy_owned_home));
     if (mkdtemp(cocxy_owned_home) == NULL) {
         int code = errno != 0 ? errno : EIO;
         cocxy_owned_home[0] = '\0';

@@ -3,6 +3,7 @@
 
 import Foundation
 import Testing
+@testable import CocxyTerminal
 
 @Suite("Test home sandbox")
 struct TestHomeSandboxSwiftTestingTests {
@@ -41,6 +42,7 @@ struct TestHomeSandboxSwiftTestingTests {
         #expect(NSHomeDirectory() != userHome)
         #expect(FileManager.default.homeDirectoryForCurrentUser.path != userHome)
         #expect(ProcessInfo.processInfo.environment["HOME"] != userHome)
+        #expect(RemoteConnectionProfile(name: "probe", host: "probe.local").controlPath.utf8.count < 104)
         let keychains = userHome + "/Library/Keychains"
         if FileManager.default.fileExists(atPath: keychains) {
             let link = NSHomeDirectory() + "/Library/Keychains"
@@ -107,6 +109,7 @@ struct TestHomeSandboxSwiftTestingTests {
         source "$1"
         cocxy_test_home_app_running() { [[ "$app_running" == true ]]; }
         cocxy_test_home_begin
+        trap cocxy_test_home_cleanup EXIT
         printf '%s' "$CFFIXED_USER_HOME" > "$report"
         [[ "$HOME" == "$CFFIXED_USER_HOME" ]] || exit 3
         [[ "$(readlink "$HOME/Library/Keychains")" == "$REAL/Library/Keychains" ]] || exit 4
