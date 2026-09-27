@@ -35,6 +35,10 @@ for arg in "$@"; do
   list_extra_args+=("$arg")
 done
 
+source "$(dirname "${BASH_SOURCE[0]}")/test-home-sandbox.sh"
+cocxy_test_home_begin
+trap cocxy_test_home_cleanup EXIT
+
 list_args=("${common_args[@]}")
 if [[ ${#list_extra_args[@]} -gt 0 ]]; then
   list_args+=("${list_extra_args[@]}")
@@ -184,4 +188,5 @@ if [[ "$coverage_enabled" == true ]]; then
   echo "Swift Testing coverage JSON written to $coverage_json"
 fi
 
+cocxy_test_home_end
 echo "All ${#suites[@]} Swift Testing suite(s) passed."

@@ -15,8 +15,10 @@ common_args=(
   --skip PerformanceTests
   --skip CocxyCorePerformanceBenchmarks
 )
+source "$(dirname "${BASH_SOURCE[0]}")/test-home-sandbox.sh"
+cocxy_test_home_begin
 test_list="$(mktemp "${TMPDIR:-/tmp}/cocxy-swift-test-list.XXXXXX")"
-trap 'rm -f "$test_list"' EXIT
+trap 'rm -f "$test_list"; cocxy_test_home_cleanup' EXIT
 
 "$swift_bin" test list "${common_args[@]}" "$@" > "$test_list"
 
@@ -35,3 +37,4 @@ fi
 
 echo "Discovered $matching_test_count Swift Testing test(s) for filter: $filter"
 "$swift_bin" test "${common_args[@]}" "$@" --filter "$filter"
+cocxy_test_home_end
