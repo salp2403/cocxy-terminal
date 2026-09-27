@@ -97,6 +97,11 @@ struct MacOSFloorVerifierSwiftTestingTests {
             encoding: .utf8
         )
         try fixture.write("scripts/run-tests.sh", gate, executable: true)
+        let sandbox = try String(
+            contentsOf: repositoryRoot().appendingPathComponent("scripts/test-home-sandbox.sh"),
+            encoding: .utf8
+        )
+        try fixture.write("scripts/test-home-sandbox.sh", sandbox)
         try fixture.write("web/scripts/build-site.mjs", markerScript("build-site"))
         try fixture.write(
             "web/scripts/verify-site.mjs",

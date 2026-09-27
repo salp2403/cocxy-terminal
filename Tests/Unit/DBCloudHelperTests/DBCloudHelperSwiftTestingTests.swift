@@ -271,9 +271,11 @@ struct DBCloudHelperSwiftTestingTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let pidFile = directory.appendingPathComponent("timeout.pid")
         let script = try longRunningScript(in: directory)
+        // The child must start and record its pid inside this budget, or the
+        // runner stops it first and there is no pid left to check for reaping.
         let runner = LocalDBCloudHelperRunner(
             configuration: DBCloudHelperRunnerConfiguration(
-                timeoutSeconds: 1,
+                timeoutSeconds: 5,
                 terminationGracePeriodSeconds: 0.2,
                 maximumRetainedBytesPerStream: 8 * 1_024
             )
@@ -296,7 +298,7 @@ struct DBCloudHelperSwiftTestingTests {
             _ = try await task.value
             Issue.record("Expected helper timeout")
         } catch let error as DBCloudHelperExecutionError {
-            #expect(error == .timedOut(seconds: 1))
+            #expect(error == .timedOut(seconds: 5))
         }
 
         #expect(LaunchdProcessSnapshot.current(for: pid)?.identity != identity)
