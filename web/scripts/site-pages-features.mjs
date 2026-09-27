@@ -27,7 +27,7 @@ function featureShot(feature, lang) {
   const title = es ? feature.esTitle : feature.title;
   const artwork = feature.slug === 'code-review'
     ? reviewArtwork()
-    : appArtwork(feature.slug === 'agents' ? 'agents' : 'hero');
+    : appArtwork(feature.slug === 'agents' ? 'agents' : 'window');
   return productShot({
     slot: `feature-${feature.slug}`,
     alt: es ? `${title} en Cocxy Terminal` : `${title} in Cocxy Terminal`,

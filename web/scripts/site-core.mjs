@@ -26,7 +26,7 @@ export function escapeXML(value) {
 }
 
 export function json(value) {
-  return JSON.stringify(value, null, 2)
+  return JSON.stringify(value, null, 1)
     .replaceAll('<', '\\u003c')
     .replaceAll('>', '\\u003e')
     .replaceAll('&', '\\u0026');
@@ -68,7 +68,9 @@ export function icon(name) {
 
 export function logoImage({ width, height, className = '', alt = '' }) {
   const classAttribute = className ? ` class="${className}"` : '';
-  return `<picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img${classAttribute} src="/images/icon.png" width="${width}" height="${height}" alt="${escapeHTML(alt)}"></picture>`;
+  const large = width > 64;
+  const source = large ? '/images/icon.png' : '/images/icon-192.png';
+  return `<img${classAttribute} src="${source}" width="${width}" height="${height}" alt="${escapeHTML(alt)}"${large ? ' loading="lazy"' : ''}>`;
 }
 
 export function pageToSlug(page) {

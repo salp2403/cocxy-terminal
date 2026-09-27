@@ -17,11 +17,6 @@ const compatibleAgents = [
   'Pi',
 ];
 
-export const themeIcons = {
-  sun: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>',
-  moon: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4 8.2 8.2 0 1 0 20 14.6z"/></svg>',
-};
-
 export function compatibilityBlock(lang = 'en') {
   const es = lang === 'es';
   return `<!-- compatibility -->
@@ -63,7 +58,8 @@ function mockRows(states) {
   return states.map((state) => `<div class="mock-app__row ${state}"><i class="state-dot"></i><span></span></div>`).join('');
 }
 
-export function appArtwork(variant = 'hero') {
+// variant: 'hero' (dense, home only), 'window', 'agents', or 'projects'.
+export function appArtwork(variant = 'window') {
   const groups = variant === 'projects'
     ? `<span class="mock-app__group"></span>${mockRows(['is-working', 'is-done'])}<span class="mock-app__group"></span>${mockRows(['is-waiting', 'is-idle'])}<span class="mock-app__group"></span>${mockRows(['is-done'])}`
     : mockRows(variant === 'hero'
@@ -73,7 +69,7 @@ export function appArtwork(variant = 'hero') {
   const session = ['is-prompt', '', 'is-dim', '', '', 'is-dim', 'is-ok'];
   const termLines = [...session, ...session, ...(variant === 'hero' ? [...session, ...session] : []), 'is-prompt is-caret'];
   const term = `<div class="mock-app__term">${termLines.map((kind) => `<span${kind ? ` class="${kind}"` : ''}></span>`).join('')}</div>`;
-  const panelStates = variant === 'hero' || variant === 'agents'
+  const panelStates = variant === 'hero'
     ? ['is-working', 'is-waiting', 'is-done', 'is-working', 'is-idle', 'is-done', 'is-waiting', 'is-idle']
     : ['is-working', 'is-waiting', 'is-done', 'is-idle'];
   const panelCards = panelStates.map((state) => `<div class="mock-app__card ${state}"><i class="state-dot"></i><span></span><span></span></div>`).join('');

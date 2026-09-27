@@ -3,7 +3,6 @@
 // Site chrome shared by build-site.mjs and generate-releases-page.mjs, so the
 // generated releases page carries the same header, footer, and theme wiring.
 import { logoImage } from './site-core.mjs';
-import { themeIcons } from './site-components.mjs';
 
 export function themeHeadTags() {
   return `<meta name="color-scheme" content="light dark">
@@ -12,16 +11,7 @@ export function themeHeadTags() {
 }
 
 export function themeBootScript() {
-  return `<script>
-  (() => {
-    const root = document.documentElement;
-    root.classList.add('js');
-    try {
-      const saved = localStorage.getItem('cocxy-theme');
-      if (saved === 'light' || saved === 'dark') root.dataset.theme = saved;
-    } catch (_) {}
-  })();
-  </script>`;
+  return `<script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>`;
 }
 
 export function siteHeader({ lang = 'en', active = '', langHref, downloadHref }) {
@@ -48,8 +38,8 @@ export function siteHeader({ lang = 'en', active = '', langHref, downloadHref })
     </div>
     <div class="nav-actions">
       <button class="theme-toggle" type="button" aria-label="${es ? 'Cambiar tema' : 'Toggle theme'}" title="${es ? 'Cambiar tema' : 'Toggle theme'}">
-        <span class="theme-toggle__sun">${themeIcons.sun}</span>
-        <span class="theme-toggle__moon">${themeIcons.moon}</span>
+        <span class="theme-toggle__sun"></span>
+        <span class="theme-toggle__moon"></span>
       </button>
       <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
         <span></span><span></span><span></span>

@@ -156,9 +156,6 @@ function head({ title, description, page, lang = 'en', type = 'website', robots 
   <meta property="og:image:alt" content="${escapeHTML(titleFull)}">
   <meta property="og:locale" content="${ogLocale}">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="${escapeHTML(titleFull)}">
-  <meta name="twitter:description" content="${escapeHTML(description)}">
-  <meta name="twitter:image" content="${ogImage}">
   ${alternateLinks(page, lang)}
   <link rel="icon" type="image/svg+xml" href="/images/icon.svg">
   <link rel="apple-touch-icon" href="/images/icon-192.png">

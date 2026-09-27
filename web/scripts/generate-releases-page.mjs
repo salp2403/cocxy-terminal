@@ -158,16 +158,19 @@ function parseBody(body) {
   return { notes, requirements, compareURL };
 }
 
+// Release bodies are written in English; the Spanish page translates the
+// headings and marks the note text so assistive technology reads it as English.
 function notesHTML(notes) {
+  const noteLang = locale === 'es' ? ' lang="en"' : '';
   return notes.map((section) => {
     const items = [];
     const paragraphs = [];
     for (const line of section.lines) {
       if (/^[-*] /.test(line)) items.push(`<li>${inlineMarkdown(line.slice(2))}</li>`);
-      else paragraphs.push(`<p>${inlineMarkdown(line)}</p>`);
+      else paragraphs.push(`<p${noteLang}>${inlineMarkdown(line)}</p>`);
     }
     const heading = text.sections[section.title] ?? section.title;
-    return `<h3>${escapeHTML(heading)}</h3>${paragraphs.join('')}${items.length ? `<ul>${items.join('')}</ul>` : ''}`;
+    return `<h3>${escapeHTML(heading)}</h3>${paragraphs.join('')}${items.length ? `<ul${noteLang}>${items.join('')}</ul>` : ''}`;
   }).join('');
 }
 
@@ -202,8 +205,7 @@ const cards = releases.map((release, index) => {
   const badge = latest ? `<span class="rel-badge">${text.latest}</span>` : '';
   const { notes, requirements, compareURL } = parseBody(release.body);
   const englishNote = text.englishNotes ? `<p class="rel-note">${text.englishNotes}</p>` : '';
-  const langAttribute = locale === 'es' ? ' lang="en"' : '';
-  const renderedNotes = notes.length ? `<div class="rel-notes"${langAttribute}>${notesHTML(notes)}</div>` : '';
+  const renderedNotes = notes.length ? `<div class="rel-notes">${notesHTML(notes)}</div>` : '';
   const body = !renderedNotes
     ? ''
     : latest
@@ -224,20 +226,14 @@ const cards = releases.map((release, index) => {
     datePublished: date,
   });
 
-  return `<article class="rel-card${latest ? ' rel-card--latest' : ''}" id="v${escapeHTML(releaseVersion.replaceAll('.', '-'))}"${hidden}>
-  <div class="rel-header">
-    <h2>${escapeHTML(tag)}</h2>
-    ${badge}
-    <time datetime="${escapeHTML(date)}">${escapeHTML(formatDate(date))}</time>
-  </div>
-  ${requirements.length ? `<p class="rel-meta">${requirements.map(escapeHTML).join(' · ')}</p>` : ''}
-  ${body}
-  <div class="rel-actions">
-    <a href="${downloadURL}" class="button ${latest ? 'button-primary' : 'button-secondary'}">${text.download}</a>
-    <a href="${releaseURL}" target="_blank" rel="noopener noreferrer" class="text-link">${text.notes}</a>
-    ${compare}
-  </div>
-</article>`;
+  return [
+    `<article class="rel-card${latest ? ' rel-card--latest' : ''}" id="v${escapeHTML(releaseVersion.replaceAll('.', '-'))}"${hidden}>`,
+    `  <div class="rel-header"><h2>${escapeHTML(tag)}</h2>${badge}<time datetime="${escapeHTML(date)}">${escapeHTML(formatDate(date))}</time></div>`,
+    requirements.length ? `  <p class="rel-meta">${requirements.map(escapeHTML).join(' · ')}</p>` : '',
+    body ? `  ${body}` : '',
+    `  <div class="rel-actions"><a href="${downloadURL}" class="button ${latest ? 'button-primary' : 'button-secondary'}">${text.download}</a><a href="${releaseURL}" target="_blank" rel="noopener noreferrer" class="text-link">${text.notes}</a>${compare}</div>`,
+    '</article>',
+  ].filter(Boolean).join('\n');
 }).join('\n');
 
 const hiddenCount = Math.max(0, releases.length - 5);
@@ -316,9 +312,6 @@ const html = `<!DOCTYPE html>
   <meta property="og:image:alt" content="${text.title}">
   <meta property="og:locale" content="${text.locale}">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="${text.title}">
-  <meta name="twitter:description" content="${text.description}">
-  <meta name="twitter:image" content="${text.ogImage}">
   <link rel="canonical" href="${text.canonical}">
   <link rel="alternate" hreflang="en" href="${site}/releases.html">
   <link rel="alternate" hreflang="es" href="${site}/es/releases.html">

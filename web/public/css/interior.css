@@ -22,11 +22,16 @@
   color: var(--fg-3);
 }
 
-.breadcrumbs a {
+.breadcrumbs li a {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
   color: var(--fg-2);
+  text-decoration: none;
+}
+
+.breadcrumbs li a:hover {
+  color: var(--fg);
 }
 
 .breadcrumbs [aria-current] {

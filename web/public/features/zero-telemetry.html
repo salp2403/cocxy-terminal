@@ -22,9 +22,6 @@
   <meta property="og:image:alt" content="Zero Telemetry - Cocxy Terminal">
   <meta property="og:locale" content="en_US">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Zero Telemetry - Cocxy Terminal">
-  <meta name="twitter:description" content="Cocxy ships without analytics SDKs, automatic crash upload, required accounts, visitor tracking, or session telemetry.">
-  <meta name="twitter:image" content="https://cocxy.dev/og/og-features-zero-telemetry.jpg">
   <link rel="canonical" href="https://cocxy.dev/features/zero-telemetry.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/features/zero-telemetry.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/zero-telemetry.html">
@@ -35,23 +32,14 @@
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
-  <script>
-  (() => {
-    const root = document.documentElement;
-    root.classList.add('js');
-    try {
-      const saved = localStorage.getItem('cocxy-theme');
-      if (saved === 'light' || saved === 'dark') root.dataset.theme = saved;
-    } catch (_) {}
-  })();
-  </script>
+  <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to main content</a>
 <header class="site-header">
   <nav class="nav container" aria-label="Main navigation">
     <a class="nav-logo" href="/" aria-label="Cocxy Terminal">
-      <picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="28" height="28" alt=""></picture>
+      <img src="/images/icon-192.png" width="28" height="28" alt="">
       <span>Cocxy</span>
     </a>
     <div class="nav-links" id="site-menu">
@@ -66,8 +54,8 @@
     </div>
     <div class="nav-actions">
       <button class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
-        <span class="theme-toggle__sun"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg></span>
-        <span class="theme-toggle__moon"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4 8.2 8.2 0 1 0 20 14.6z"/></svg></span>
+        <span class="theme-toggle__sun"></span>
+        <span class="theme-toggle__moon"></span>
       </button>
       <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
         <span></span><span></span><span></span>
@@ -82,7 +70,7 @@
     <span class="page-hero__icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-5"/></svg></span><h1>Zero Telemetry</h1>
     <p>Cocxy ships without analytics SDKs, automatic crash upload, required accounts, visitor tracking, or session telemetry.</p>
   </div></section>
-<section class="section section--flush"><div class="container"><div class="window mock feature-shot" role="img" aria-label="Illustration of the Cocxy window: Zero Telemetry"><div class="mock__bar"><i></i><i></i><i></i></div><div class="mock-app mock-app--hero"><div class="mock-app__side"><span class="mock-app__label"></span><span class="mock-app__search"></span><div class="mock-app__row is-working"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-waiting"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-done"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-working"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-done"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-waiting"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div></div><div class="mock-app__term"><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt is-caret"></span></div><div class="mock-app__panel"><span class="mock-app__label"></span><div class="mock-app__card is-working"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-waiting"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-done"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-working"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-idle"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-done"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-waiting"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-idle"><i class="state-dot"></i><span></span><span></span></div></div></div></div></div></section>
+<section class="section section--flush"><div class="container"><div class="window mock feature-shot" role="img" aria-label="Illustration of the Cocxy window: Zero Telemetry"><div class="mock__bar"><i></i><i></i><i></i></div><div class="mock-app mock-app--window"><div class="mock-app__side"><span class="mock-app__label"></span><span class="mock-app__search"></span><div class="mock-app__row is-working"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-waiting"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-done"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-working"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div></div><div class="mock-app__term"><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt is-caret"></span></div><div class="mock-app__panel"><span class="mock-app__label"></span><div class="mock-app__card is-working"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-waiting"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-done"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-idle"><i class="state-dot"></i><span></span><span></span></div></div></div></div></div></section>
 <section class="section"><div class="container">
   <h2 class="sr-only">Capabilities</h2>
   <ul class="capabilities"><li>No analytics SDK</li><li>No account</li><li>No session upload</li></ul>
@@ -140,43 +128,43 @@
 </main>
 <script type="application/ld+json">
 {
-  "@context": "https://schema.org",
-  "@type": "BreadcrumbList",
-  "itemListElement": [
-    {
-      "@type": "ListItem",
-      "position": 1,
-      "name": "Home",
-      "item": "https://cocxy.dev/"
-    },
-    {
-      "@type": "ListItem",
-      "position": 2,
-      "name": "Features",
-      "item": "https://cocxy.dev/features.html"
-    },
-    {
-      "@type": "ListItem",
-      "position": 3,
-      "name": "Zero Telemetry",
-      "item": "https://cocxy.dev/features/zero-telemetry.html"
-    }
-  ]
+ "@context": "https://schema.org",
+ "@type": "BreadcrumbList",
+ "itemListElement": [
+  {
+   "@type": "ListItem",
+   "position": 1,
+   "name": "Home",
+   "item": "https://cocxy.dev/"
+  },
+  {
+   "@type": "ListItem",
+   "position": 2,
+   "name": "Features",
+   "item": "https://cocxy.dev/features.html"
+  },
+  {
+   "@type": "ListItem",
+   "position": 3,
+   "name": "Zero Telemetry",
+   "item": "https://cocxy.dev/features/zero-telemetry.html"
+  }
+ ]
 }
 </script>
 <script type="application/ld+json">
 {
-  "@context": "https://schema.org",
-  "@type": "TechArticle",
-  "name": "Zero Telemetry",
-  "description": "Cocxy ships without analytics SDKs, automatic crash upload, required accounts, visitor tracking, or session telemetry.",
-  "inLanguage": "en"
+ "@context": "https://schema.org",
+ "@type": "TechArticle",
+ "name": "Zero Telemetry",
+ "description": "Cocxy ships without analytics SDKs, automatic crash upload, required accounts, visitor tracking, or session telemetry.",
+ "inLanguage": "en"
 }
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">
     <div>
-      <a class="footer-brand" href="/"><picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="28" height="28" alt=""></picture><span>Cocxy Terminal</span></a>
+      <a class="footer-brand" href="/"><img src="/images/icon-192.png" width="28" height="28" alt=""><span>Cocxy Terminal</span></a>
       <p>Native macOS terminal, local-first, MIT licensed, and zero telemetry.</p>
     </div>
     <nav aria-label="Footer links">
