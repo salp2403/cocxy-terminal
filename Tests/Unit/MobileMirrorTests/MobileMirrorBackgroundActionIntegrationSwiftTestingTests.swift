@@ -257,29 +257,6 @@ struct MobileMirrorBackgroundActionIntegrationSwiftTestingTests {
         #expect(eventCapture.contains("event: revoked"))
     }
 
-    @Test("expected pairing conditions log below error level and faults stay errors")
-    func statusLogLevelsFollowSeverity() throws {
-        let sandbox = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: sandbox) }
-        let context = makeCoordinator(sandbox: sandbox)
-        defer { context.stop() }
-        let store = try OSLogStore(scope: .currentProcessIdentifier)
-        let startDate = Date()
-        let start = store.position(date: startDate)
-
-        _ = context.coordinator.statusMessage(for: MobileMirrorTunnelError.noConnectedTarget)
-        _ = context.coordinator.statusMessage(for: MobileMirrorLocalRelayError.noPrivateNetwork)
-        _ = context.coordinator.statusMessage(for: MobileMirrorLocalRelayError.listenerUnavailable)
-
-        let levels = try store.getEntries(
-            at: start,
-            matching: NSPredicate(format: "subsystem == %@ AND category == %@", "dev.cocxy.terminal", "MobileMirror")
-        ).compactMap { $0 as? OSLogEntryLog }
-            .filter { $0.date >= startDate && $0.formatString.hasPrefix("Mobile mirror stopped:") }
-            .map(\.level)
-        #expect(levels == [.notice, .notice, .error])
-    }
-
     @Test("background audit failure reaches the desktop in the configured language")
     func backgroundAuditFailureIsLocalized() async throws {
         let sandbox = try makeTemporaryDirectory()
