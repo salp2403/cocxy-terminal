@@ -43,6 +43,7 @@ struct ProjectActivityMetricsSwiftTestingTests {
     @Test("cancelled metric loads cannot overwrite the newest project snapshot")
     func cancelledMetricLoadCannotOverwriteNewestSnapshot() async {
         var invocation = 0
+        var cancelledLoadReturned = false
         let expected = ProjectActivitySummary(
             week: ProjectActivityMetrics(
                 durationMilliseconds: 1_000,
@@ -61,7 +62,9 @@ struct ProjectActivityMetricsSwiftTestingTests {
             activitySummaryLoader: { _ in
                 invocation += 1
                 if invocation == 1 {
-                    try? await Task.sleep(for: .milliseconds(100))
+                    for _ in 0..<10_000 where invocation < 2 { await Task.yield() }
+                    for _ in 0..<50 { await Task.yield() }
+                    cancelledLoadReturned = true
                     return .disabled
                 }
                 return .available(expected, costTrackingEnabled: true)
@@ -84,8 +87,14 @@ struct ProjectActivityMetricsSwiftTestingTests {
         }
         #expect(invocation == 1)
         viewModel.reloadActivitySummary()
-        try? await Task.sleep(for: .milliseconds(150))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while !cancelledLoadReturned || viewModel.activitySummaryState == .loading,
+              ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        for _ in 0..<20 { await Task.yield() }
 
+        #expect(cancelledLoadReturned)
         #expect(viewModel.activitySummaryState == .available(
             expected,
             costTrackingEnabled: true
