@@ -29,9 +29,6 @@
   <link rel="icon" type="image/svg+xml" href="/images/icon.svg">
   <link rel="apple-touch-icon" href="/images/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
   <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
@@ -87,11 +84,7 @@
       <article class="card download-card">
         <h3>Homebrew</h3>
         <p>Install and upgrade from the official tap.</p>
-        <div class="code-block install">
-  <div class="install__bar"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copy Homebrew command">Copy</button></div>
-  <pre><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code></pre>
-  <span class="sr-only" aria-live="polite" data-copy-status></span>
-</div>
+        <div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</span></code></pre></div>
       </article>
       <article class="card download-card">
         <h3>Release channels</h3>
@@ -103,112 +96,10 @@
 </section>
 </main>
 <script type="application/ld+json">
-{
- "@context": "https://schema.org",
- "@type": "BreadcrumbList",
- "itemListElement": [
-  {
-   "@type": "ListItem",
-   "position": 1,
-   "name": "Home",
-   "item": "https://cocxy.dev/"
-  },
-  {
-   "@type": "ListItem",
-   "position": 2,
-   "name": "FAQ",
-   "item": "https://cocxy.dev/faq.html"
-  }
- ]
-}
+{"@context": "https://schema.org","@type": "BreadcrumbList","itemListElement": [{"@type": "ListItem","position": 1,"name": "Home","item": "https://cocxy.dev/"},{"@type": "ListItem","position": 2,"name": "FAQ","item": "https://cocxy.dev/faq.html"}]}
 </script>
 <script type="application/ld+json">
-{
- "@context": "https://schema.org",
- "@type": "FAQPage",
- "mainEntity": [
-  {
-   "@type": "Question",
-   "name": "Does Cocxy require an account?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "No. Install and use Cocxy without signing in."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "Does it upload sessions?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "No. Sessions and Vault data stay local."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "How do I install it?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "Use the signed DMG or Homebrew."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "Which agents are supported?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "11 built-in profiles plus custom configured agents."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "What does Vault store?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "Local session metadata and content according to the actions you enable."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "Can I use SSH?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "Yes. SSH connections are explicit user-started actions."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "Does the website load third-party JavaScript?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "No. The website avoids third-party JavaScript."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "Where are the docs?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "The documentation hub is available at /docs/."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "How do I report security issues?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "Use GitHub Security Advisory or dev@cocxy.dev."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "Does the license change?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "No. Cocxy stays MIT licensed."
-   }
-  }
- ]
-}
+{"@context": "https://schema.org","@type": "FAQPage","mainEntity": [{"@type": "Question","name": "Does Cocxy require an account?","acceptedAnswer": {"@type": "Answer","text": "No. Install and use Cocxy without signing in."}},{"@type": "Question","name": "Does it upload sessions?","acceptedAnswer": {"@type": "Answer","text": "No. Sessions and Vault data stay local."}},{"@type": "Question","name": "How do I install it?","acceptedAnswer": {"@type": "Answer","text": "Use the signed DMG or Homebrew."}},{"@type": "Question","name": "Which agents are supported?","acceptedAnswer": {"@type": "Answer","text": "11 built-in profiles plus custom configured agents."}},{"@type": "Question","name": "What does Vault store?","acceptedAnswer": {"@type": "Answer","text": "Local session metadata and content according to the actions you enable."}},{"@type": "Question","name": "Can I use SSH?","acceptedAnswer": {"@type": "Answer","text": "Yes. SSH connections are explicit user-started actions."}},{"@type": "Question","name": "Does the website load third-party JavaScript?","acceptedAnswer": {"@type": "Answer","text": "No. The website avoids third-party JavaScript."}},{"@type": "Question","name": "Where are the docs?","acceptedAnswer": {"@type": "Answer","text": "The documentation hub is available at /docs/."}},{"@type": "Question","name": "How do I report security issues?","acceptedAnswer": {"@type": "Answer","text": "Use GitHub Security Advisory or dev@cocxy.dev."}},{"@type": "Question","name": "Does the license change?","acceptedAnswer": {"@type": "Answer","text": "No. Cocxy stays MIT licensed."}}]}
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">

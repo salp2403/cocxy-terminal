@@ -68,18 +68,43 @@ function initAnchorNavigation() {
   });
 }
 
+// The nearest heading above a code block names its Copy button, so a page
+// with several blocks gives each button a distinct accessible name.
+function headingAbove(block) {
+  for (let node = block; node && node !== document.body; node = node.parentElement) {
+    for (let sibling = node.previousElementSibling; sibling; sibling = sibling.previousElementSibling) {
+      if (sibling.matches('h2, h3')) return sibling.textContent.trim();
+    }
+  }
+  return '';
+}
+
 function initCopyButtons() {
   const spanish = document.documentElement.lang.startsWith('es');
   const labels = spanish
-    ? { copied: 'Copiado', manual: 'Selecciona', copiedStatus: 'Comando copiado', manualStatus: 'Comando seleccionado; cópialo con Cmd+C' }
-    : { copied: 'Copied', manual: 'Select', copiedStatus: 'Command copied', manualStatus: 'Command selected; copy it with Cmd+C' };
+    ? { copy: 'Copiar', commands: 'Copiar comandos', config: 'Copiar configuración', copied: 'Copiado', manual: 'Selecciona', copiedStatus: 'Copiado al portapapeles', manualStatus: 'Texto seleccionado; cópialo con Cmd+C' }
+    : { copy: 'Copy', commands: 'Copy commands', config: 'Copy configuration', copied: 'Copied', manual: 'Select', copiedStatus: 'Copied to the clipboard', manualStatus: 'Text selected; copy it with Cmd+C' };
 
-  document.querySelectorAll('.code-block').forEach((block) => {
-    const button = block.querySelector('.copy-button');
+  const blocks = document.querySelectorAll('.code-block');
+  if (!blocks.length) return;
+  const status = document.createElement('span');
+  status.className = 'sr-only';
+  status.setAttribute('aria-live', 'polite');
+  document.body.append(status);
+
+  blocks.forEach((block) => {
+    const bar = block.querySelector('.install__bar');
     const code = block.querySelector('code');
-    const status = block.querySelector('[data-copy-status]');
-    if (!button || !code) return;
-    const original = button.textContent;
+    if (!bar || !code) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'copy-button';
+    button.textContent = labels.copy;
+    const action = block.classList.contains('install--config') ? labels.config : labels.commands;
+    const heading = headingAbove(block);
+    button.setAttribute('aria-label', heading ? `${action}: ${heading}` : action);
+    bar.append(button);
+    const original = labels.copy;
     let resetTimer = 0;
 
     button.addEventListener('click', async () => {
@@ -91,11 +116,11 @@ function initCopyButtons() {
         window.getSelection()?.selectAllChildren(code);
       }
       button.textContent = copied ? labels.copied : labels.manual;
-      if (status) status.textContent = copied ? labels.copiedStatus : labels.manualStatus;
+      status.textContent = copied ? labels.copiedStatus : labels.manualStatus;
       window.clearTimeout(resetTimer);
       resetTimer = window.setTimeout(() => {
         button.textContent = original;
-        if (status) status.textContent = '';
+        status.textContent = '';
       }, 1600);
     });
   });

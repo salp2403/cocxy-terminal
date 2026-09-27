@@ -29,9 +29,6 @@
   <link rel="icon" type="image/svg+xml" href="/images/icon.svg">
   <link rel="apple-touch-icon" href="/images/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
   <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
@@ -70,21 +67,9 @@
     <h1>Canales</h1>
     <p>Canales estable, validación y nocturno con riesgos claros.</p>
   </div></section>
-<section class="section section--tight"><div class="container cards-3"><article class="card download-card is-done"><h2 class="channel-title"><span class="state-dot"></span>Estable</h2><p>Canal recomendado para trabajo diario.</p><div class="code-block install">
-  <div class="install__bar"><span>Homebrew</span><button class="copy-button" type="button" aria-label="Copiar comando de Estable">Copiar</button></div>
-  <pre><code>brew install --cask cocxy</code></pre>
-  <span class="sr-only" aria-live="polite" data-copy-status></span>
-</div><p class="card-meta">appcast.xml</p></article>
-  <article class="card download-card is-waiting"><h2 class="channel-title"><span class="state-dot"></span>Validación</h2><p>Canal de validación antes del canal estable.</p><div class="code-block install">
-  <div class="install__bar"><span>Homebrew</span><button class="copy-button" type="button" aria-label="Copiar comando de Validación">Copiar</button></div>
-  <pre><code>brew install --cask cocxy-pr&#101;view</code></pre>
-  <span class="sr-only" aria-live="polite" data-copy-status></span>
-</div><p class="card-meta"><span data-feed="appcast-preview.xml">appcast de validación</span></p></article>
-  <article class="card download-card is-working"><h2 class="channel-title"><span class="state-dot"></span>Nocturno</h2><p>Canal de mayor riesgo para pruebas tempranas.</p><div class="code-block install">
-  <div class="install__bar"><span>Homebrew</span><button class="copy-button" type="button" aria-label="Copiar comando de Nocturno">Copiar</button></div>
-  <pre><code>brew install --cask cocxy-nightly</code></pre>
-  <span class="sr-only" aria-live="polite" data-copy-status></span>
-</div><p class="card-meta">appcast-nightly.xml</p></article></div></section>
+<section class="section section--tight"><div class="container cards-3"><article class="card download-card is-done"><h2 class="channel-title"><span class="state-dot"></span>Estable</h2><p>Canal recomendado para trabajo diario.</p><div class="code-block install"><div class="install__bar"><span>Homebrew</span></div><pre><code><span>brew install --cask cocxy</span></code></pre></div><p class="card-meta">appcast.xml</p></article>
+  <article class="card download-card is-waiting"><h2 class="channel-title"><span class="state-dot"></span>Validación</h2><p>Canal de validación antes del canal estable.</p><div class="code-block install"><div class="install__bar"><span>Homebrew</span></div><pre><code><span>brew install --cask cocxy-pr&#101;view</span></code></pre></div><p class="card-meta"><span data-feed="appcast-preview.xml">appcast de validación</span></p></article>
+  <article class="card download-card is-working"><h2 class="channel-title"><span class="state-dot"></span>Nocturno</h2><p>Canal de mayor riesgo para pruebas tempranas.</p><div class="code-block install"><div class="install__bar"><span>Homebrew</span></div><pre><code><span>brew install --cask cocxy-nightly</span></code></pre></div><p class="card-meta">appcast-nightly.xml</p></article></div></section>
 <section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
     <div class="section-header section-header--center" data-reveal="fade-up">
@@ -101,11 +86,7 @@
       <article class="card download-card">
         <h3>Homebrew</h3>
         <p>Instala y actualiza desde el tap oficial.</p>
-        <div class="code-block install">
-  <div class="install__bar"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copiar comando de Homebrew">Copiar</button></div>
-  <pre><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code></pre>
-  <span class="sr-only" aria-live="polite" data-copy-status></span>
-</div>
+        <div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</span></code></pre></div>
       </article>
       <article class="card download-card">
         <h3>Canales</h3>
@@ -117,24 +98,7 @@
 </section>
 </main>
 <script type="application/ld+json">
-{
- "@context": "https://schema.org",
- "@type": "BreadcrumbList",
- "itemListElement": [
-  {
-   "@type": "ListItem",
-   "position": 1,
-   "name": "Inicio",
-   "item": "https://cocxy.dev/es/"
-  },
-  {
-   "@type": "ListItem",
-   "position": 2,
-   "name": "Canales",
-   "item": "https://cocxy.dev/channels.html"
-  }
- ]
-}
+{"@context": "https://schema.org","@type": "BreadcrumbList","itemListElement": [{"@type": "ListItem","position": 1,"name": "Inicio","item": "https://cocxy.dev/es/"},{"@type": "ListItem","position": 2,"name": "Canales","item": "https://cocxy.dev/channels.html"}]}
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">
