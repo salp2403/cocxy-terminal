@@ -14,6 +14,7 @@ final class AuroraChromeController: ObservableObject {
     @Published var projects: [ProjectPresentationItem] = []
     @Published private(set) var projectTaskCounts: [String: Int] = [:]
     @Published var projectRegistryErrorDescription: String?
+    @Published private(set) var projectRegistryWritable = true
     @Published private(set) var projectRegistryRecoveryDiagnostic:
         ProjectRegistryRecoveryDiagnostic?
     @Published var activeSessionID: String?
@@ -288,6 +289,12 @@ final class AuroraChromeController: ObservableObject {
         projectRegistry?.$recoveryDiagnostic
             .sink { [weak self] diagnostic in
                 self?.projectRegistryRecoveryDiagnostic = diagnostic
+            }
+            .store(in: &cancellables)
+
+        projectRegistry?.$canPersist
+            .sink { [weak self] canPersist in
+                self?.projectRegistryWritable = canPersist
             }
             .store(in: &cancellables)
 

@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Закріпити проєкт";
 "projectSidebar.unpin" = "Відкріпити проєкт";
 "projectSidebar.unavailable" = "Список проєктів недоступний";
+"projectSidebar.readOnly" = "Зараз неможливо зберегти зміни проєктів.";
 "project.registry.recovery.message" = "Не вдалося прочитати частину метаданих проєктів. Cocxy зберіг відхилені записи (%d) у приватному файлі відновлення.";
 "project.registry.recovery.document" = "Не вдалося прочитати список проєктів. Cocxy зберіг його в приватному файлі відновлення й почав новий список.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d завдання";
@@ -2437,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "Не вдалося прочитати файли cookie з цього профілю браузера.";
 "browser.import.issue.bookmarkReadFailed" = "Не вдалося прочитати закладки з цього профілю браузера.";
 "browser.import.issue.auditWriteFailed" = "Імпорт завершено, але не вдалося зберегти його локальний запис аудиту.";
+"browser.import.issue.historySourceUnavailable" = "У цьому профілі браузера не знайдено файлу історії.";
+"browser.import.issue.cookieSourceUnavailable" = "У цьому профілі браузера не знайдено файлу cookie.";
+"browser.import.issue.bookmarkSourceUnavailable" = "У цьому профілі браузера не знайдено файлу закладок.";
+"browser.import.issue.historyStorageUnavailable" = "Сховище історії браузера Cocxy недоступне.";
+"browser.import.issue.cookieStorageUnavailable" = "Сховище файлів cookie браузера Cocxy недоступне.";
+"browser.import.issue.bookmarkStorageUnavailable" = "Сховище закладок браузера Cocxy недоступне.";
+"browser.import.issue.historyLatestVisitOnly" = "Цей браузер зберігає лише останнє відвідування кожної сторінки, тому імпортовано лише їх.";
+"browser.import.issue.partitionedCookiesSkipped" = "Пропущено розділених файлів cookie, бо їхній розділ неможливо зберегти: %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "Пропущено файлів cookie контейнерів або розділених, бо їхню ізоляцію неможливо зберегти: %d.";
+"browser.import.issue.historyImportLimit" = "Імпорт історії зупинено на %d відвідуваннях; пропущено відповідних відвідувань: %d.";
+"browser.import.issue.historyScanLimit" = "Перегляд історії зупинено після %d найновіших відвідувань; старіші можуть залишитися.";
 "browser.import.issue.historyWriteFailed" = "Незбережені відвідування в історії: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Незбережені закладки: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Пропущені зашифровані файли cookie: %d.";

@@ -103,4 +103,59 @@ struct ProjectAutomaticRegistrationSwiftTestingTests {
 
         #expect(registry.records.map(\.id) == [ProjectID(rootURL: repository)])
     }
+
+    @Test("changing into a subfolder of a registered folder without a repository counts the visit")
+    func registeredPlainFolderCountsVisitsFromSubfolders() throws {
+        let sandbox = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjectRegisteredPlainFolder-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let home = sandbox.appendingPathComponent("home", isDirectory: true)
+        let workFolder = home.appendingPathComponent("Documents/work", isDirectory: true)
+        let child = workFolder.appendingPathComponent("drafts", isDirectory: true)
+        try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+        let registry = ProjectRegistry(store: ProjectRegistryStore(
+            fileURL: sandbox.appendingPathComponent("registry.json")
+        ))
+        let resolver = CachedProjectResolver(
+            projectRegistry: registry,
+            rootResolver: GitAncestorWorkspaceRootResolver(homeDirectory: home),
+            homeDirectory: home
+        )
+        try registry.recordOpen(resolver.resolveProject(for: workFolder), incrementOpenCount: false)
+        let tabManager = TabManager()
+        let tabID = try #require(tabManager.tabs.first?.id)
+        tabManager.updateTab(id: tabID) { $0.workingDirectory = home }
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            tabManager: tabManager,
+            projectRegistry: registry,
+            projectResolver: resolver,
+            deferContentSetup: true
+        )
+
+        controller.handleCurrentDirectoryChange(child, tabID: tabID, surfaceID: nil)
+
+        #expect(registry.records.map(\.id) == [ProjectID(rootURL: workFolder)])
+        #expect(registry.records.first?.openCount == 1)
+    }
+
+    @Test("Open Project registers a folder without a repository without counting a visit")
+    func openProjectRegistersPlainFolder() throws {
+        let sandbox = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjectOpenPlainFolder-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let folder = sandbox.appendingPathComponent("plain-folder", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let registry = ProjectRegistry(store: ProjectRegistryStore(
+            fileURL: sandbox.appendingPathComponent("registry.json")
+        ))
+        let appDelegate = AppDelegate(projectIdentityServices: ProjectIdentityServices(registry: registry))
+        #expect(appDelegate.projectResolver.resolveProject(for: folder).rootSource == .workingDirectory)
+
+        let projectID = appDelegate.registerChosenProjectFolder(folder)
+
+        #expect(projectID == ProjectID(rootURL: folder))
+        #expect(registry.records.map(\.id) == [projectID])
+        #expect(registry.records.first?.openCount == 0)
+    }
 }

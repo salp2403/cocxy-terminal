@@ -146,7 +146,7 @@ struct BrowserImporter: Sendable {
             } else if !preview.history.isEmpty {
                 skippedCount += preview.history.count
                 if plan.importHistory {
-                    issues.append(issue(plan, sourceProfile, "Browser history storage is unavailable"))
+                    issues.append(issue(plan, sourceProfile, "Browser history storage is unavailable", kind: .storageUnavailable(.history)))
                 }
             }
 
@@ -193,7 +193,7 @@ struct BrowserImporter: Sendable {
             } else if !preview.cookies.isEmpty {
                 skippedCount += preview.cookies.count
                 if plan.importCookies {
-                    issues.append(issue(plan, sourceProfile, "Browser cookie storage is unavailable"))
+                    issues.append(issue(plan, sourceProfile, "Browser cookie storage is unavailable", kind: .storageUnavailable(.cookies)))
                 }
             }
 
@@ -237,7 +237,7 @@ struct BrowserImporter: Sendable {
             } else if !preview.bookmarks.isEmpty {
                 skippedCount += preview.bookmarks.count
                 if plan.importBookmarks {
-                    issues.append(issue(plan, sourceProfile, "Browser bookmark storage is unavailable"))
+                    issues.append(issue(plan, sourceProfile, "Browser bookmark storage is unavailable", kind: .storageUnavailable(.bookmarks)))
                 }
             }
 
@@ -503,7 +503,7 @@ struct BrowserImporter: Sendable {
         _ plan: BrowserImportPlan,
         _ sourceProfile: String,
         _ message: String,
-        kind: BrowserImportIssueKind? = nil
+        kind: BrowserImportIssueKind
     ) -> BrowserImportIssue {
         BrowserImportIssue(
             source: plan.source,

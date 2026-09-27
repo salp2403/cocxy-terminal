@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Przypnij projekt";
 "projectSidebar.unpin" = "Odepnij projekt";
 "projectSidebar.unavailable" = "Lista projektów jest niedostępna";
+"projectSidebar.readOnly" = "Nie można teraz zapisać zmian w projektach.";
 "project.registry.recovery.message" = "Nie udało się odczytać części metadanych projektu. Cocxy zapisał odrzucone rekordy (%d) w prywatnym pliku odzyskiwania.";
 "project.registry.recovery.document" = "Nie udało się odczytać listy projektów. Cocxy zapisał ją w prywatnym pliku odzyskiwania i rozpoczął nową listę.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d zadanie";
@@ -2437,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "Nie udało się odczytać plików cookie z tego profilu przeglądarki.";
 "browser.import.issue.bookmarkReadFailed" = "Nie udało się odczytać zakładek z tego profilu przeglądarki.";
 "browser.import.issue.auditWriteFailed" = "Import zakończył się, ale nie udało się zapisać jego lokalnego wpisu audytu.";
+"browser.import.issue.historySourceUnavailable" = "W tym profilu przeglądarki nie znaleziono pliku historii.";
+"browser.import.issue.cookieSourceUnavailable" = "W tym profilu przeglądarki nie znaleziono pliku cookie.";
+"browser.import.issue.bookmarkSourceUnavailable" = "W tym profilu przeglądarki nie znaleziono pliku zakładek.";
+"browser.import.issue.historyStorageUnavailable" = "Magazyn historii przeglądarki Cocxy jest niedostępny.";
+"browser.import.issue.cookieStorageUnavailable" = "Magazyn plików cookie przeglądarki Cocxy jest niedostępny.";
+"browser.import.issue.bookmarkStorageUnavailable" = "Magazyn zakładek przeglądarki Cocxy jest niedostępny.";
+"browser.import.issue.historyLatestVisitOnly" = "Ta przeglądarka przechowuje tylko ostatnią wizytę na każdej stronie, więc zaimportowano tylko te wizyty.";
+"browser.import.issue.partitionedCookiesSkipped" = "Pominięte partycjonowane pliki cookie, bo nie można zachować ich partycji: %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "Pominięte pliki cookie kontenerów lub partycjonowane, bo nie można zachować ich izolacji: %d.";
+"browser.import.issue.historyImportLimit" = "Import historii zatrzymano na %d wizytach; pominięte pasujące wizyty: %d.";
+"browser.import.issue.historyScanLimit" = "Skanowanie historii zatrzymano po %d najnowszych wizytach; starsze wizyty mogły pozostać.";
 "browser.import.issue.historyWriteFailed" = "Niezapisane wizyty w historii: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Niezapisane zakładki: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Pominięte zaszyfrowane pliki cookie: %d.";

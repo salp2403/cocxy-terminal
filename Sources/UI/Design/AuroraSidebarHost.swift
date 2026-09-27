@@ -50,11 +50,13 @@ struct AuroraSidebarHost: View {
             onRenameWorkspace: { workspaceID, title in
                 controller.onRenameWorkspace?(workspaceID, title)
             },
-            onSetWorkspaceCollapsed: controller.projectRegistryErrorDescription == nil
+            onSetWorkspaceCollapsed: controller.projectRegistryWritable
                 ? controller.onSetWorkspaceCollapsed
                 : nil,
-            onActivateProject: controller.onActivateProject,
-            onSetProjectPinned: controller.projectRegistryErrorDescription == nil
+            onActivateProject: controller.projectRegistryWritable
+                ? controller.onActivateProject
+                : nil,
+            onSetProjectPinned: controller.projectRegistryWritable
                 ? controller.onSetProjectPinned
                 : nil,
             renameRequest: controller.sidebarRenameRequest,

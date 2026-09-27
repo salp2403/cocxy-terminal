@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "固定项目";
 "projectSidebar.unpin" = "取消固定项目";
 "projectSidebar.unavailable" = "项目列表不可用";
+"projectSidebar.readOnly" = "目前无法保存项目更改。";
 "project.registry.recovery.message" = "部分项目元数据无法读取。Cocxy 已将被拒绝的记录（%d 条）保存到私有恢复文件中。";
 "project.registry.recovery.document" = "无法读取项目列表。Cocxy 已将其保存到私有恢复文件中，并开始了一个新列表。";
 "projectSidebar.taskBadge.accessibility.one" = "%@，%d 个任务";
@@ -2437,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "无法从此浏览器配置文件读取 Cookie。";
 "browser.import.issue.bookmarkReadFailed" = "无法从此浏览器配置文件读取书签。";
 "browser.import.issue.auditWriteFailed" = "导入已完成，但无法保存其本地审计记录。";
+"browser.import.issue.historySourceUnavailable" = "在此浏览器配置文件中未找到历史记录文件。";
+"browser.import.issue.cookieSourceUnavailable" = "在此浏览器配置文件中未找到 Cookie 文件。";
+"browser.import.issue.bookmarkSourceUnavailable" = "在此浏览器配置文件中未找到书签文件。";
+"browser.import.issue.historyStorageUnavailable" = "Cocxy 的浏览器历史记录存储不可用。";
+"browser.import.issue.cookieStorageUnavailable" = "Cocxy 的浏览器 Cookie 存储不可用。";
+"browser.import.issue.bookmarkStorageUnavailable" = "Cocxy 的浏览器书签存储不可用。";
+"browser.import.issue.historyLatestVisitOnly" = "此浏览器仅保留每个页面的最近一次访问，因此只导入了这些访问。";
+"browser.import.issue.partitionedCookiesSkipped" = "因无法保留分区而跳过的分区 Cookie：%d。";
+"browser.import.issue.isolatedCookiesSkipped" = "因无法保留隔离而跳过的容器或分区 Cookie：%d。";
+"browser.import.issue.historyImportLimit" = "历史记录导入在 %d 次访问时停止；跳过的匹配访问：%d。";
+"browser.import.issue.historyScanLimit" = "历史记录扫描在最近 %d 次访问后停止；较早的访问可能仍未导入。";
 "browser.import.issue.historyWriteFailed" = "未保存的历史访问记录：%d。";
 "browser.import.issue.bookmarkWriteFailed" = "未保存的书签：%d。";
 "browser.import.issue.cookieDecryptionFailed" = "已跳过的加密 Cookie：%d。";

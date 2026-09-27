@@ -173,12 +173,103 @@ struct ProjectAuroraRegistrySwiftTestingTests {
         )
     }
 
+    @Test("a failed repair save keeps the projects and recovery notice visible and actionable")
+    func repairSaveFailureKeepsSidebarList() throws {
+        let sandbox = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let mounted = try mountRegistrySection(
+            sandbox: sandbox,
+            deniedWritePrefix: "registry.json"
+        )
+        let rendered = renderedViewStrings(mounted.section.body)
+
+        #expect(mounted.controller.projectRegistryErrorDescription == nil)
+        #expect(rendered.contains("valid-project"))
+        #expect(rendered.contains { $0.hasPrefix("No se pudieron leer algunos metadatos") })
+        #expect(mounted.section.onActivate != nil)
+        #expect(mounted.section.onSetPinned != nil)
+    }
+
+    @Test("a read-only registry keeps its projects visible under a banner with actions disabled")
+    func readOnlyRegistryKeepsSidebarList() throws {
+        let sandbox = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let mounted = try mountRegistrySection(
+            sandbox: sandbox,
+            deniedWritePrefix: "registry-quarantine-"
+        )
+        let rendered = renderedViewStrings(mounted.section.body)
+
+        #expect(mounted.controller.projectRegistryErrorDescription != nil)
+        #expect(rendered.contains("valid-project"))
+        #expect(rendered.contains("Los cambios en los proyectos no se pueden guardar ahora."))
+        #expect(mounted.section.onActivate == nil)
+        #expect(mounted.section.onSetPinned == nil)
+        #expect(mounted.sidebar.onSetWorkspaceCollapsed == nil)
+    }
+
+    private func mountRegistrySection(
+        sandbox: URL,
+        deniedWritePrefix: String
+    ) throws -> MountedRegistrySection {
+        let registryURL = sandbox.appendingPathComponent("registry.json")
+        try Data(#"[{"id":"/tmp/valid-project"},"invalid"]"#.utf8).write(to: registryURL)
+        let store = ProjectRegistryStore(fileURL: registryURL) { data, url in
+            if url.lastPathComponent.hasPrefix(deniedWritePrefix) {
+                throw CocoaError(.fileWriteOutOfSpace)
+            }
+            try data.write(to: url, options: .atomic)
+        }
+        let registry = ProjectRegistry(store: store)
+        let tabManager = TabManager()
+        let surfaceStore = AgentStatePerSurfaceStore()
+        let controller = AuroraChromeController(
+            tabManager: tabManager,
+            store: surfaceStore,
+            projectRegistry: registry
+        )
+        controller.localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(Bundle(url:
+                URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                    .appendingPathComponent("Resources/Localization", isDirectory: true)
+            ))
+        )
+        controller.onActivateProject = { _ in }
+        controller.onSetProjectPinned = { _, _ in }
+        controller.onSetWorkspaceCollapsed = { _, _ in }
+        controller.beginObservingDomain()
+        let sidebar = AuroraSidebarHost(controller: controller).makeSidebarView()
+        let section = try #require(firstReflectedValue(
+            of: Design.AuroraProjectRegistrySection.self,
+            in: sidebar.body
+        ))
+        return MountedRegistrySection(
+            registry: registry,
+            tabManager: tabManager,
+            surfaceStore: surfaceStore,
+            controller: controller,
+            sidebar: sidebar,
+            section: section
+        )
+    }
+
     private func makeSandbox() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("ProjectAuroraRegistry-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return ProjectPathCanonicalizer.canonicalURL(url)
     }
+}
+
+@MainActor
+private struct MountedRegistrySection {
+    let registry: ProjectRegistry
+    let tabManager: TabManager
+    let surfaceStore: AgentStatePerSurfaceStore
+    let controller: AuroraChromeController
+    let sidebar: Design.AuroraSidebarView
+    let section: Design.AuroraProjectRegistrySection
 }
 
 private func renderedViewStrings(

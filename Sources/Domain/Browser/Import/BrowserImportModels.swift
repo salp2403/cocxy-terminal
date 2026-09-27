@@ -683,14 +683,15 @@ struct BrowserImportedBookmark: Sendable, Equatable {
 struct BrowserImportIssue: Sendable, Equatable {
     let source: BrowserImportSource
     let profileName: String
+    /// English text for the CLI; the wizard renders `kind` in the app language.
     let message: String
-    let kind: BrowserImportIssueKind?
+    let kind: BrowserImportIssueKind
 
     init(
         source: BrowserImportSource,
         profileName: String,
         message: String,
-        kind: BrowserImportIssueKind? = nil
+        kind: BrowserImportIssueKind
     ) {
         self.source = source
         self.profileName = profileName

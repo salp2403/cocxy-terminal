@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "釘選專案";
 "projectSidebar.unpin" = "取消釘選專案";
 "projectSidebar.unavailable" = "無法使用專案列表";
+"projectSidebar.readOnly" = "目前無法儲存專案變更。";
 "project.registry.recovery.message" = "部分專案中繼資料無法讀取。Cocxy 已將遭拒的記錄（%d 筆）儲存到私人復原檔案。";
 "project.registry.recovery.document" = "無法讀取專案清單。Cocxy 已將其儲存到私人復原檔案，並開始新的清單。";
 "projectSidebar.taskBadge.accessibility.one" = "%@，%d 個任務";
@@ -2437,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "無法從此瀏覽器設定檔讀取 Cookie。";
 "browser.import.issue.bookmarkReadFailed" = "無法從此瀏覽器設定檔讀取書籤。";
 "browser.import.issue.auditWriteFailed" = "匯入已完成，但無法儲存其本機稽核記錄。";
+"browser.import.issue.historySourceUnavailable" = "在此瀏覽器設定檔中找不到瀏覽記錄檔案。";
+"browser.import.issue.cookieSourceUnavailable" = "在此瀏覽器設定檔中找不到 Cookie 檔案。";
+"browser.import.issue.bookmarkSourceUnavailable" = "在此瀏覽器設定檔中找不到書籤檔案。";
+"browser.import.issue.historyStorageUnavailable" = "Cocxy 的瀏覽器瀏覽記錄儲存空間無法使用。";
+"browser.import.issue.cookieStorageUnavailable" = "Cocxy 的瀏覽器 Cookie 儲存空間無法使用。";
+"browser.import.issue.bookmarkStorageUnavailable" = "Cocxy 的瀏覽器書籤儲存空間無法使用。";
+"browser.import.issue.historyLatestVisitOnly" = "此瀏覽器只保留每個頁面的最近一次造訪，因此只匯入了這些造訪。";
+"browser.import.issue.partitionedCookiesSkipped" = "因無法保留分割區而略過的分割 Cookie：%d。";
+"browser.import.issue.isolatedCookiesSkipped" = "因無法保留隔離而略過的容器或分割 Cookie：%d。";
+"browser.import.issue.historyImportLimit" = "瀏覽記錄匯入在 %d 次造訪時停止；略過的相符造訪：%d。";
+"browser.import.issue.historyScanLimit" = "瀏覽記錄掃描在最近 %d 次造訪後停止；較早的造訪可能仍未匯入。";
 "browser.import.issue.historyWriteFailed" = "未儲存的瀏覽記錄：%d。";
 "browser.import.issue.bookmarkWriteFailed" = "未儲存的書籤：%d。";
 "browser.import.issue.cookieDecryptionFailed" = "已略過的加密 Cookie：%d。";

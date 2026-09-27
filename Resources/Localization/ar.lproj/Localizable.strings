@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "تثبيت المشروع";
 "projectSidebar.unpin" = "إلغاء تثبيت المشروع";
 "projectSidebar.unavailable" = "قائمة المشاريع غير متاحة";
+"projectSidebar.readOnly" = "لا يمكن حفظ تغييرات المشاريع الآن.";
 "project.registry.recovery.message" = "تعذرت قراءة بعض بيانات المشاريع الوصفية. حفظ Cocxy السجلات المرفوضة (%d) في ملف استرداد خاص.";
 "project.registry.recovery.document" = "تعذرت قراءة قائمة المشاريع. حفظها Cocxy في ملف استرداد خاص وبدأ قائمة جديدة.";
 "projectSidebar.taskBadge.accessibility.one" = "%@، %d مهمة";
@@ -2437,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "تعذرت قراءة ملفات تعريف الارتباط من ملف تعريف المتصفح هذا.";
 "browser.import.issue.bookmarkReadFailed" = "تعذرت قراءة الإشارات المرجعية من ملف تعريف المتصفح هذا.";
 "browser.import.issue.auditWriteFailed" = "اكتمل الاستيراد، لكن تعذر حفظ سجل التدقيق المحلي الخاص به.";
+"browser.import.issue.historySourceUnavailable" = "لم يُعثر على ملف سجل في ملف تعريف المتصفح هذا.";
+"browser.import.issue.cookieSourceUnavailable" = "لم يُعثر على ملف ملفات تعريف الارتباط في ملف تعريف المتصفح هذا.";
+"browser.import.issue.bookmarkSourceUnavailable" = "لم يُعثر على ملف إشارات مرجعية في ملف تعريف المتصفح هذا.";
+"browser.import.issue.historyStorageUnavailable" = "تخزين سجل المتصفح في Cocxy غير متاح.";
+"browser.import.issue.cookieStorageUnavailable" = "تخزين ملفات تعريف الارتباط للمتصفح في Cocxy غير متاح.";
+"browser.import.issue.bookmarkStorageUnavailable" = "تخزين الإشارات المرجعية للمتصفح في Cocxy غير متاح.";
+"browser.import.issue.historyLatestVisitOnly" = "يحتفظ هذا المتصفح بآخر زيارة لكل صفحة فقط، لذا استُوردت تلك الزيارات فقط.";
+"browser.import.issue.partitionedCookiesSkipped" = "ملفات تعريف الارتباط المقسّمة التي تم تخطيها لتعذر الحفاظ على تقسيمها: %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "ملفات تعريف الارتباط الخاصة بالحاويات أو المقسّمة التي تم تخطيها لتعذر الحفاظ على عزلها: %d.";
+"browser.import.issue.historyImportLimit" = "توقف استيراد السجل عند %d زيارة؛ الزيارات المطابقة التي تم تخطيها: %d.";
+"browser.import.issue.historyScanLimit" = "توقف فحص السجل بعد أحدث %d زيارة؛ قد تبقى زيارات أقدم.";
 "browser.import.issue.historyWriteFailed" = "زيارات السجل التي لم تُحفظ: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "الإشارات المرجعية التي لم تُحفظ: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "ملفات تعريف الارتباط المشفرة التي تم تخطيها: %d.";

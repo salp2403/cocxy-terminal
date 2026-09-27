@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Metti il progetto in evidenza";
 "projectSidebar.unpin" = "Rimuovi il progetto dagli elementi in evidenza";
 "projectSidebar.unavailable" = "Elenco dei progetti non disponibile";
+"projectSidebar.readOnly" = "Al momento non è possibile salvare le modifiche ai progetti.";
 "project.registry.recovery.message" = "Non è stato possibile leggere alcuni metadati dei progetti. Cocxy ha salvato i record rifiutati (%d) in un file di recupero privato.";
 "project.registry.recovery.document" = "Non è stato possibile leggere l’elenco dei progetti. Cocxy lo ha salvato in un file di recupero privato e ha iniziato un nuovo elenco.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d attività";
@@ -2437,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "Non è stato possibile leggere i cookie da questo profilo del browser.";
 "browser.import.issue.bookmarkReadFailed" = "Non è stato possibile leggere i segnalibri da questo profilo del browser.";
 "browser.import.issue.auditWriteFailed" = "L’importazione è terminata, ma non è stato possibile salvare il relativo record di audit locale.";
+"browser.import.issue.historySourceUnavailable" = "Nessun file della cronologia trovato in questo profilo del browser.";
+"browser.import.issue.cookieSourceUnavailable" = "Nessun file dei cookie trovato in questo profilo del browser.";
+"browser.import.issue.bookmarkSourceUnavailable" = "Nessun file dei segnalibri trovato in questo profilo del browser.";
+"browser.import.issue.historyStorageUnavailable" = "L’archivio della cronologia del browser di Cocxy non è disponibile.";
+"browser.import.issue.cookieStorageUnavailable" = "L’archivio dei cookie del browser di Cocxy non è disponibile.";
+"browser.import.issue.bookmarkStorageUnavailable" = "L’archivio dei segnalibri del browser di Cocxy non è disponibile.";
+"browser.import.issue.historyLatestVisitOnly" = "Questo browser conserva solo l’ultima visita a ogni pagina, quindi sono state importate solo quelle visite.";
+"browser.import.issue.partitionedCookiesSkipped" = "Cookie partizionati ignorati perché la loro partizione non può essere mantenuta: %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "Cookie di contenitore o partizionati ignorati perché il loro isolamento non può essere mantenuto: %d.";
+"browser.import.issue.historyImportLimit" = "L’importazione della cronologia si è fermata a %d visite; visite corrispondenti ignorate: %d.";
+"browser.import.issue.historyScanLimit" = "L’analisi della cronologia si è fermata dopo le %d visite più recenti; potrebbero restare visite più vecchie.";
 "browser.import.issue.historyWriteFailed" = "Visite della cronologia non salvate: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Segnalibri non salvati: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Cookie crittografati ignorati: %d.";

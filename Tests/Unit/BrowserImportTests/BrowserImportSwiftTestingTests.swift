@@ -558,7 +558,7 @@ struct BrowserImportSwiftTestingTests {
         #expect(result.history.count == 50_000)
         #expect(result.skippedCount == 2)
         #expect(result.errors.contains {
-            $0.message.contains("History safety limit reached")
+            $0.kind == .historySafetyLimit(skipped: 2, importLimit: 50_000, scanLimit: nil)
                 && $0.message.contains("50000-visit import limit")
         })
     }

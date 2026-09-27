@@ -468,6 +468,7 @@
 "projectSidebar.pin" = "Fixar projeto";
 "projectSidebar.unpin" = "Desafixar projeto";
 "projectSidebar.unavailable" = "Lista de projetos indisponível";
+"projectSidebar.readOnly" = "Não é possível salvar as alterações dos projetos agora.";
 "project.registry.recovery.message" = "Não foi possível ler alguns metadados de projetos. O Cocxy salvou os registros rejeitados (%d) em um arquivo privado de recuperação.";
 "project.registry.recovery.document" = "Não foi possível ler a lista de projetos. O Cocxy a salvou em um arquivo privado de recuperação e iniciou uma nova lista.";
 "projectSidebar.taskBadge.accessibility.one" = "%@, %d tarefa";
@@ -2437,6 +2438,17 @@
 "browser.import.issue.cookieReadFailed" = "Não foi possível ler os cookies deste perfil do navegador.";
 "browser.import.issue.bookmarkReadFailed" = "Não foi possível ler os favoritos deste perfil do navegador.";
 "browser.import.issue.auditWriteFailed" = "A importação terminou, mas não foi possível salvar seu registro local de auditoria.";
+"browser.import.issue.historySourceUnavailable" = "Nenhum arquivo de histórico foi encontrado neste perfil do navegador.";
+"browser.import.issue.cookieSourceUnavailable" = "Nenhum arquivo de cookies foi encontrado neste perfil do navegador.";
+"browser.import.issue.bookmarkSourceUnavailable" = "Nenhum arquivo de favoritos foi encontrado neste perfil do navegador.";
+"browser.import.issue.historyStorageUnavailable" = "O armazenamento de histórico do navegador do Cocxy não está disponível.";
+"browser.import.issue.cookieStorageUnavailable" = "O armazenamento de cookies do navegador do Cocxy não está disponível.";
+"browser.import.issue.bookmarkStorageUnavailable" = "O armazenamento de favoritos do navegador do Cocxy não está disponível.";
+"browser.import.issue.historyLatestVisitOnly" = "Este navegador guarda apenas a última visita a cada página, então só essas visitas foram importadas.";
+"browser.import.issue.partitionedCookiesSkipped" = "Cookies particionados ignorados porque a partição não pode ser mantida: %d.";
+"browser.import.issue.isolatedCookiesSkipped" = "Cookies de contêiner ou particionados ignorados porque o isolamento não pode ser mantido: %d.";
+"browser.import.issue.historyImportLimit" = "A importação do histórico parou em %d visitas; visitas correspondentes ignoradas: %d.";
+"browser.import.issue.historyScanLimit" = "A verificação do histórico parou após as %d visitas mais recentes; visitas mais antigas podem ter ficado de fora.";
 "browser.import.issue.historyWriteFailed" = "Visitas do histórico não salvas: %d.";
 "browser.import.issue.bookmarkWriteFailed" = "Favoritos não salvos: %d.";
 "browser.import.issue.cookieDecryptionFailed" = "Cookies criptografados ignorados: %d.";

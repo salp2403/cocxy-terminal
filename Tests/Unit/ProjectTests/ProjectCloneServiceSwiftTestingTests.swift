@@ -109,8 +109,8 @@ struct ProjectCloneServiceSwiftTestingTests {
         #expect(FileManager.default.fileExists(atPath: unrelated.path))
     }
 
-    @Test("a failure after publishing a clone removes the clone but keeps files it did not create")
-    func postPublicationFailureRemovesOnlyTheClone() throws {
+    @Test("a failure after publishing a clone keeps the whole clone once files were added to it")
+    func postPublicationFailureKeepsTaintedCloneWhole() throws {
         let sandbox = makeSandbox()
         defer { try? FileManager.default.removeItem(at: sandbox) }
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
@@ -140,8 +140,8 @@ struct ProjectCloneServiceSwiftTestingTests {
             try service.clone(remote: "https://example.test/team/project.git", into: sandbox)
         }
         let project = sandbox.appendingPathComponent("project", isDirectory: true)
-        #expect(try FileManager.default.contentsOfDirectory(atPath: project.path) == [
-            "user-notes.txt",
+        #expect(Set(try FileManager.default.contentsOfDirectory(atPath: project.path)) == [
+            ".git", "README.md", "user-notes.txt",
         ])
     }
 

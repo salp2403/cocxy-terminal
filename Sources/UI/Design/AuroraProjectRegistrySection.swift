@@ -30,19 +30,18 @@ extension Design {
             VStack(alignment: .leading, spacing: Spacing.xSmall) {
                 if !registryAvailable {
                     unavailableRow
-                } else {
-                    if let recoveryMessage {
-                        recoveryRow(recoveryMessage)
-                    }
-                    projectGroup(
-                        title: localizer.string("projectSidebar.pinned", fallback: "Pinned"),
-                        projects: pinned
-                    )
-                    projectGroup(
-                        title: localizer.string("projectSidebar.recent", fallback: "Recent"),
-                        projects: recent
-                    )
                 }
+                if let recoveryMessage {
+                    recoveryRow(recoveryMessage)
+                }
+                projectGroup(
+                    title: localizer.string("projectSidebar.pinned", fallback: "Pinned"),
+                    projects: pinned
+                )
+                projectGroup(
+                    title: localizer.string("projectSidebar.recent", fallback: "Recent"),
+                    projects: recent
+                )
             }
             .padding(.bottom, projects.isEmpty && registryAvailable ? 0 : Spacing.xSmall)
         }
@@ -163,10 +162,9 @@ extension Design {
         private var unavailableRow: some View {
             HStack(spacing: Spacing.xSmall) {
                 Image(systemName: "exclamationmark.triangle")
-                Text(localizer.string(
-                    "projectSidebar.unavailable",
-                    fallback: "Project list unavailable"
-                ))
+                Text(projects.isEmpty
+                    ? localizer.string("projectSidebar.unavailable", fallback: "Project list unavailable")
+                    : localizer.string("projectSidebar.readOnly", fallback: "Project changes can't be saved right now."))
                     .lineLimit(2)
             }
             .font(.system(size: 10.5, weight: .medium))
