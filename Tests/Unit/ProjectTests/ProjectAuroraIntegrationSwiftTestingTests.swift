@@ -474,7 +474,7 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
 
     @Test("workspace rename migrates every open worktree alias to the folded identity")
     func renameMigratesLegacyWorktreeAlias() throws {
-        let suiteName = "ProjectAuroraRenameTests.\(UUID().uuidString)"
+        let suiteName = HermeticUserDefaults.suiteName()
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let titleStore = AuroraWorkspaceTitleStore(defaults: defaults, storageKey: "titles")

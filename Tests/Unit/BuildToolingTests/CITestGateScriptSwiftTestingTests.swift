@@ -200,6 +200,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(job.contains(
             "./scripts/run-filtered-swift-testing.sh NotebookProcessRunnerSwiftTestingTests"
         ))
+        #expect(job.contains("run-filtered-swift-testing.sh SocketLocalExecutionIntegrationSwiftTestingTests"))
         #expect(!job.contains("swift test --filter"))
         #expect(!job.contains("COCXYCORE_DEPLOY_KEY"))
         #expect(!job.contains("repository: salp2403/cocxycore"))

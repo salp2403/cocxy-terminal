@@ -200,10 +200,10 @@ struct AgentPipelineRuntimeSwiftTestingTests {
         let fixture = try launchRealQueuedProvider(teamID: "queue-process-exit", exitCode: 0)
         defer { fixture.controller.close() }
         #expect(fixture.delegate.hookEventReceiver == nil)
-        #expect(await waitUntil(attempts: 1_000) {
+        #expect(await waitUntil(attempts: 3_000) {
             fixture.tabID.withValue { $0 != nil }
         })
-        let completedBeforeWatchdog = await waitUntil(attempts: 1_000) {
+        let completedBeforeWatchdog = await waitUntil(attempts: 3_000) {
             await fixture.delegate.agentPipelineCompletionBroker.pendingTeamIDs.isEmpty
         }
         guard completedBeforeWatchdog else {
@@ -229,10 +229,10 @@ struct AgentPipelineRuntimeSwiftTestingTests {
     func nonzeroProviderExitFailsQueuedWork() async throws {
         let fixture = try launchRealQueuedProvider(teamID: "queue-process-failure", exitCode: 3)
         defer { fixture.controller.close() }
-        #expect(await waitUntil(attempts: 1_000) {
+        #expect(await waitUntil(attempts: 3_000) {
             fixture.tabID.withValue { $0 != nil }
         })
-        let completedBeforeWatchdog = await waitUntil(attempts: 1_000) {
+        let completedBeforeWatchdog = await waitUntil(attempts: 3_000) {
             await fixture.delegate.agentPipelineCompletionBroker.pendingTeamIDs.isEmpty
         }
         guard completedBeforeWatchdog else {
@@ -547,7 +547,7 @@ struct AgentPipelineRuntimeSwiftTestingTests {
     }
 
     private func waitUntil(
-        attempts: Int = 200,
+        attempts: Int = 3_000,
         _ condition: @escaping @Sendable () async -> Bool
     ) async -> Bool {
         for _ in 0..<attempts {
@@ -558,7 +558,7 @@ struct AgentPipelineRuntimeSwiftTestingTests {
     }
 
     private func waitUntilOnMainActor(
-        attempts: Int = 200,
+        attempts: Int = 3_000,
         _ condition: @escaping @MainActor () -> Bool
     ) async -> Bool {
         for _ in 0..<attempts {

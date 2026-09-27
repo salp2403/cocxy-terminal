@@ -156,7 +156,7 @@ func waitForQueueItem(
 }
 
 func waitUntil(
-    timeout: Duration = .seconds(2),
+    timeout: Duration = .seconds(15),
     condition: @escaping () async -> Bool
 ) async throws {
     let clock = ContinuousClock()

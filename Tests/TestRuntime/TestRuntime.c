@@ -10,6 +10,8 @@
 #include <limits.h>
 #include <libproc.h>
 #include <poll.h>
+#include <pwd.h>
+#include <removefile.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdio.h>
@@ -42,6 +44,58 @@ static const char *cocxy_process_gate_state = "execution-gate.plist";
 static const unsigned int cocxy_fixture_lifetime_seconds = 30;
 static const int cocxy_reap_timeout_milliseconds = 2000;
 static char cocxy_owned_process_root[PATH_MAX] = {0};
+static char cocxy_owned_home[PATH_MAX] = {0};
+
+static void cocxy_remove_owned_home(void) {
+    if (cocxy_owned_home[0] == '\0') return;
+    removefile(cocxy_owned_home, NULL, REMOVEFILE_RECURSIVE);
+}
+
+// Foundation ignores HOME on macOS; CFFIXED_USER_HOME moves NSHomeDirectory()
+// and every path derived from it. Setting it before any test code runs keeps a
+// test process out of the user's real home even outside the test runners.
+static int cocxy_install_private_home(void) {
+    const char *existing = getenv("CFFIXED_USER_HOME");
+    if (existing != NULL && existing[0] != '\0') return 0;
+
+    // Short on purpose: SSH control sockets live under the home and a Unix
+    // socket path must fit in 104 bytes, which a TMPDIR-based home exceeds.
+    strlcpy(cocxy_owned_home, "/tmp/cxh.XXXXXX", sizeof(cocxy_owned_home));
+    if (mkdtemp(cocxy_owned_home) == NULL) {
+        int code = errno != 0 ? errno : EIO;
+        cocxy_owned_home[0] = '\0';
+        return code;
+    }
+    // Keychain Services looks for the user's file keychains under the home and
+    // blocks on a dialog when they are missing, so the private home links them.
+    struct passwd *account = getpwuid(getuid());
+    if (account != NULL && account->pw_dir != NULL) {
+        char keychains[PATH_MAX];
+        char library[PATH_MAX];
+        char link[PATH_MAX];
+        struct stat keychains_status = {0};
+        if (snprintf(keychains, sizeof(keychains), "%s/Library/Keychains", account->pw_dir)
+                < (int)sizeof(keychains)
+            && snprintf(library, sizeof(library), "%s/Library", cocxy_owned_home)
+                < (int)sizeof(library)
+            && snprintf(link, sizeof(link), "%s/Keychains", library) < (int)sizeof(link)
+            && stat(keychains, &keychains_status) == 0
+            && S_ISDIR(keychains_status.st_mode)
+            && (mkdir(library, 0700) != 0 || symlink(keychains, link) != 0)) {
+            int code = errno != 0 ? errno : EIO;
+            cocxy_remove_owned_home();
+            return code;
+        }
+    }
+    if (setenv("CFFIXED_USER_HOME", cocxy_owned_home, 1) != 0
+        || setenv("HOME", cocxy_owned_home, 1) != 0
+        || atexit(cocxy_remove_owned_home) != 0) {
+        int code = errno != 0 ? errno : EIO;
+        cocxy_remove_owned_home();
+        return code;
+    }
+    return 0;
+}
 
 static void cocxy_remove_owned_process_root(void) {
     if (cocxy_owned_process_root[0] == '\0') return;
@@ -422,4 +476,7 @@ static void cocxy_test_runtime_install_signal_guards(void) {
     if (evidence_path != NULL && evidence_path[0] != '\0') {
         _exit(cocxy_run_escape_parent(arguments, evidence_path));
     }
+
+    int home_code = cocxy_install_private_home();
+    if (home_code != 0) _exit(home_code);
 }

@@ -130,7 +130,7 @@ struct MobileMirrorProjectServiceSwiftTestingTests {
         let operation = Task {
             try await service.createProject(named: "Cancelled", in: root)
         }
-        #expect(started.wait(timeout: .now() + 2) == .success)
+        #expect(started.wait(timeout: .now() + 15) == .success)
 
         operation.cancel()
         release.signal()

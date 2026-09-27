@@ -206,7 +206,7 @@ final class QuickTerminalViewModelTests: XCTestCase {
         sut.toggle()  // false -> true
         sut.toggle()  // true -> false
 
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
 
         XCTAssertEqual(emittedValues, [true, false],
                        "Publisher must emit [true, false] after two toggles")

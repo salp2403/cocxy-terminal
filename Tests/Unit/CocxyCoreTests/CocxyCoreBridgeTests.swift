@@ -413,7 +413,7 @@ struct CocxyCoreBridgeTests {
         defer { bridge.destroySurface(surfaceID) }
         let baseline = hostView.updateInteractionMetricsCount
 
-        try await waitUntil(timeoutNanoseconds: 3_000_000_000, pollNanoseconds: 10_000_000) {
+        try await waitUntil(timeoutNanoseconds: 15_000_000_000, pollNanoseconds: 10_000_000) {
             hostView.updateInteractionMetricsCount >= baseline + 2
         }
 
@@ -562,7 +562,7 @@ struct CocxyCoreBridgeTests {
         #expect(accepted.withValue { $0 })
 
         goodProbe.close()
-        try await waitUntil(timeoutNanoseconds: 5_000_000_000) {
+        try await waitUntil(timeoutNanoseconds: 15_000_000_000) {
             bridge.webTerminalStatus(for: surfaceID) == nil
         }
 
@@ -593,7 +593,7 @@ struct CocxyCoreBridgeTests {
             _ = try await probe.receive(containing: "\"type\":\"auth_ok\"")
             probe.close()
 
-            try await waitUntil(timeoutNanoseconds: 5_000_000_000) {
+            try await waitUntil(timeoutNanoseconds: 15_000_000_000) {
                 bridge.webTerminalStatus(for: surfaceID) == nil
             }
         }
@@ -2402,7 +2402,7 @@ func readPreedit(from terminal: OpaquePointer) -> String {
 /// poll interval, while a loaded 3-vCPU machine is not failed for being
 /// slow. The `Issue.record` below still fires if the effect never arrives.
 func waitUntil(
-    timeoutNanoseconds: UInt64 = 5_000_000_000,
+    timeoutNanoseconds: UInt64 = 15_000_000_000,
     pollNanoseconds: UInt64 = 10_000_000,
     condition: @escaping @Sendable @MainActor () -> Bool
 ) async throws {

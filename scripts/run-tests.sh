@@ -28,11 +28,16 @@ if [[ -f web/scripts/build-site.mjs ]]; then
   "$NODE_BIN" web/scripts/verify-site.mjs
 fi
 
+source "$ROOT_DIR/scripts/test-home-sandbox.sh"
+cocxy_test_home_begin
+trap cocxy_test_home_cleanup EXIT
+
 echo "Running XCTest suite..."
 swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks \
   --disable-automatic-resolution
 
 echo "Running Swift Testing suite..."
 ./scripts/run-swift-testing-serial.sh
+cocxy_test_home_end
 
 echo "All XCTest and Swift Testing tests passed."

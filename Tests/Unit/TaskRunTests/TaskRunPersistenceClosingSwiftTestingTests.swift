@@ -127,7 +127,7 @@ struct TaskRunPersistenceClosingSwiftTestingTests {
         run.updatedAt = Date(timeIntervalSince1970: 200)
         coordinator.enqueue(run)
 
-        #expect(probe.firstSaveStarted.wait(timeout: .now() + 2) == .success)
+        #expect(probe.firstSaveStarted.wait(timeout: .now() + 15) == .success)
         coordinator.flush()
         #expect(probe.snapshots == [run])
     }

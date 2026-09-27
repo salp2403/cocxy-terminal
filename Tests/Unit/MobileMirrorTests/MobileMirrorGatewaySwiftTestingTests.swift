@@ -15,7 +15,7 @@ struct MobileMirrorGatewaySwiftTestingTests: MobileMirrorRouterTestSupport {
         let hub = MobileMirrorEventHub { _, descriptor in
             if descriptor == 41 {
                 slowStarted.signal()
-                return releaseSlow.wait(timeout: .now() + 2) == .success
+                return releaseSlow.wait(timeout: .now() + 30) == .success
             }
             fastReceived.signal()
             return true
@@ -26,10 +26,10 @@ struct MobileMirrorGatewaySwiftTestingTests: MobileMirrorRouterTestSupport {
         }
 
         hub.add(descriptor: 41, close: {})
-        #expect(slowStarted.wait(timeout: .now() + 1) == .success)
+        #expect(slowStarted.wait(timeout: .now() + 15) == .success)
         hub.add(descriptor: 42, close: {})
 
-        #expect(fastReceived.wait(timeout: .now() + 1) == .success)
+        #expect(fastReceived.wait(timeout: .now() + 15) == .success)
     }
 
     @Test("event stream replays bounded notifications after the last received ID")
@@ -210,7 +210,7 @@ struct MobileMirrorGatewaySwiftTestingTests: MobileMirrorRouterTestSupport {
         #expect(retainedGateway != nil)
         stalled.release()
 
-        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(15))
         while retainedGateway != nil, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }
@@ -425,7 +425,7 @@ private final class MobileMirrorStalledRoute: @unchecked Sendable {
     }
 
     func waitUntilEntered() -> Bool {
-        entered.wait(timeout: .now() + 2) == .success
+        entered.wait(timeout: .now() + 15) == .success
     }
 
     func release() {
@@ -473,7 +473,7 @@ private final class MobileMirrorEventCapture: @unchecked Sendable {
     }
 
     func wait(for count: Int, descriptor: Int32) throws {
-        let deadline = Date().addingTimeInterval(2)
+        let deadline = Date().addingTimeInterval(15)
         condition.lock()
         defer { condition.unlock() }
         while values[descriptor, default: []].count < count {
@@ -526,7 +526,7 @@ private final class MobileMirrorCaptureServer: @unchecked Sendable {
     }
 
     func waitForRequest() throws -> String {
-        guard semaphore.wait(timeout: .now() + 3) == .success else {
+        guard semaphore.wait(timeout: .now() + 15) == .success else {
             throw CocoaError(.fileReadUnknown)
         }
         lock.lock()

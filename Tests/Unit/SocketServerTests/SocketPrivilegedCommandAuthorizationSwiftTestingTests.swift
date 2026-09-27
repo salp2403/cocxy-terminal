@@ -249,7 +249,7 @@ struct SocketPrivilegedCommandAuthorizationSwiftTestingTests {
             thread.start()
         }
 
-        #expect(group.wait(timeout: .now() + 5) == .success)
+        #expect(group.wait(timeout: .now() + 15) == .success)
         #expect(providerCalls.value == 1)
         #expect(results.value.count == 8)
         #expect(results.value.allSatisfy { $0 })

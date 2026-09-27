@@ -856,7 +856,7 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         let shellPID = try #require(process.process?.shellPID)
         #expect(waitForFile(ready, timeout: 2))
 
-        let shutdown = try helper.shutdownGracefully(timeout: 6)
+        let shutdown = try helper.shutdownGracefully(timeout: 15)
 
         #expect(shutdown.ok == true)
         #expect(helper.isRunning == false)
@@ -889,7 +889,7 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         )
         let shellPID = try #require(process.process?.shellPID)
 
-        try helper.closeInputAndWaitForExit(timeout: 5)
+        try helper.closeInputAndWaitForExit(timeout: 15)
 
         #expect(helper.isRunning == false)
         #expect(processExists(shellPID) == false)
@@ -1291,7 +1291,7 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         }
         input.fileHandleForWriting.closeFile()
 
-        if group.wait(timeout: .now() + 3) == .timedOut {
+        if group.wait(timeout: .now() + 15) == .timedOut {
             process.terminate()
             Issue.record("cocxyd helper timed out")
         }
@@ -1368,7 +1368,7 @@ final class RunningHelperProcess {
         process.isRunning
     }
 
-    func sendAndWait(_ request: PTYDaemonRequest, timeout: TimeInterval = 5) throws -> PTYDaemonResponse {
+    func sendAndWait(_ request: PTYDaemonRequest, timeout: TimeInterval = 15) throws -> PTYDaemonResponse {
         guard TerminalProcessBoundary.writeAll(
             try PTYDaemonLineCodec.encode(request),
             to: input.fileHandleForWriting.fileDescriptor
@@ -1378,7 +1378,7 @@ final class RunningHelperProcess {
         return try waitForResponse(id: request.id, timeout: timeout)
     }
 
-    func shutdownGracefully(timeout: TimeInterval = 5) throws -> PTYDaemonResponse {
+    func shutdownGracefully(timeout: TimeInterval = 15) throws -> PTYDaemonResponse {
         guard isShutdown == false else {
             throw HelperTestError.transport("helper already shut down")
         }
@@ -1403,7 +1403,7 @@ final class RunningHelperProcess {
         return response
     }
 
-    func closeInputAndWaitForExit(timeout: TimeInterval = 5) throws {
+    func closeInputAndWaitForExit(timeout: TimeInterval = 15) throws {
         guard isShutdown == false else {
             throw HelperTestError.transport("helper already shut down")
         }

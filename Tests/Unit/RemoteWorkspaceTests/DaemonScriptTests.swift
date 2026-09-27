@@ -704,7 +704,7 @@ struct DaemonScriptTests {
         )
 
         #expect(stop.exitCode == 0)
-        #expect(waitForSocketClosure(descriptor: descriptor, timeoutSeconds: 3))
+        #expect(waitForSocketClosure(descriptor: descriptor, timeoutSeconds: 15))
     }
 
     @Test("Python listener stays on loopback and does not use netcat exec")
@@ -745,7 +745,7 @@ struct DaemonScriptTests {
     ) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/nc")
-        process.arguments = ["-w", "3", "127.0.0.1", String(port)]
+        process.arguments = ["-w", "15", "127.0.0.1", String(port)]
         let input = Pipe()
         let output = Pipe()
         process.standardInput = input

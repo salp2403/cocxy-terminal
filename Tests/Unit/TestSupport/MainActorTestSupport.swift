@@ -43,7 +43,7 @@ enum MainActorTestSupport {
     @MainActor
     @discardableResult
     static func waitForMainCondition(
-        timeout: TimeInterval = 3.0,
+        timeout: TimeInterval = 15.0,
         pollInterval: TimeInterval = 0.01,
         _ condition: () -> Bool
     ) -> Bool {

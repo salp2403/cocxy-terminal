@@ -79,7 +79,7 @@ struct OnboardingSwiftTestingTests {
 
     @Test("skip and completion both suppress automatic first-launch presentation")
     func stateStoreTracksSkipAndCompletion() {
-        let suiteName = "dev.cocxy.tests.onboarding.\(UUID().uuidString)"
+        let suiteName = HermeticUserDefaults.suiteName()
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 

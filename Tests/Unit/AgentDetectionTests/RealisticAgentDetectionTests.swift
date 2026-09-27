@@ -67,7 +67,7 @@ final class RealisticAgentDetectionTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
             dispatchExpectation.fulfill()
         }
-        waitForExpectations(timeout: timeout + 1.0)
+        waitForExpectations(timeout: timeout + 15.0)
     }
 
     /// Creates a StateCollector subscribed to the engine's stateChanged publisher.

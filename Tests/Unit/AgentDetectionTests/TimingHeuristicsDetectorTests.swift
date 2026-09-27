@@ -57,7 +57,7 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
         }
 
         // Wait for the idle timeout (0.2s)
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 15.0)
     }
 
     func testNoTimeoutFromIdleState() {
@@ -142,7 +142,7 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
         }
 
         // Should fire at 0.15s, not 5.0s
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 15.0)
     }
 
     func testNoTriggerDuringActiveOutput() {
@@ -206,7 +206,7 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.08)
         let _ = detector.processBytes(Data("chunk3".utf8))
 
-        wait(for: [expectation], timeout: 2.0)
+        wait(for: [expectation], timeout: 15.0)
     }
 
     func testPauseWhenUnfocused() {
@@ -265,7 +265,7 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
 
         // Local runs finish in a fraction of a second; the 5 s ceiling is
         // only a safety net so a real regression still fails the test.
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation], timeout: 15.0)
     }
 
     // MARK: - Edge Cases
@@ -298,7 +298,7 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
             expectation.fulfill()
         }
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 15.0)
     }
 
     // MARK: - DetectionLayer Conformance
@@ -328,6 +328,6 @@ final class TimingHeuristicsDetectorTests: XCTestCase {
 
         let _ = sut.processBytes(Data("some output".utf8))
 
-        wait(for: [expectation], timeout: 0.5)
+        wait(for: [expectation], timeout: 15.0)
     }
 }

@@ -168,7 +168,7 @@ struct UnifiedQuickSwitchWiringSwiftTestingTests {
             parent: nil
         ))
         try registry.setPinned(true, projectID: projectID)
-        let suiteName = "QuickSwitchProjectAliases.\(UUID().uuidString)"
+        let suiteName = HermeticUserDefaults.suiteName()
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let titles = AuroraWorkspaceTitleStore(defaults: defaults, storageKey: "titles")

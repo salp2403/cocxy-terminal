@@ -86,7 +86,7 @@ struct MergePullRequestActionSheetSwiftTestingTests {
 
     @Test("storedDeleteBranchPreference defaults to true when never written")
     func storedPreferenceDefaultsToTrueWhenNeverWritten() {
-        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let defaults = UserDefaults(suiteName: HermeticUserDefaults.suiteName())!
         defer {
             defaults.removePersistentDomain(forName: defaults.dictionaryRepresentation().description)
         }
@@ -100,7 +100,7 @@ struct MergePullRequestActionSheetSwiftTestingTests {
 
     @Test("storedDeleteBranchPreference returns explicit false")
     func storedPreferenceReturnsExplicitFalse() {
-        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let defaults = UserDefaults(suiteName: HermeticUserDefaults.suiteName())!
         defaults.set(false, forKey: MergePullRequestActionSheet.deleteBranchPreferenceKey)
         let value = MergePullRequestActionSheet.storedDeleteBranchPreference(in: defaults)
         #expect(value == false)
@@ -108,7 +108,7 @@ struct MergePullRequestActionSheetSwiftTestingTests {
 
     @Test("storedDeleteBranchPreference returns explicit true")
     func storedPreferenceReturnsExplicitTrue() {
-        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let defaults = UserDefaults(suiteName: HermeticUserDefaults.suiteName())!
         defaults.set(true, forKey: MergePullRequestActionSheet.deleteBranchPreferenceKey)
         let value = MergePullRequestActionSheet.storedDeleteBranchPreference(in: defaults)
         #expect(value == true)
@@ -116,7 +116,7 @@ struct MergePullRequestActionSheetSwiftTestingTests {
 
     @Test("storeDeleteBranchPreference persists the chosen value")
     func storePreferencePersistsChosenValue() {
-        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let defaults = UserDefaults(suiteName: HermeticUserDefaults.suiteName())!
         MergePullRequestActionSheet.storeDeleteBranchPreference(false, in: defaults)
         #expect(defaults.bool(forKey: MergePullRequestActionSheet.deleteBranchPreferenceKey) == false)
 
@@ -126,7 +126,7 @@ struct MergePullRequestActionSheetSwiftTestingTests {
 
     @Test("preference round-trips through store/load")
     func preferenceRoundTripsThroughStoreLoad() {
-        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let defaults = UserDefaults(suiteName: HermeticUserDefaults.suiteName())!
         for value in [true, false, true] {
             MergePullRequestActionSheet.storeDeleteBranchPreference(value, in: defaults)
             let read = MergePullRequestActionSheet.storedDeleteBranchPreference(in: defaults)

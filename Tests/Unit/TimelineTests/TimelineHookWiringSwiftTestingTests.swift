@@ -32,6 +32,7 @@ struct TimelineHookWiringSwiftTestingTests {
             timestamp: Date(timeIntervalSince1970: 2_000)
         ))
 
+        for _ in 0..<1_500 where delegate.agentTimelineStore?.events(for: "timeline-live-edit").isEmpty ?? true { try await Task.sleep(for: .milliseconds(10)) }
         try await Task.sleep(for: .milliseconds(100))
 
         let events = delegate.agentTimelineStore?.events(for: "timeline-live-edit")
@@ -67,7 +68,7 @@ struct TimelineHookWiringSwiftTestingTests {
             timestamp: Date(),
             cwd: nested.path
         ))
-        try await Task.sleep(for: .milliseconds(100))
+        for _ in 0..<1_500 where delegate.agentTimelineStore?.events(for: "timeline-project").first == nil { try await Task.sleep(for: .milliseconds(10)) }
 
         let event = delegate.agentTimelineStore?.events(for: "timeline-project").first
         #expect(event?.projectIdentity == ProjectID(rootURL: root))

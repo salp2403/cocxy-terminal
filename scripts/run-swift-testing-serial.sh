@@ -6,11 +6,16 @@ set -euo pipefail
 # Running each Swift Testing suite in its own process keeps coverage intact
 # while preventing AppKit/Dispatch-heavy suites from over-parallelizing.
 
+# Suites that drive real launchd containment pass or fail with machine load
+# and process churn, so they stay out of this gate and run in the Bounded
+# Process Containment CI lane through run-filtered-swift-testing.sh.
 common_args=(
   --disable-automatic-resolution
   --disable-xctest
   --skip PerformanceTests
   --skip CocxyCorePerformanceBenchmarks
+  --skip NotebookProcessRunnerSwiftTestingTests
+  --skip SocketLocalExecutionIntegrationSwiftTestingTests
 )
 
 # Tests that park a thread on a synchronous bridge starve the cooperative pool
@@ -29,6 +34,10 @@ for arg in "$@"; do
   fi
   list_extra_args+=("$arg")
 done
+
+source "$(dirname "${BASH_SOURCE[0]}")/test-home-sandbox.sh"
+cocxy_test_home_begin
+trap cocxy_test_home_cleanup EXIT
 
 list_args=("${common_args[@]}")
 if [[ ${#list_extra_args[@]} -gt 0 ]]; then
@@ -179,4 +188,5 @@ if [[ "$coverage_enabled" == true ]]; then
   echo "Swift Testing coverage JSON written to $coverage_json"
 fi
 
+cocxy_test_home_end
 echo "All ${#suites[@]} Swift Testing suite(s) passed."

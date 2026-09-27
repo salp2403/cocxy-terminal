@@ -23,7 +23,7 @@ struct AuroraRenameIntegrationSwiftTestingTests {
 
     @Test("workspace rename persists once by identity without copying onto tabs")
     func workspaceRenameUsesIdentityStore() throws {
-        let suiteName = "AuroraRenameIntegrationTests.\(UUID().uuidString)"
+        let suiteName = HermeticUserDefaults.suiteName()
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let titleStore = AuroraWorkspaceTitleStore(
@@ -35,10 +35,9 @@ struct AuroraRenameIntegrationSwiftTestingTests {
             auroraWorkspaceTitleStore: titleStore
         )
         let tab = controller.tabManager.tabs[0]
-        let resolver = GitAncestorWorkspaceRootResolver()
         let workspaceID = AuroraWorkspacePlanner.descriptor(
             for: tab,
-            resolver: resolver
+            projectResolver: controller.projectResolver
         ).identity
 
         controller.applyAuroraWorkspaceRename(
@@ -56,7 +55,7 @@ struct AuroraRenameIntegrationSwiftTestingTests {
 
     @Test("windows sharing the app title store observe workspace renames immediately")
     func windowsShareWorkspaceTitleStore() throws {
-        let suiteName = "AuroraSharedWorkspaceTitleStoreTests.\(UUID().uuidString)"
+        let suiteName = HermeticUserDefaults.suiteName()
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let titleStore = AuroraWorkspaceTitleStore(

@@ -203,7 +203,7 @@ private func socksTestConnectionObservedClosure(_ connection: NWConnection) asyn
 /// assertion keeps failing when the effect never happens.
 @MainActor
 private func waitForSOCKSProxyEffect(
-    within timeout: Duration = .seconds(5),
+    within timeout: Duration = .seconds(15),
     _ condition: @MainActor () -> Bool
 ) async {
     let deadline = ContinuousClock.now.advanced(by: timeout)
@@ -414,8 +414,8 @@ struct SOCKS5ProxyTests {
         }
         listeners.listenerDidBecomeReady = nil
         #expect(!listeners.isReady)
-        #expect(Self.canRebindIPv4(port: port))
-        #expect(Self.canRebindIPv6(port: port))
+        for _ in 0..<1_500 where !(Self.canRebindIPv4(port: port) && Self.canRebindIPv6(port: port)) { try await Task.sleep(nanoseconds: 10_000_000) }
+        #expect(Self.canRebindIPv4(port: port) && Self.canRebindIPv6(port: port))
     }
 
     @Test("Wrong and stale passwords are rejected before CONNECT parsing")
@@ -715,7 +715,7 @@ struct SOCKS5ProxyTests {
 
         proxy.stop()
         client.cancel()
-
+        await waitForSOCKSProxyEffect { forwarder.lastTransport == nil }
         #expect(forwarder.lastTransport == nil)
     }
 

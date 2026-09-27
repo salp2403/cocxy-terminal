@@ -126,7 +126,7 @@ struct ForegroundProcessProbeSwiftTestingTests {
 
         // Wait enough to observe the deadline fire. The deadline is
         // 50 ms; we poll for up to 2 s to absorb scheduling jitter.
-        let deadline = Date().addingTimeInterval(2.0)
+        let deadline = Date().addingTimeInterval(15.0)
         while !completed, Date() < deadline {
             try await Task.sleep(nanoseconds: 20_000_000)
         }

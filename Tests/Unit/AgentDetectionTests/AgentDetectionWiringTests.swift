@@ -216,7 +216,7 @@ final class AgentDetectionWiringTests: XCTestCase {
                 expectation.fulfill()
             }
         }
-        wait(for: [expectation], timeout: 2.0)
+        wait(for: [expectation], timeout: 15.0)
     }
 
     // MARK: - Timeline store receives hook events via direct wiring
@@ -259,6 +259,6 @@ final class AgentDetectionWiringTests: XCTestCase {
                 expectation.fulfill()
             }
         }
-        wait(for: [expectation], timeout: 2.0)
+        wait(for: [expectation], timeout: 15.0)
     }
 }

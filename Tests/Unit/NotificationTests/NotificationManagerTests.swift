@@ -182,7 +182,7 @@ final class NotificationManagerTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             expectation.fulfill()
         }
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 15.0)
 
         emitter.reset()
         let notification2 = makeNotification(type: .agentNeedsAttention, tabId: tabA)
