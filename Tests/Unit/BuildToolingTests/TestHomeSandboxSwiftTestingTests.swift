@@ -50,24 +50,35 @@ struct TestHomeSandboxSwiftTestingTests {
         }
     }
 
-    @Test("only an app bundle counts as a running Cocxy app")
-    func appDetectionIgnoresTestProcesses() throws {
+    @Test("only a process named like the app counts as a running Cocxy app")
+    func appDetectionMatchesProcessName() throws {
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-app-detection-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: fixture, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let name = "cxapp" + UUID().uuidString.prefix(8).lowercased()
+        let named = fixture.appendingPathComponent(name)
+        try FileManager.default.createSymbolicLink(atPath: named.path, withDestinationPath: "/bin/sleep")
+        let app = try Process.run(named, arguments: ["30"])
+        let mention = try Process.run(
+            URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", #"trap 'kill $!; exit' TERM; sleep 30 & wait; : "# + name]
+        )
+        defer { mention.terminate(); app.terminate() }
         let sandbox = repositoryRoot().appendingPathComponent("scripts/test-home-sandbox.sh").path
-        func matches(_ commandLine: String) throws -> Bool {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/bash")
-            process.arguments = [
-                "-c", #"source "$1"; printf '%s' "$2" | grep -Eq "$cocxy_test_home_app_pattern""#,
-                "match", sandbox, commandLine,
-            ]
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus == 0
+        func detected() throws -> Bool {
+            let check = try Process.run(URL(fileURLWithPath: "/bin/bash"), arguments: [
+                "-c", #"source "$1"; cocxy_test_home_app_name="$2"; cocxy_test_home_app_running"#,
+                "detect", sandbox, name,
+            ])
+            check.waitUntilExit()
+            return check.terminationStatus == 0
         }
 
-        #expect(try matches("/Applications/Cocxy Terminal.app/Contents/MacOS/CocxyTerminal"))
-        #expect(try matches("/repo/build/CocxyTerminal.app/Contents/MacOS/CocxyTerminal -ApplePersistenceIgnoreState YES"))
-        #expect(try !matches("/repo/.build/debug/CocxyTerminalPackageTests.xctest/Contents/MacOS/CocxyTerminalPackageTests"))
+        #expect(try detected())
+        app.terminate()
+        app.waitUntilExit()
+        #expect(try !detected())
     }
 
     @Test("an untouched real home passes and the private home is removed")

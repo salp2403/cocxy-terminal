@@ -43,12 +43,13 @@ cocxy_test_home_config() {
   { find "$directory" -print0 | xargs -0 stat -f '%m %z %N' 2>/dev/null || true; } | LC_ALL=C sort
 }
 
-# Anchored on the app bundle so test processes, whose paths end in
-# CocxyTerminalPackageTests.xctest/Contents/MacOS/..., never count as the app.
-cocxy_test_home_app_pattern='\.app/Contents/MacOS/CocxyTerminal'
+# Every Cocxy bundle runs an executable named CocxyTerminal. Matching the
+# process name, not the command line, keeps test processes and shells that
+# merely mention the app from counting as a running app.
+cocxy_test_home_app_name='CocxyTerminal'
 
 cocxy_test_home_app_running() {
-  pgrep -f "$cocxy_test_home_app_pattern" >/dev/null 2>&1
+  pgrep -x "$cocxy_test_home_app_name" >/dev/null 2>&1
 }
 
 # Verifies the real home and removes the private one. Only the runner that
