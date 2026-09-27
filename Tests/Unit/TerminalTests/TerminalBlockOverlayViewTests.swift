@@ -30,6 +30,7 @@ final class TerminalBlockOverlayViewTests: XCTestCase {
         XCTAssertEqual(entries[0].headerFrame?.height, 16)
         XCTAssertEqual(entries[0].railFrame.origin.y, 26)
         XCTAssertEqual(entries[0].railFrame.height, 55)
+        XCTAssertLessThan(entries[0].railFrame.maxX, 8, "the rail must stay left of the first text column")
     }
 
     func testLayoutDrawsOnlyRailWhenBlockBeginsAboveViewport() throws {

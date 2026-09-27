@@ -11,6 +11,7 @@ struct TerminalBlockOverlayLayoutEntry: Equatable {
 
 enum TerminalBlockOverlayLayout {
     static let horizontalInset: CGFloat = 8
+    static let railWidth: CGFloat = 3
     static let maximumHeaderWidth: CGFloat = 260
 
     static func headerHeight(for cellHeight: CGFloat) -> CGFloat {
@@ -36,7 +37,8 @@ enum TerminalBlockOverlayLayout {
         let availableHeaderWidth = max(0, width - trailingInset * 2)
         let resolvedHeaderWidth = min(maximumHeaderWidth, availableHeaderWidth)
         let headerX = max(0, width - trailingInset - resolvedHeaderWidth)
-        let railX = max(0, padding.x + 2)
+        // The rail sits in the content padding so it never covers the first cell column.
+        let railX = max(0, padding.x - railWidth - 2)
 
         return blocks.compactMap { block in
             guard let blockStartRow = block.visibleStartRow,
@@ -67,7 +69,7 @@ enum TerminalBlockOverlayLayout {
             let railFrame = NSRect(
                 x: railX,
                 y: y,
-                width: 3,
+                width: railWidth,
                 height: max(headerHeight, CGFloat(clampedEndExclusive - clampedStart) * cellHeight)
             )
             return TerminalBlockOverlayLayoutEntry(
