@@ -484,7 +484,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             status: 200,
             headers: [
                 "Content-Type": "text/html; charset=utf-8",
-                "Content-Security-Policy": "default-src 'none'; script-src 'nonce-\(nonce)'; style-src 'nonce-\(nonce)'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'",
+                "Content-Security-Policy": "default-src 'none'; script-src 'nonce-\(nonce)'; style-src 'nonce-\(nonce)'; img-src data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'",
             ],
             body: Data(html.utf8)
         )
