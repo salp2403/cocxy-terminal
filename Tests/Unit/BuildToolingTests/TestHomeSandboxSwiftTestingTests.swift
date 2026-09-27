@@ -41,6 +41,11 @@ struct TestHomeSandboxSwiftTestingTests {
         #expect(NSHomeDirectory() != userHome)
         #expect(FileManager.default.homeDirectoryForCurrentUser.path != userHome)
         #expect(ProcessInfo.processInfo.environment["HOME"] != userHome)
+        let keychains = userHome + "/Library/Keychains"
+        if FileManager.default.fileExists(atPath: keychains) {
+            let link = NSHomeDirectory() + "/Library/Keychains"
+            #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link) == keychains)
+        }
     }
 
     @Test("an untouched real home passes and the private home is removed")
@@ -88,6 +93,10 @@ struct TestHomeSandboxSwiftTestingTests {
         let config = realHome.appendingPathComponent(".config/cocxy/projects", isDirectory: true)
         try FileManager.default.createDirectory(at: preferences, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: realHome.appendingPathComponent("Library/Keychains", isDirectory: true),
+            withIntermediateDirectories: true
+        )
         try Data("existing".utf8).write(to: preferences.appendingPathComponent("existing.plist"))
         try Data("[]".utf8).write(to: config.appendingPathComponent("registry.json"))
         let report = fixture.appendingPathComponent("private-home.txt")
@@ -99,7 +108,8 @@ struct TestHomeSandboxSwiftTestingTests {
         cocxy_test_home_app_running() { [[ "$app_running" == true ]]; }
         cocxy_test_home_begin
         printf '%s' "$CFFIXED_USER_HOME" > "$report"
-        [[ "$HOME" == "$CFFIXED_USER_HOME" ]]
+        [[ "$HOME" == "$CFFIXED_USER_HOME" ]] || exit 3
+        [[ "$(readlink "$HOME/Library/Keychains")" == "$REAL/Library/Keychains" ]] || exit 4
         case "$mutation" in
           preference) printf x > "$REAL/Library/Preferences/leaked.suite.plist" ;;
           config) printf '[{}]' > "$REAL/.config/cocxy/projects/registry.json" ;;

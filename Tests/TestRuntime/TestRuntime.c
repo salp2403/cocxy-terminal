@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <libproc.h>
 #include <poll.h>
+#include <pwd.h>
 #include <removefile.h>
 #include <signal.h>
 #include <spawn.h>
@@ -76,6 +77,27 @@ static int cocxy_install_private_home(void) {
         int code = errno != 0 ? errno : EIO;
         cocxy_owned_home[0] = '\0';
         return code;
+    }
+    // Keychain Services looks for the user's file keychains under the home and
+    // blocks on a dialog when they are missing, so the private home links them.
+    struct passwd *account = getpwuid(getuid());
+    if (account != NULL && account->pw_dir != NULL) {
+        char keychains[PATH_MAX];
+        char library[PATH_MAX];
+        char link[PATH_MAX];
+        struct stat keychains_status = {0};
+        if (snprintf(keychains, sizeof(keychains), "%s/Library/Keychains", account->pw_dir)
+                < (int)sizeof(keychains)
+            && snprintf(library, sizeof(library), "%s/Library", cocxy_owned_home)
+                < (int)sizeof(library)
+            && snprintf(link, sizeof(link), "%s/Keychains", library) < (int)sizeof(link)
+            && stat(keychains, &keychains_status) == 0
+            && S_ISDIR(keychains_status.st_mode)
+            && (mkdir(library, 0700) != 0 || symlink(keychains, link) != 0)) {
+            int code = errno != 0 ? errno : EIO;
+            cocxy_remove_owned_home();
+            return code;
+        }
     }
     if (setenv("CFFIXED_USER_HOME", cocxy_owned_home, 1) != 0
         || setenv("HOME", cocxy_owned_home, 1) != 0
@@ -452,9 +474,6 @@ __attribute__((constructor))
 static void cocxy_test_runtime_install_signal_guards(void) {
     signal(SIGPIPE, SIG_IGN);
 
-    int home_code = cocxy_install_private_home();
-    if (home_code != 0) _exit(home_code);
-
     int namespace_code = cocxy_install_process_test_namespace();
     if (namespace_code != 0) _exit(namespace_code);
 
@@ -469,4 +488,7 @@ static void cocxy_test_runtime_install_signal_guards(void) {
     if (evidence_path != NULL && evidence_path[0] != '\0') {
         _exit(cocxy_run_escape_parent(arguments, evidence_path));
     }
+
+    int home_code = cocxy_install_private_home();
+    if (home_code != 0) _exit(home_code);
 }

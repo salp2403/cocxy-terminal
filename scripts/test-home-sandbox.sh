@@ -14,6 +14,12 @@ cocxy_test_home_begin() {
   cocxy_test_home_real="${HOME:?HOME must name the real home to guard it}"
   cocxy_test_home_state="$(mktemp -d "${TMPDIR:-/tmp}/cocxy-test-home.XXXXXX")"
   mkdir "$cocxy_test_home_state/home"
+  # Keychain Services looks for the user's file keychains under the home and
+  # blocks on a dialog when they are missing, so the private home links them.
+  if [[ -d "$cocxy_test_home_real/Library/Keychains" ]]; then
+    mkdir "$cocxy_test_home_state/home/Library"
+    ln -s "$cocxy_test_home_real/Library/Keychains" "$cocxy_test_home_state/home/Library/Keychains"
+  fi
   cocxy_test_home_preferences > "$cocxy_test_home_state/preferences.before"
   cocxy_test_home_config > "$cocxy_test_home_state/config.before"
   export COCXY_TEST_HOME="$cocxy_test_home_state/home"
