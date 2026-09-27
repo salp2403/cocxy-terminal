@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <libproc.h>
 #include <poll.h>
+#include <removefile.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdio.h>
@@ -42,6 +43,49 @@ static const char *cocxy_process_gate_state = "execution-gate.plist";
 static const unsigned int cocxy_fixture_lifetime_seconds = 30;
 static const int cocxy_reap_timeout_milliseconds = 2000;
 static char cocxy_owned_process_root[PATH_MAX] = {0};
+static char cocxy_owned_home[PATH_MAX] = {0};
+
+static void cocxy_remove_owned_home(void) {
+    if (cocxy_owned_home[0] == '\0') return;
+    removefile(cocxy_owned_home, NULL, REMOVEFILE_RECURSIVE);
+}
+
+// Foundation ignores HOME on macOS; CFFIXED_USER_HOME moves NSHomeDirectory()
+// and every path derived from it. Setting it before any test code runs keeps a
+// test process out of the user's real home even outside the test runners.
+static int cocxy_install_private_home(void) {
+    const char *existing = getenv("CFFIXED_USER_HOME");
+    if (existing != NULL && existing[0] != '\0') return 0;
+
+    const char *temporary = getenv("TMPDIR");
+    if (temporary == NULL || temporary[0] == '\0') temporary = "/tmp";
+    size_t length = strlen(temporary);
+    while (length > 1 && temporary[length - 1] == '/') length--;
+    int count = snprintf(
+        cocxy_owned_home,
+        sizeof(cocxy_owned_home),
+        "%.*s/cocxy-test-home.XXXXXX",
+        (int)length,
+        temporary
+    );
+    if (count <= 0 || count >= (int)sizeof(cocxy_owned_home)) {
+        cocxy_owned_home[0] = '\0';
+        return EOVERFLOW;
+    }
+    if (mkdtemp(cocxy_owned_home) == NULL) {
+        int code = errno != 0 ? errno : EIO;
+        cocxy_owned_home[0] = '\0';
+        return code;
+    }
+    if (setenv("CFFIXED_USER_HOME", cocxy_owned_home, 1) != 0
+        || setenv("HOME", cocxy_owned_home, 1) != 0
+        || atexit(cocxy_remove_owned_home) != 0) {
+        int code = errno != 0 ? errno : EIO;
+        cocxy_remove_owned_home();
+        return code;
+    }
+    return 0;
+}
 
 static void cocxy_remove_owned_process_root(void) {
     if (cocxy_owned_process_root[0] == '\0') return;
@@ -407,6 +451,9 @@ static int cocxy_run_escape_parent(
 __attribute__((constructor))
 static void cocxy_test_runtime_install_signal_guards(void) {
     signal(SIGPIPE, SIG_IGN);
+
+    int home_code = cocxy_install_private_home();
+    if (home_code != 0) _exit(home_code);
 
     int namespace_code = cocxy_install_process_test_namespace();
     if (namespace_code != 0) _exit(namespace_code);

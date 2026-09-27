@@ -33,6 +33,16 @@ struct TestHomeSandboxSwiftTestingTests {
         }
     }
 
+    @Test("test processes resolve a private home, never the user's")
+    func processHomeIsPrivate() throws {
+        let account = try #require(getpwuid(getuid()))
+        let userHome = String(cString: try #require(account.pointee.pw_dir))
+
+        #expect(NSHomeDirectory() != userHome)
+        #expect(FileManager.default.homeDirectoryForCurrentUser.path != userHome)
+        #expect(ProcessInfo.processInfo.environment["HOME"] != userHome)
+    }
+
     @Test("an untouched real home passes and the private home is removed")
     func untouchedHomePasses() throws {
         let result = try runSandbox(.none, appRunning: false)
