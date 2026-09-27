@@ -84,7 +84,6 @@ struct ProjectActivityMetricsSwiftTestingTests {
         }
         #expect(invocation == 1)
         viewModel.reloadActivitySummary()
-        for _ in 0..<1_500 where viewModel.activitySummaryState != .available(expected, costTrackingEnabled: true) { try? await Task.sleep(for: .milliseconds(10)) }
         try? await Task.sleep(for: .milliseconds(150))
 
         #expect(viewModel.activitySummaryState == .available(
