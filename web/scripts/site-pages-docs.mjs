@@ -170,7 +170,7 @@ export function firstRunGuide(lang = 'en', pager = '') {
     ['notifications', 'Notifications', 'Local alerts are based on visible events.'],
     ['command-palette', 'Command Palette', 'Search actions, windows, and commands from one place.'],
     ['sessions', 'Sessions', 'Resume work from local Vault history.'],
-    ['local-backups', 'Local Backups', '{{Preferences > Backups}} lets you Restore only the selected artifact.'],
+    ['local-backups', 'Local Backups', '{{Preferences > Backups}} lets you restore only the selected artifact.'],
     ['input-classifier', 'Input Classifier', [
       { config: ['[input-classifier]', 'dangerous-command-warning = true', 'auto-route-natural-language = false', 'foundation-models-fallback = true'] },
       { commands: ['cocxy classify'] },

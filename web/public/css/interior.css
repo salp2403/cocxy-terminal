@@ -567,6 +567,7 @@
     flex: none;
     align-self: center;
     padding-inline: var(--space-2);
+    scroll-snap-align: start;
   }
 
   .toc a {
