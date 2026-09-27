@@ -29,9 +29,6 @@
   <link rel="icon" type="image/svg+xml" href="/images/icon.svg">
   <link rel="apple-touch-icon" href="/images/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
   <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
@@ -72,14 +69,14 @@
     <div class="page-hero__actions"><a class="button button-primary" href="/es/docs/first-run.html">Abrir guía</a></div>
   </div></section>
 <section class="section section--tight"><div class="container docs-layout">
-  <nav class="toc" aria-label="Contenido de primer arranque"><strong>Contenido</strong><a href="#install" class="sidebar-link">Instalar</a><a href="#visual-tour" class="sidebar-link">Recorrido visual</a><a href="#concepts" class="sidebar-link">Conceptos</a><a href="#configuration" class="sidebar-link">Configuración</a><a href="#keyboard-shortcuts" class="sidebar-link">Atajos de teclado</a><a href="#agent-detection" class="sidebar-link">Detección de agentes</a><a href="#code-review" class="sidebar-link">Revisión de código</a><a href="#markdown" class="sidebar-link">Markdown</a><a href="#quicklook" class="sidebar-link">Quick Look</a><a href="#browser" class="sidebar-link">Navegador</a><a href="#remote-workspaces" class="sidebar-link">Espacios remotos</a><a href="#web-terminal" class="sidebar-link">Terminal web</a><a href="#shell-integration" class="sidebar-link">Integración de shell</a><a href="#per-project-config" class="sidebar-link">Configuración por proyecto</a><a href="#applescript" class="sidebar-link">AppleScript</a><a href="#plugin-system" class="sidebar-link">Sistema de plugins</a><a href="#splits" class="sidebar-link">Divisiones</a><a href="#quick-terminal" class="sidebar-link">Terminal rápida</a><a href="#notifications" class="sidebar-link">Notificaciones</a><a href="#command-palette" class="sidebar-link">Paleta de comandos</a><a href="#sessions" class="sidebar-link">Sesiones</a><a href="#local-backups" class="sidebar-link">Copias locales</a><a href="#input-classifier" class="sidebar-link">Clasificador de entrada</a><a href="#command-signatures" class="sidebar-link">Firmas de comandos</a><a href="#sandbox-controls" class="sidebar-link">Controles de sandbox</a><a href="#command-corrections" class="sidebar-link">Correcciones de comandos</a><a href="#cli-companion" class="sidebar-link">CLI complementaria</a><a href="#themes" class="sidebar-link">Temas</a><a href="#agents-toml" class="sidebar-link">agents.toml</a><a href="#migration-guide" class="sidebar-link">Migrar desde versiones v0.x</a><a href="#troubleshooting" class="sidebar-link">Solución de problemas</a></nav>
+  <nav class="toc" aria-label="Contenido de primer arranque"><strong>Contenido</strong><a href="#install">Instalar</a><a href="#visual-tour">Recorrido visual</a><a href="#concepts">Conceptos</a><a href="#configuration">Configuración</a><a href="#keyboard-shortcuts">Atajos de teclado</a><a href="#agent-detection">Detección de agentes</a><a href="#code-review">Revisión de código</a><a href="#markdown">Markdown</a><a href="#quicklook">Quick Look</a><a href="#browser">Navegador</a><a href="#remote-workspaces">Espacios remotos</a><a href="#web-terminal">Terminal web</a><a href="#shell-integration">Integración de shell</a><a href="#per-project-config">Configuración por proyecto</a><a href="#applescript">AppleScript</a><a href="#plugin-system">Sistema de plugins</a><a href="#splits">Divisiones</a><a href="#quick-terminal">Terminal rápida</a><a href="#notifications">Notificaciones</a><a href="#command-palette">Paleta de comandos</a><a href="#sessions">Sesiones</a><a href="#local-backups">Copias locales</a><a href="#input-classifier">Clasificador de entrada</a><a href="#command-signatures">Firmas de comandos</a><a href="#sandbox-controls">Controles de sandbox</a><a href="#command-corrections">Correcciones de comandos</a><a href="#cli-companion">CLI complementaria</a><a href="#themes">Temas</a><a href="#agents-toml">agents.toml</a><a href="#migration-guide">Migrar desde versiones v0.x</a><a href="#troubleshooting">Solución de problemas</a></nav>
   <article class="prose">
-    <h2 id="install">Instalar</h2><p>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</p>
+    <h2 id="install">Instalar</h2><div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</span></code></pre></div>
 <h2 id="visual-tour">Recorrido visual</h2><p>Abre la barra lateral, el navegador y la Bóveda para confirmar el estado local.</p>
 <h2 id="concepts">Conceptos</h2><p>Pestañas, paneles, sesiones, agentes y Bóveda viven en tu Mac.</p>
-<h2 id="configuration">Configuración</h2><p>.cocxy.toml controla temas, hooks, agentes y seguridad por proyecto.</p>
+<h2 id="configuration">Configuración</h2><p><code>.cocxy.toml</code> controla temas, hooks, agentes y seguridad por proyecto.</p>
 <h2 id="keyboard-shortcuts">Atajos de teclado</h2><p>Usa la paleta de comandos para descubrir acciones sin memorizar atajos.</p>
-<h2 id="agent-detection">Detección de agentes</h2><p>cocxy setup-hooks instala hooks locales y cocxy status verifica el estado.</p>
+<h2 id="agent-detection">Detección de agentes</h2><p><code>cocxy setup-hooks</code> instala hooks locales y <code>cocxy status</code> verifica el estado.</p>
 <h2 id="code-review">Revisión de código</h2><p>Revisa diffs, comentarios en línea y cambios antes de enviar observaciones.</p>
 <h2 id="markdown">Markdown</h2><p>Abre documentos, previsualiza y exporta sin salir del espacio local.</p>
 <h2 id="quicklook">Quick Look</h2><p>La vista previa opera offline con sanitización de contenido.</p>
@@ -95,54 +92,37 @@
 <h2 id="notifications">Notificaciones</h2><p>Las alertas locales se basan en eventos visibles.</p>
 <h2 id="command-palette">Paleta de comandos</h2><p>Busca acciones, ventanas y comandos desde un punto único.</p>
 <h2 id="sessions">Sesiones</h2><p>Reanuda trabajo desde la Bóveda local.</p>
-<h2 id="local-backups">Copias locales</h2><p>Preferencias &gt; Backups permite revisar copias locales. Restaura solo el artefacto seleccionado.</p>
-<h2 id="input-classifier">Clasificador de entrada</h2><pre class="code-block"><code>clasificador de entrada
-[input-classifier]
+<h2 id="local-backups">Copias locales</h2><p><span class="ui-path">Preferencias &gt; Backups</span> permite revisar copias locales. Restaura solo el artefacto seleccionado.</p>
+<h2 id="input-classifier">Clasificador de entrada</h2><p class="doc-caption">clasificador de entrada</p><div class="code-block install install--config"><div class="install__bar"><span>TOML</span></div><pre><code>[input-classifier]
 dangerous-command-warning = true
 auto-route-natural-language = false
-foundation-models-fallback = true
-cocxy classify
-dangerous-command
-natural-language</code><button class="copy-button" type="button">Copiar</button></pre>
-<h2 id="command-signatures">Firmas de comandos</h2><pre class="code-block"><code>firmas de comandos
-[security]
+foundation-models-fallback = true</code></pre></div><div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>cocxy classify</span></code></pre></div><ul class="term-list"><li><code>dangerous-command</code></li><li><code>natural-language</code></li></ul>
+<h2 id="command-signatures">Firmas de comandos</h2><p class="doc-caption">firmas de comandos</p><div class="code-block install install--config"><div class="install__bar"><span>TOML</span></div><pre><code>[security]
 require-signed-templates = false
 require-signed-macros = false
 require-signed-plugins = false
 warn-on-unsigned = true
-trust-on-first-use = false
-cocxy keys generate --author
-cocxy sign template
-cocxy verify template
-verificada
-sin firma
-firma inv&aacute;lida</code><button class="copy-button" type="button">Copiar</button></pre>
-<h2 id="sandbox-controls">Controles de sandbox</h2><pre class="code-block"><code>[security.sandbox]
+trust-on-first-use = false</code></pre></div><div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>cocxy keys generate --author</span>
+<span>cocxy sign template</span>
+<span>cocxy verify template</span></code></pre></div><ul class="label-list"><li>verificada</li><li>sin firma</li><li>firma inv&aacute;lida</li></ul>
+<h2 id="sandbox-controls">Controles de sandbox</h2><div class="code-block install install--config"><div class="install__bar"><span>TOML</span></div><pre><code>[security.sandbox]
 plugins-strict = true
 agents-isolated = true
 mcp-isolated = true
 audit-log-enabled = true
-warn-on-grant = true
-cocxy sandbox list-grants
-cocxy sandbox revoke
-Inspector de sandbox</code><button class="copy-button" type="button">Copiar</button></pre>
-<h2 id="command-corrections">Correcciones de comandos</h2><pre class="code-block"><code>correcciones de comandos
-[command-corrections]
+warn-on-grant = true</code></pre></div><div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>cocxy sandbox list-grants</span>
+<span>cocxy sandbox revoke</span></code></pre></div><ul class="label-list"><li>Inspector de sandbox</li></ul>
+<h2 id="command-corrections">Correcciones de comandos</h2><p class="doc-caption">correcciones de comandos</p><div class="code-block install install--config"><div class="install__bar"><span>TOML</span></div><pre><code>[command-corrections]
 edit-distance-threshold = 2
 foundation-models-enabled = true
 agent-fallback = false
 auto-show-on-failure = true
-show-confidence-badge = true
-cocxy correct
-gti status
-pyhton -m venv .
-Tab
-Esc</code><button class="copy-button" type="button">Copiar</button></pre>
-<h2 id="cli-companion">CLI complementaria</h2><p>cocxy --help lista comandos para automatización local.</p>
+show-confidence-badge = true</code></pre></div><div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>cocxy correct</span></code></pre></div><ul class="term-list"><li><code>gti status</code></li><li><code>pyhton -m venv .</code></li></ul><p class="key-list"><kbd>Tab</kbd> <kbd>Esc</kbd></p>
+<h2 id="cli-companion">CLI complementaria</h2><p><code>cocxy --help</code> lista comandos para automatización local.</p>
 <h2 id="themes">Temas</h2><p>Configura colores, fuente y contraste desde preferencias.</p>
 <h2 id="agents-toml">agents.toml</h2><p>Define agentes propios, patrones y reglas de reanudación.</p>
-<h2 id="migration-guide">Migrar desde versiones v0.x</h2><p>~/.config/cocxy/ conserva configuración; usa brew update &amp;&amp; brew upgrade --cask cocxy.</p>
-<h2 id="troubleshooting">Solución de problemas</h2><p>Ejecuta cocxy doctor y revisa permisos locales. Sin telemetr&iacute;a.</p>
+<h2 id="migration-guide">Migrar desde versiones v0.x</h2><p><code>~/.config/cocxy/</code> conserva configuración; usa <code>brew update &amp;&amp; brew upgrade --cask cocxy</code>.</p>
+<h2 id="troubleshooting">Solución de problemas</h2><p>Ejecuta <code>cocxy doctor</code> y revisa permisos locales. Sin telemetr&iacute;a.</p>
   </article>
 </div></section>
 <section class="section section-band" id="download" aria-labelledby="download-title">
@@ -161,11 +141,7 @@ Esc</code><button class="copy-button" type="button">Copiar</button></pre>
       <article class="card download-card">
         <h3>Homebrew</h3>
         <p>Instala y actualiza desde el tap oficial.</p>
-        <div class="code-block install">
-  <div class="install__bar"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copiar comando de Homebrew">Copiar</button></div>
-  <pre><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code></pre>
-  <span class="sr-only" aria-live="polite" data-copy-status></span>
-</div>
+        <div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</span></code></pre></div>
       </article>
       <article class="card download-card">
         <h3>Canales</h3>
@@ -177,24 +153,7 @@ Esc</code><button class="copy-button" type="button">Copiar</button></pre>
 </section>
 </main>
 <script type="application/ld+json">
-{
- "@context": "https://schema.org",
- "@type": "BreadcrumbList",
- "itemListElement": [
-  {
-   "@type": "ListItem",
-   "position": 1,
-   "name": "Inicio",
-   "item": "https://cocxy.dev/es/"
-  },
-  {
-   "@type": "ListItem",
-   "position": 2,
-   "name": "Primer arranque",
-   "item": "https://cocxy.dev/getting-started.html"
-  }
- ]
-}
+{"@context": "https://schema.org","@type": "BreadcrumbList","itemListElement": [{"@type": "ListItem","position": 1,"name": "Inicio","item": "https://cocxy.dev/es/"},{"@type": "ListItem","position": 2,"name": "Primer arranque","item": "https://cocxy.dev/getting-started.html"}]}
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">

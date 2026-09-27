@@ -29,9 +29,6 @@
   <link rel="icon" type="image/svg+xml" href="/images/icon.svg">
   <link rel="apple-touch-icon" href="/images/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
   <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
@@ -74,7 +71,7 @@
 <section class="section"><div class="container">
   <h2 class="sr-only">Capacidades</h2>
   <ul class="capabilities"><li>Salida JSON</li><li>Socket local</li><li>Scripts de shell</li></ul>
-  <div class="detail-columns"><article id="section-1"><h2>Control automatizable</h2><p>Ventanas, pestañas, divisiones, Bóveda, Markdown, navegador, remoto y diagnósticos se pueden manejar desde shell.</p></article><article id="section-2"><h2>Salida JSON</h2><p>La salida legible por máquinas mantiene pipelines con jq y checks locales.</p></article><article id="section-3"><h2>Socket local</h2><p>El socket de la app opera en la máquina del usuario.</p></article></div>
+  <div class="detail-columns"><article id="section-1"><h2>Control automatizable</h2><p>Ventanas, pestañas, divisiones, Bóveda, Markdown, navegador, remoto y diagnósticos se pueden manejar desde shell.</p></article><article id="section-2"><h2>Salida JSON</h2><p>La salida legible por máquinas mantiene pipelines con <code>jq</code> y checks locales.</p></article><article id="section-3"><h2>Socket local</h2><p>El socket de la app opera en la máquina del usuario.</p></article></div>
   <div class="note is-done"><h2>Local primero</h2><p>La función opera desde tu Mac o desde conexiones que inicias explícitamente.</p></div>
 </div></section>
 <section class="section section-band" aria-labelledby="related-title"><div class="container">
@@ -111,11 +108,7 @@
       <article class="card download-card">
         <h3>Homebrew</h3>
         <p>Instala y actualiza desde el tap oficial.</p>
-        <div class="code-block install">
-  <div class="install__bar"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copiar comando de Homebrew">Copiar</button></div>
-  <pre><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code></pre>
-  <span class="sr-only" aria-live="polite" data-copy-status></span>
-</div>
+        <div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</span></code></pre></div>
       </article>
       <article class="card download-card">
         <h3>Canales</h3>
@@ -127,39 +120,10 @@
 </section>
 </main>
 <script type="application/ld+json">
-{
- "@context": "https://schema.org",
- "@type": "BreadcrumbList",
- "itemListElement": [
-  {
-   "@type": "ListItem",
-   "position": 1,
-   "name": "Inicio",
-   "item": "https://cocxy.dev/es/"
-  },
-  {
-   "@type": "ListItem",
-   "position": 2,
-   "name": "Funciones",
-   "item": "https://cocxy.dev/es/features.html"
-  },
-  {
-   "@type": "ListItem",
-   "position": 3,
-   "name": "CLI complementaria",
-   "item": "https://cocxy.dev/features/cli.html"
-  }
- ]
-}
+{"@context": "https://schema.org","@type": "BreadcrumbList","itemListElement": [{"@type": "ListItem","position": 1,"name": "Inicio","item": "https://cocxy.dev/es/"},{"@type": "ListItem","position": 2,"name": "Funciones","item": "https://cocxy.dev/es/features.html"},{"@type": "ListItem","position": 3,"name": "CLI complementaria","item": "https://cocxy.dev/features/cli.html"}]}
 </script>
 <script type="application/ld+json">
-{
- "@context": "https://schema.org",
- "@type": "TechArticle",
- "name": "CLI complementaria",
- "description": "Automatiza ventanas, pestañas, agentes, hooks, Bóveda, navegador, Markdown, remotos, configuración, temas y diagnósticos.",
- "inLanguage": "es-HN"
-}
+{"@context": "https://schema.org","@type": "TechArticle","name": "CLI complementaria","description": "Automatiza ventanas, pestañas, agentes, hooks, Bóveda, navegador, Markdown, remotos, configuración, temas y diagnósticos.","inLanguage": "es-HN"}
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">

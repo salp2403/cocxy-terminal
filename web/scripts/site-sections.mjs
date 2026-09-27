@@ -53,7 +53,7 @@ export function downloadSection(lang = 'en') {
       <article class="card download-card">
         <h3>Homebrew</h3>
         <p>${es ? 'Instala y actualiza desde el tap oficial.' : 'Install and upgrade from the official tap.'}</p>
-        ${installBlock({ lang, label: 'Terminal', subject: 'Homebrew', command: 'brew tap salp2403/tap &amp;&amp; brew install --cask cocxy' })}
+        ${installBlock({ label: 'Terminal', command: 'brew tap salp2403/tap &amp;&amp; brew install --cask cocxy' })}
       </article>
       <article class="card download-card">
         <h3>${es ? 'Canales' : 'Release channels'}</h3>

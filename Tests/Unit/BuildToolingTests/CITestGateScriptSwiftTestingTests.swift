@@ -5592,7 +5592,7 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         #expect(english.contains(#"<h2 id="migration-guide">Migration from v0.x</h2>"#))
-        #expect(english.contains(##"<a href="#migration-guide" class="sidebar-link">Migration Guide</a>"##))
+        #expect(english.contains(##"<a href="#migration-guide">Migration Guide</a>"##))
         #expect(english.contains("~/.config/cocxy/"))
         #expect(english.contains("brew update &amp;&amp; brew upgrade --cask cocxy"))
         #expect(spanish.contains("Migrar desde versiones v0.x"))
@@ -5612,7 +5612,7 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         #expect(english.contains(#"<h2 id="local-backups">Local Backups</h2>"#))
-        #expect(english.contains(##"<a href="#local-backups" class="sidebar-link">Local Backups</a>"##))
+        #expect(english.contains(##"<a href="#local-backups">Local Backups</a>"##))
         #expect(english.contains("Preferences &gt; Backups"))
         #expect(english.contains("Restore only the selected artifact"))
         #expect(spanish.contains("Copias locales"))
@@ -5633,7 +5633,7 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         #expect(english.contains(#"<h2 id="input-classifier">Input Classifier</h2>"#))
-        #expect(english.contains(##"<a href="#input-classifier" class="sidebar-link">Input Classifier</a>"##))
+        #expect(english.contains(##"<a href="#input-classifier">Input Classifier</a>"##))
         #expect(english.contains("[input-classifier]"))
         #expect(english.contains("dangerous-command-warning = true"))
         #expect(english.contains("auto-route-natural-language = false"))
@@ -5666,7 +5666,7 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         #expect(english.contains(#"<h2 id="command-signatures">Command Signatures</h2>"#))
-        #expect(english.contains(##"<a href="#command-signatures" class="sidebar-link">Command Signatures</a>"##))
+        #expect(english.contains(##"<a href="#command-signatures">Command Signatures</a>"##))
         #expect(english.contains("[security]"))
         #expect(english.contains("require-signed-templates = false"))
         #expect(english.contains("require-signed-macros = false"))
@@ -5709,7 +5709,7 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         #expect(english.contains(#"<h2 id="sandbox-controls">Sandbox Controls</h2>"#))
-        #expect(english.contains(##"<a href="#sandbox-controls" class="sidebar-link">Sandbox Controls</a>"##))
+        #expect(english.contains(##"<a href="#sandbox-controls">Sandbox Controls</a>"##))
         #expect(english.contains("[security.sandbox]"))
         #expect(english.contains("plugins-strict = true"))
         #expect(english.contains("agents-isolated = true"))
@@ -5747,7 +5747,7 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         #expect(english.contains(#"<h2 id="command-corrections">Command Corrections</h2>"#))
-        #expect(english.contains(##"<a href="#command-corrections" class="sidebar-link">Command Corrections</a>"##))
+        #expect(english.contains(##"<a href="#command-corrections">Command Corrections</a>"##))
         #expect(english.contains("[command-corrections]"))
         #expect(english.contains("edit-distance-threshold = 2"))
         #expect(english.contains("foundation-models-enabled = true"))

@@ -175,6 +175,7 @@ for (const file of htmlFiles) {
   const relative = path.relative(publicRoot, file);
   const content = fs.readFileSync(file, 'utf8');
   if (styleAttrPattern.test(content)) fail(`Inline style attribute in ${relative}`);
+  if (/`|\[\[|\{\{/.test(content.replace(/<script\b[\s\S]*?<\/script>/g, ''))) fail(`Unrendered inline markup in ${relative}`);
   if (externalScriptPattern.test(content)) fail(`External script in ${relative}`);
   if (externalImagePattern.test(content)) fail(`External image in ${relative}`);
   if (externalStylesheetPattern.test(content)) fail(`External stylesheet in ${relative}`);

@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { appArtwork, compatibilityBlock, stateChips } from './site-components.mjs';
+import { appArtwork, codeBlock, compatibilityBlock, stateChips } from './site-components.mjs';
 import {
   homeArchitecture,
   homeClosing,
@@ -128,7 +128,7 @@ function minifyCSS(source) {
     .trim();
 }
 
-function head({ title, description, page, lang = 'en', type = 'website', robots = 'index, follow, max-snippet:-1, max-image-preview:large' }) {
+function head({ title, description, page, lang = 'en', type = 'website', robots = 'index, follow, max-snippet:-1, max-image-preview:large', feeds = false }) {
   const htmlLang = lang === 'es' ? 'es-HN' : 'en';
   const ogLocale = lang === 'es' ? 'es_HN' : 'en_US';
   const url = canonicalFor(page, lang);
@@ -159,10 +159,10 @@ function head({ title, description, page, lang = 'en', type = 'website', robots 
   ${alternateLinks(page, lang)}
   <link rel="icon" type="image/svg+xml" href="/images/icon.svg">
   <link rel="apple-touch-icon" href="/images/icon-192.png">
-  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="manifest" href="/manifest.webmanifest">${feeds ? `
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
+  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">` : ''}
   ${themeBootScript()}
 </head>`;
 }
@@ -250,7 +250,7 @@ function softwareSchema(lang = 'en') {
 
 function layout({ page, lang = 'en', title, description, active = '', schema = [], body, robots }) {
   currentPage = page;
-  return `${head({ title, description, page, lang, robots })}\n<body>\n${nav(lang, active)}\n<main id="main">\n${body}\n</main>\n${schemaScripts(schema)}\n${footer(lang)}`;
+  return `${head({ title, description, page, lang, robots, feeds: page === '/' || page === '/releases.html' })}\n<body>\n${nav(lang, active)}\n<main id="main">\n${body}\n</main>\n${schemaScripts(schema)}\n${footer(lang)}`;
 }
 
 function home(lang = 'en') {
@@ -627,7 +627,7 @@ function previewComponents() {
       <div class="feature-tiles">${featurePages.slice(0, 3).map((feature) => featureTile(feature, 'en', { anchor: false })).join('')}</div>
       <div class="stats-grid">${stat('11', 'agents')}${stat('21', 'languages')}${stat('0', 'telemetry')}${stat('MIT', 'license')}${stat('15+', 'macOS')}</div>
       <div class="docs-search"><label for="preview-search">Search</label><input id="preview-search" type="search" data-doc-search placeholder="ssh, agents, plugins"><div data-doc-search-results class="docs-search-results"></div></div>
-      <pre class="code-block"><code>cocxy status</code><button class="copy-button" type="button">Copy</button></pre>
+      ${codeBlock({ label: 'Terminal', lines: ['cocxy status'] })}
     </div></section>
   </main>
   <script src="../public/js/theme-switcher.js?v=${assetVersion}" defer></script>

@@ -29,9 +29,6 @@
   <link rel="icon" type="image/svg+xml" href="/images/icon.svg">
   <link rel="apple-touch-icon" href="/images/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
   <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
@@ -87,11 +84,7 @@
       <article class="card download-card">
         <h3>Homebrew</h3>
         <p>Instala y actualiza desde el tap oficial.</p>
-        <div class="code-block install">
-  <div class="install__bar"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copiar comando de Homebrew">Copiar</button></div>
-  <pre><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code></pre>
-  <span class="sr-only" aria-live="polite" data-copy-status></span>
-</div>
+        <div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</span></code></pre></div>
       </article>
       <article class="card download-card">
         <h3>Canales</h3>
@@ -103,112 +96,10 @@
 </section>
 </main>
 <script type="application/ld+json">
-{
- "@context": "https://schema.org",
- "@type": "BreadcrumbList",
- "itemListElement": [
-  {
-   "@type": "ListItem",
-   "position": 1,
-   "name": "Inicio",
-   "item": "https://cocxy.dev/es/"
-  },
-  {
-   "@type": "ListItem",
-   "position": 2,
-   "name": "Preguntas frecuentes",
-   "item": "https://cocxy.dev/faq.html"
-  }
- ]
-}
+{"@context": "https://schema.org","@type": "BreadcrumbList","itemListElement": [{"@type": "ListItem","position": 1,"name": "Inicio","item": "https://cocxy.dev/es/"},{"@type": "ListItem","position": 2,"name": "Preguntas frecuentes","item": "https://cocxy.dev/faq.html"}]}
 </script>
 <script type="application/ld+json">
-{
- "@context": "https://schema.org",
- "@type": "FAQPage",
- "mainEntity": [
-  {
-   "@type": "Question",
-   "name": "¿Cocxy requiere cuenta?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "No. Puedes instalar y usar Cocxy sin iniciar sesión."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "¿Sube mis sesiones?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "No. Las sesiones y la Bóveda viven localmente."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "¿Cómo se instala?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "DMG firmado o Homebrew."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "¿Qué agentes soporta?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "11 perfiles integrados y agentes propios por configuración."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "¿Qué datos guarda la Bóveda?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "Metadatos y contenido de sesiones locales según las acciones que habilites."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "¿Puedo usar SSH?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "Sí. Las conexiones SSH se inician explícitamente por el usuario."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "¿El navegador carga scripts externos de Cocxy?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "No. El sitio evita JavaScript de terceros."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "¿Dónde está la documentación?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "En el hub de documentación local del sitio."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "¿Cómo reporto seguridad?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "Usa GitHub Security Advisory o dev@cocxy.dev."
-   }
-  },
-  {
-   "@type": "Question",
-   "name": "¿La licencia cambia?",
-   "acceptedAnswer": {
-    "@type": "Answer",
-    "text": "No. Cocxy se mantiene MIT."
-   }
-  }
- ]
-}
+{"@context": "https://schema.org","@type": "FAQPage","mainEntity": [{"@type": "Question","name": "¿Cocxy requiere cuenta?","acceptedAnswer": {"@type": "Answer","text": "No. Puedes instalar y usar Cocxy sin iniciar sesión."}},{"@type": "Question","name": "¿Sube mis sesiones?","acceptedAnswer": {"@type": "Answer","text": "No. Las sesiones y la Bóveda viven localmente."}},{"@type": "Question","name": "¿Cómo se instala?","acceptedAnswer": {"@type": "Answer","text": "DMG firmado o Homebrew."}},{"@type": "Question","name": "¿Qué agentes soporta?","acceptedAnswer": {"@type": "Answer","text": "11 perfiles integrados y agentes propios por configuración."}},{"@type": "Question","name": "¿Qué datos guarda la Bóveda?","acceptedAnswer": {"@type": "Answer","text": "Metadatos y contenido de sesiones locales según las acciones que habilites."}},{"@type": "Question","name": "¿Puedo usar SSH?","acceptedAnswer": {"@type": "Answer","text": "Sí. Las conexiones SSH se inician explícitamente por el usuario."}},{"@type": "Question","name": "¿El navegador carga scripts externos de Cocxy?","acceptedAnswer": {"@type": "Answer","text": "No. El sitio evita JavaScript de terceros."}},{"@type": "Question","name": "¿Dónde está la documentación?","acceptedAnswer": {"@type": "Answer","text": "En el hub de documentación local del sitio."}},{"@type": "Question","name": "¿Cómo reporto seguridad?","acceptedAnswer": {"@type": "Answer","text": "Usa GitHub Security Advisory o dev@cocxy.dev."}},{"@type": "Question","name": "¿La licencia cambia?","acceptedAnswer": {"@type": "Answer","text": "No. Cocxy se mantiene MIT."}}]}
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">

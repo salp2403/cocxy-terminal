@@ -16,6 +16,15 @@ export function escapeHTML(value) {
     .replace(/\u0000(\d+)\u0000/g, (_, index) => entities[Number(index)]);
 }
 
+// Inline markup for visible copy: `code`, [[key]] for keyboard keys, and
+// {{Menu > Item}} for app menu paths. Metadata keeps the plain strings.
+export function renderInline(value) {
+  return escapeHTML(value)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[\[([^\]]+)\]\]/g, '<kbd>$1</kbd>')
+    .replace(/\{\{([^}]+)\}\}/g, '<span class="ui-path">$1</span>');
+}
+
 export function escapeXML(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -25,8 +34,10 @@ export function escapeXML(value) {
     .replaceAll("'", '&apos;');
 }
 
+// Compact JSON that keeps the "key": value spacing the release rewrites match.
 export function json(value) {
-  return JSON.stringify(value, null, 1)
+  return JSON.stringify(value)
+    .replace(/([{,])"([@\w-]+)":/g, '$1"$2": ')
     .replaceAll('<', '\\u003c')
     .replaceAll('>', '\\u003e')
     .replaceAll('&', '\\u0026');

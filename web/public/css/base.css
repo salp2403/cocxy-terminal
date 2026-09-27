@@ -50,11 +50,41 @@ button {
 }
 
 code,
-pre,
-kbd {
+pre {
   font-family: var(--font-mono);
   font-size: 0.9em;
   letter-spacing: 0;
+}
+
+:not(pre) > code {
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+  color: var(--fg);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 0.86em;
+  overflow-wrap: anywhere;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.75em;
+  padding: 0.1em 0.5em;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  color: var(--fg);
+  background: var(--surface);
+  font-family: var(--font-sans);
+  font-size: 0.85em;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.ui-path {
+  color: var(--fg);
+  font-weight: 600;
 }
 
 a {

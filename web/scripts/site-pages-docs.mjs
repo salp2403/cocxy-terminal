@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
-import { escapeHTML } from './site-core.mjs';
+import { escapeHTML, renderInline } from './site-core.mjs';
+import { codeBlock } from './site-components.mjs';
 import { docPages, sampleCommand } from './site-data.mjs';
 import { pageHero } from './site-sections.mjs';
 
@@ -11,6 +12,9 @@ const docGroups = [
 ];
 
 const docHref = (slug, es) => `${es ? '/es' : ''}/docs/${slug}.html`;
+
+// Doc summaries double as page metadata, so file names are marked at render time.
+const markConfigFiles = (text) => text.replace(/(?<![\w`.])(\.cocxy\.toml|agents\.toml)(?![\w`])/g, '`$1`');
 
 export function docsHubBody(lang, description) {
   const es = lang === 'es';
@@ -58,7 +62,7 @@ export function docDetailBody(doc, lang) {
   });
   if (slug === 'first-run') return `${hero}\n${firstRunGuide(lang, docPager(slug, lang))}`;
   return `${hero}
-<section class="section section--tight"><div class="container docs-layout"><nav class="toc" aria-label="${es ? 'Contenido de documentación' : 'Documentation contents'}"><strong>${es ? 'Contenido' : 'Contents'}</strong><a href="#overview">${es ? 'Resumen' : 'Overview'}</a><a href="#steps">${es ? 'Pasos' : 'Steps'}</a><a href="#verify">${es ? 'Verificación' : 'Verification'}</a></nav><article class="prose"><h2 id="overview">${es ? 'Resumen' : 'Overview'}</h2><p>${escapeHTML(description)}</p><h2 id="steps">${es ? 'Pasos' : 'Steps'}</h2><pre class="code-block"><code>${sampleCommand(slug)}</code><button class="copy-button" type="button">${es ? 'Copiar' : 'Copy'}</button></pre><h2 id="verify">${es ? 'Verificación' : 'Verification'}</h2><p>${es ? 'Comprueba la salida localmente antes de depender del flujo en trabajo real.' : 'Verify the output locally before relying on the workflow for real work.'}</p>${docPager(slug, lang)}</article></div></section>`;
+<section class="section section--tight"><div class="container docs-layout"><nav class="toc" aria-label="${es ? 'Contenido de documentación' : 'Documentation contents'}"><strong>${es ? 'Contenido' : 'Contents'}</strong><a href="#overview">${es ? 'Resumen' : 'Overview'}</a><a href="#steps">${es ? 'Pasos' : 'Steps'}</a><a href="#verify">${es ? 'Verificación' : 'Verification'}</a></nav><article class="prose"><h2 id="overview">${es ? 'Resumen' : 'Overview'}</h2><p>${renderInline(markConfigFiles(description))}</p><h2 id="steps">${es ? 'Pasos' : 'Steps'}</h2>${codeBlock({ label: 'Terminal', lines: [sampleCommand(slug)] })}<h2 id="verify">${es ? 'Verificación' : 'Verification'}</h2><p>${es ? 'Comprueba la salida localmente antes de depender del flujo en trabajo real.' : 'Verify the output locally before relying on the workflow for real work.'}</p>${docPager(slug, lang)}</article></div></section>`;
 }
 
 export function movedBody(lang) {
@@ -74,24 +78,31 @@ export function movedBody(lang) {
 ${firstRunGuide(lang)}`;
 }
 
-function docSection(id, title, text, lang) {
+function docSection(id, title, content, lang) {
   const es = lang === 'es';
-  const codeText = text.replaceAll('\\n', '\n');
-  const content = codeText.includes('\n')
-    ? `<pre class="code-block"><code>${escapeHTML(codeText)}</code><button class="copy-button" type="button">${es ? 'Copiar' : 'Copy'}</button></pre>`
-    : `<p>${escapeHTML(text)}</p>`;
-  return `<h2 id="${id}">${escapeHTML(title)}</h2>${content}`;
+  const parts = typeof content === 'string' ? [{ text: content }] : content;
+  const rendered = parts.map((part) => {
+    if (part.text) return `<p>${renderInline(part.text)}</p>`;
+    if (part.caption) return `<p class="doc-caption">${escapeHTML(part.caption)}</p>`;
+    if (part.commands) return codeBlock({ label: 'Terminal', lines: part.commands.map(escapeHTML) });
+    if (part.config) return codeBlock({ kind: 'config', label: 'TOML', lines: part.config.map(escapeHTML) });
+    if (part.terms) return `<ul class="term-list">${part.terms.map((term) => `<li><code>${escapeHTML(term)}</code></li>`).join('')}</ul>`;
+    if (part.labels) return `<ul class="label-list">${part.labels.map((label) => `<li>${escapeHTML(label)}</li>`).join('')}</ul>`;
+    if (part.keys) return `<p class="key-list">${part.keys.map((key) => `<kbd>${escapeHTML(key)}</kbd>`).join(' ')}</p>`;
+    throw new Error(`Unknown doc part in ${id}${es ? ' (es)' : ''}`);
+  }).join('');
+  return `<h2 id="${id}">${escapeHTML(title)}</h2>${rendered}`;
 }
 
 export function firstRunGuide(lang = 'en', pager = '') {
   const es = lang === 'es';
   const sections = es ? [
-    ['install', 'Instalar', 'brew tap salp2403/tap && brew install --cask cocxy'],
+    ['install', 'Instalar', [{ commands: ['brew tap salp2403/tap && brew install --cask cocxy'] }]],
     ['visual-tour', 'Recorrido visual', 'Abre la barra lateral, el navegador y la Bóveda para confirmar el estado local.'],
     ['concepts', 'Conceptos', 'Pestañas, paneles, sesiones, agentes y Bóveda viven en tu Mac.'],
-    ['configuration', 'Configuración', '.cocxy.toml controla temas, hooks, agentes y seguridad por proyecto.'],
+    ['configuration', 'Configuración', '`.cocxy.toml` controla temas, hooks, agentes y seguridad por proyecto.'],
     ['keyboard-shortcuts', 'Atajos de teclado', 'Usa la paleta de comandos para descubrir acciones sin memorizar atajos.'],
-    ['agent-detection', 'Detección de agentes', 'cocxy setup-hooks instala hooks locales y cocxy status verifica el estado.'],
+    ['agent-detection', 'Detección de agentes', '`cocxy setup-hooks` instala hooks locales y `cocxy status` verifica el estado.'],
     ['code-review', 'Revisión de código', 'Revisa diffs, comentarios en línea y cambios antes de enviar observaciones.'],
     ['markdown', 'Markdown', 'Abre documentos, previsualiza y exporta sin salir del espacio local.'],
     ['quicklook', 'Quick Look', 'La vista previa opera offline con sanitización de contenido.'],
@@ -107,23 +118,43 @@ export function firstRunGuide(lang = 'en', pager = '') {
     ['notifications', 'Notificaciones', 'Las alertas locales se basan en eventos visibles.'],
     ['command-palette', 'Paleta de comandos', 'Busca acciones, ventanas y comandos desde un punto único.'],
     ['sessions', 'Sesiones', 'Reanuda trabajo desde la Bóveda local.'],
-    ['local-backups', 'Copias locales', 'Preferencias &gt; Backups permite revisar copias locales. Restaura solo el artefacto seleccionado.'],
-    ['input-classifier', 'Clasificador de entrada', 'clasificador de entrada\\n[input-classifier]\\ndangerous-command-warning = true\\nauto-route-natural-language = false\\nfoundation-models-fallback = true\\ncocxy classify\\ndangerous-command\\nnatural-language'],
-    ['command-signatures', 'Firmas de comandos', 'firmas de comandos\\n[security]\\nrequire-signed-templates = false\\nrequire-signed-macros = false\\nrequire-signed-plugins = false\\nwarn-on-unsigned = true\\ntrust-on-first-use = false\\ncocxy keys generate --author\\ncocxy sign template\\ncocxy verify template\\nverificada\\nsin firma\\nfirma inv&aacute;lida'],
-    ['sandbox-controls', 'Controles de sandbox', '[security.sandbox]\\nplugins-strict = true\\nagents-isolated = true\\nmcp-isolated = true\\naudit-log-enabled = true\\nwarn-on-grant = true\\ncocxy sandbox list-grants\\ncocxy sandbox revoke\\nInspector de sandbox'],
-    ['command-corrections', 'Correcciones de comandos', 'correcciones de comandos\\n[command-corrections]\\nedit-distance-threshold = 2\\nfoundation-models-enabled = true\\nagent-fallback = false\\nauto-show-on-failure = true\\nshow-confidence-badge = true\\ncocxy correct\\ngti status\\npyhton -m venv .\\nTab\\nEsc'],
-    ['cli-companion', 'CLI complementaria', 'cocxy --help lista comandos para automatización local.'],
+    ['local-backups', 'Copias locales', '{{Preferencias &gt; Backups}} permite revisar copias locales. Restaura solo el artefacto seleccionado.'],
+    ['input-classifier', 'Clasificador de entrada', [
+      { caption: 'clasificador de entrada' },
+      { config: ['[input-classifier]', 'dangerous-command-warning = true', 'auto-route-natural-language = false', 'foundation-models-fallback = true'] },
+      { commands: ['cocxy classify'] },
+      { terms: ['dangerous-command', 'natural-language'] },
+    ]],
+    ['command-signatures', 'Firmas de comandos', [
+      { caption: 'firmas de comandos' },
+      { config: ['[security]', 'require-signed-templates = false', 'require-signed-macros = false', 'require-signed-plugins = false', 'warn-on-unsigned = true', 'trust-on-first-use = false'] },
+      { commands: ['cocxy keys generate --author', 'cocxy sign template', 'cocxy verify template'] },
+      { labels: ['verificada', 'sin firma', 'firma inv&aacute;lida'] },
+    ]],
+    ['sandbox-controls', 'Controles de sandbox', [
+      { config: ['[security.sandbox]', 'plugins-strict = true', 'agents-isolated = true', 'mcp-isolated = true', 'audit-log-enabled = true', 'warn-on-grant = true'] },
+      { commands: ['cocxy sandbox list-grants', 'cocxy sandbox revoke'] },
+      { labels: ['Inspector de sandbox'] },
+    ]],
+    ['command-corrections', 'Correcciones de comandos', [
+      { caption: 'correcciones de comandos' },
+      { config: ['[command-corrections]', 'edit-distance-threshold = 2', 'foundation-models-enabled = true', 'agent-fallback = false', 'auto-show-on-failure = true', 'show-confidence-badge = true'] },
+      { commands: ['cocxy correct'] },
+      { terms: ['gti status', 'pyhton -m venv .'] },
+      { keys: ['Tab', 'Esc'] },
+    ]],
+    ['cli-companion', 'CLI complementaria', '`cocxy --help` lista comandos para automatización local.'],
     ['themes', 'Temas', 'Configura colores, fuente y contraste desde preferencias.'],
     ['agents-toml', 'agents.toml', 'Define agentes propios, patrones y reglas de reanudación.'],
-    ['migration-guide', 'Migrar desde versiones v0.x', '~/.config/cocxy/ conserva configuración; usa brew update && brew upgrade --cask cocxy.'],
-    ['troubleshooting', 'Solución de problemas', 'Ejecuta cocxy doctor y revisa permisos locales. Sin telemetr&iacute;a.'],
+    ['migration-guide', 'Migrar desde versiones v0.x', '`~/.config/cocxy/` conserva configuración; usa `brew update && brew upgrade --cask cocxy`.'],
+    ['troubleshooting', 'Solución de problemas', 'Ejecuta `cocxy doctor` y revisa permisos locales. Sin telemetr&iacute;a.'],
   ] : [
-    ['install', 'Install', 'brew tap salp2403/tap && brew install --cask cocxy'],
+    ['install', 'Install', [{ commands: ['brew tap salp2403/tap && brew install --cask cocxy'] }]],
     ['visual-tour', 'Visual Tour', 'Open the sidebar, browser, and Vault to confirm local state.'],
     ['concepts', 'Concepts', 'Tabs, panes, sessions, agents, and Vault live on your Mac.'],
-    ['configuration', 'Configuration', '.cocxy.toml controls themes, hooks, agents, and security per project.'],
+    ['configuration', 'Configuration', '`.cocxy.toml` controls themes, hooks, agents, and security per project.'],
     ['keyboard-shortcuts', 'Keyboard Shortcuts', 'Use the command palette to discover actions without memorizing shortcuts.'],
-    ['agent-detection', 'Agent Detection', 'cocxy setup-hooks installs local hooks and cocxy status verifies state.'],
+    ['agent-detection', 'Agent Detection', '`cocxy setup-hooks` installs local hooks and `cocxy status` verifies state.'],
     ['code-review', 'Code Review', 'Review diffs, inline comments, and changes before returning feedback.'],
     ['markdown', 'Markdown', 'Open documents, preview, and export without leaving the local workspace.'],
     ['quicklook', 'Quick Look', 'Preview content offline with sanitization.'],
@@ -139,20 +170,38 @@ export function firstRunGuide(lang = 'en', pager = '') {
     ['notifications', 'Notifications', 'Local alerts are based on visible events.'],
     ['command-palette', 'Command Palette', 'Search actions, windows, and commands from one place.'],
     ['sessions', 'Sessions', 'Resume work from local Vault history.'],
-    ['local-backups', 'Local Backups', 'Preferences > Backups lets you Restore only the selected artifact.'],
-    ['input-classifier', 'Input Classifier', '[input-classifier]\\ndangerous-command-warning = true\\nauto-route-natural-language = false\\nfoundation-models-fallback = true\\ncocxy classify\\ndangerous-command\\nnatural-language'],
-    ['command-signatures', 'Command Signatures', '[security]\\nrequire-signed-templates = false\\nrequire-signed-macros = false\\nrequire-signed-plugins = false\\nwarn-on-unsigned = true\\ntrust-on-first-use = false\\ncocxy keys generate --author\\ncocxy sign template\\ncocxy verify template\\nverified\\nunsigned\\ninvalid signature'],
-    ['sandbox-controls', 'Sandbox Controls', '[security.sandbox]\\nplugins-strict = true\\nagents-isolated = true\\nmcp-isolated = true\\naudit-log-enabled = true\\nwarn-on-grant = true\\ncocxy sandbox list-grants\\ncocxy sandbox revoke\\nSandbox Inspector\\nAgent command tools run with workspace-scoped read/write access'],
-    ['command-corrections', 'Command Corrections', '[command-corrections]\\nedit-distance-threshold = 2\\nfoundation-models-enabled = true\\nagent-fallback = false\\nauto-show-on-failure = true\\nshow-confidence-badge = true\\ncocxy correct\\ngti status\\npyhton -m venv .\\nTab\\nEsc'],
-    ['cli-companion', 'CLI Companion', 'cocxy --help lists commands for local automation.'],
+    ['local-backups', 'Local Backups', '{{Preferences > Backups}} lets you Restore only the selected artifact.'],
+    ['input-classifier', 'Input Classifier', [
+      { config: ['[input-classifier]', 'dangerous-command-warning = true', 'auto-route-natural-language = false', 'foundation-models-fallback = true'] },
+      { commands: ['cocxy classify'] },
+      { terms: ['dangerous-command', 'natural-language'] },
+    ]],
+    ['command-signatures', 'Command Signatures', [
+      { config: ['[security]', 'require-signed-templates = false', 'require-signed-macros = false', 'require-signed-plugins = false', 'warn-on-unsigned = true', 'trust-on-first-use = false'] },
+      { commands: ['cocxy keys generate --author', 'cocxy sign template', 'cocxy verify template'] },
+      { labels: ['verified', 'unsigned', 'invalid signature'] },
+    ]],
+    ['sandbox-controls', 'Sandbox Controls', [
+      { config: ['[security.sandbox]', 'plugins-strict = true', 'agents-isolated = true', 'mcp-isolated = true', 'audit-log-enabled = true', 'warn-on-grant = true'] },
+      { commands: ['cocxy sandbox list-grants', 'cocxy sandbox revoke'] },
+      { labels: ['Sandbox Inspector'] },
+      { text: 'Agent command tools run with workspace-scoped read/write access' },
+    ]],
+    ['command-corrections', 'Command Corrections', [
+      { config: ['[command-corrections]', 'edit-distance-threshold = 2', 'foundation-models-enabled = true', 'agent-fallback = false', 'auto-show-on-failure = true', 'show-confidence-badge = true'] },
+      { commands: ['cocxy correct'] },
+      { terms: ['gti status', 'pyhton -m venv .'] },
+      { keys: ['Tab', 'Esc'] },
+    ]],
+    ['cli-companion', 'CLI Companion', '`cocxy --help` lists commands for local automation.'],
     ['themes', 'Themes', 'Configure colors, font, and contrast from preferences.'],
     ['agents-toml', 'agents.toml', 'Define custom agents, patterns, and resume rules.'],
-    ['migration-guide', 'Migration from v0.x', '~/.config/cocxy/ keeps configuration; use brew update && brew upgrade --cask cocxy.'],
-    ['troubleshooting', 'Troubleshooting', 'Run cocxy doctor and inspect local permissions.'],
+    ['migration-guide', 'Migration from v0.x', '`~/.config/cocxy/` keeps configuration; use `brew update && brew upgrade --cask cocxy`.'],
+    ['troubleshooting', 'Troubleshooting', 'Run `cocxy doctor` and inspect local permissions.'],
   ];
 
   return `<section class="section section--tight"><div class="container docs-layout">
-  <nav class="toc" aria-label="${es ? 'Contenido de primer arranque' : 'First run contents'}"><strong>${es ? 'Contenido' : 'Contents'}</strong>${sections.map(([id, title]) => `<a href="#${id}" class="sidebar-link">${escapeHTML(!es && id === 'migration-guide' ? 'Migration Guide' : title)}</a>`).join('')}</nav>
+  <nav class="toc" aria-label="${es ? 'Contenido de primer arranque' : 'First run contents'}"><strong>${es ? 'Contenido' : 'Contents'}</strong>${sections.map(([id, title]) => `<a href="#${id}">${escapeHTML(!es && id === 'migration-guide' ? 'Migration Guide' : title)}</a>`).join('')}</nav>
   <article class="prose">
     ${sections.map(([id, title, text]) => docSection(id, title, text, lang)).join('\n')}${pager}
   </article>

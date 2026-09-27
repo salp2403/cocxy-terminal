@@ -29,9 +29,6 @@
   <link rel="icon" type="image/svg+xml" href="/images/icon.svg">
   <link rel="apple-touch-icon" href="/images/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
   <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
@@ -73,7 +70,7 @@
 <section class="section section--flush"><div class="container"><div class="window mock feature-shot" role="img" aria-label="Illustration of the Cocxy window: GitHub Pane"><div class="mock__bar"><i></i><i></i><i></i></div><div class="mock-app mock-app--window"><div class="mock-app__side"><span class="mock-app__label"></span><span class="mock-app__search"></span><div class="mock-app__row is-working"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-waiting"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-done"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-working"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div></div><div class="mock-app__term"><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt is-caret"></span></div><div class="mock-app__panel"><span class="mock-app__label"></span><div class="mock-app__card is-working"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-waiting"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-done"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-idle"><i class="state-dot"></i><span></span><span></span></div></div></div></div></div></section>
 <section class="section"><div class="container">
   <h2 class="sr-only">Capabilities</h2>
-  <ul class="capabilities"><li>gh auth reuse</li><li>Checks and releases</li><li>Local context</li></ul>
+  <ul class="capabilities"><li><code>gh auth</code> reuse</li><li>Checks and releases</li><li>Local context</li></ul>
   <div class="detail-columns"><article id="section-1"><h2>Uses your GitHub auth</h2><p>Cocxy shells out to the authenticated GitHub CLI paths you control instead of brokering repository data through a Cocxy backend.</p></article><article id="section-2"><h2>PR and release context</h2><p>Checks, release links, issue references, and repository pages remain visible while agents work.</p></article><article id="section-3"><h2>Scriptable</h2><p>The CLI companion keeps GitHub workflows addressable from shell scripts and local automation.</p></article></div>
   <div class="note is-done"><h2>Local-first</h2><p>The feature operates on your Mac or through connections you explicitly start.</p></div>
 </div></section>
@@ -111,11 +108,7 @@
       <article class="card download-card">
         <h3>Homebrew</h3>
         <p>Install and upgrade from the official tap.</p>
-        <div class="code-block install">
-  <div class="install__bar"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copy Homebrew command">Copy</button></div>
-  <pre><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code></pre>
-  <span class="sr-only" aria-live="polite" data-copy-status></span>
-</div>
+        <div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</span></code></pre></div>
       </article>
       <article class="card download-card">
         <h3>Release channels</h3>
@@ -127,39 +120,10 @@
 </section>
 </main>
 <script type="application/ld+json">
-{
- "@context": "https://schema.org",
- "@type": "BreadcrumbList",
- "itemListElement": [
-  {
-   "@type": "ListItem",
-   "position": 1,
-   "name": "Home",
-   "item": "https://cocxy.dev/"
-  },
-  {
-   "@type": "ListItem",
-   "position": 2,
-   "name": "Features",
-   "item": "https://cocxy.dev/features.html"
-  },
-  {
-   "@type": "ListItem",
-   "position": 3,
-   "name": "GitHub Pane",
-   "item": "https://cocxy.dev/features/github.html"
-  }
- ]
-}
+{"@context": "https://schema.org","@type": "BreadcrumbList","itemListElement": [{"@type": "ListItem","position": 1,"name": "Home","item": "https://cocxy.dev/"},{"@type": "ListItem","position": 2,"name": "Features","item": "https://cocxy.dev/features.html"},{"@type": "ListItem","position": 3,"name": "GitHub Pane","item": "https://cocxy.dev/features/github.html"}]}
 </script>
 <script type="application/ld+json">
-{
- "@context": "https://schema.org",
- "@type": "TechArticle",
- "name": "GitHub Pane",
- "description": "Keep pull requests, issues, checks, release pages, and repository context next to the terminal without adding a Cocxy account.",
- "inLanguage": "en"
-}
+{"@context": "https://schema.org","@type": "TechArticle","name": "GitHub Pane","description": "Keep pull requests, issues, checks, release pages, and repository context next to the terminal without adding a Cocxy account.","inLanguage": "en"}
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">

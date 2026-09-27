@@ -28,14 +28,18 @@ export function compatibilityBlock(lang = 'en') {
 <!-- /compatibility -->`;
 }
 
-export function installBlock({ lang = 'en', label, command, subject }) {
-  const es = lang === 'es';
-  const copyLabel = es ? `Copiar comando de ${subject}` : `Copy ${subject} command`;
-  return `<div class="code-block install">
-  <div class="install__bar"><span>${label}</span><button class="copy-button" type="button" aria-label="${copyLabel}">${es ? 'Copiar' : 'Copy'}</button></div>
-  <pre><code>${command}</code></pre>
-  <span class="sr-only" aria-live="polite" data-copy-status></span>
-</div>`;
+// kind 'command' prefixes each line with a prompt (CSS, so Copy takes the
+// bare command); kind 'config' shows the snippet as written.
+// main.js adds the Copy button to the bar, which already reserves its height.
+export function codeBlock({ kind = 'command', label, lines }) {
+  const body = kind === 'command'
+    ? lines.map((line) => `<span>${line}</span>`).join('\n')
+    : lines.join('\n');
+  return `<div class="code-block install${kind === 'config' ? ' install--config' : ''}"><div class="install__bar"><span>${label}</span></div><pre><code>${body}</code></pre></div>`;
+}
+
+export function installBlock({ label, command }) {
+  return codeBlock({ label, lines: [command] });
 }
 
 export function stateChips(lang = 'en') {

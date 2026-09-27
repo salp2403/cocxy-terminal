@@ -29,9 +29,6 @@
   <link rel="icon" type="image/svg+xml" href="/images/icon.svg">
   <link rel="apple-touch-icon" href="/images/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
   <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
@@ -73,8 +70,8 @@
 <section class="section section--flush"><div class="container"><div class="window mock feature-shot" role="img" aria-label="Ilustración de la ventana de Cocxy: Integración de shell"><div class="mock__bar"><i></i><i></i><i></i></div><div class="mock-app mock-app--window"><div class="mock-app__side"><span class="mock-app__label"></span><span class="mock-app__search"></span><div class="mock-app__row is-working"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-waiting"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-done"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-working"><i class="state-dot"></i><span></span></div><div class="mock-app__row is-idle"><i class="state-dot"></i><span></span></div></div><div class="mock-app__term"><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt"></span><span></span><span class="is-dim"></span><span></span><span></span><span class="is-dim"></span><span class="is-ok"></span><span class="is-prompt is-caret"></span></div><div class="mock-app__panel"><span class="mock-app__label"></span><div class="mock-app__card is-working"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-waiting"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-done"><i class="state-dot"></i><span></span><span></span></div><div class="mock-app__card is-idle"><i class="state-dot"></i><span></span><span></span></div></div></div></div></div></section>
 <section class="section"><div class="container">
   <h2 class="sr-only">Capacidades</h2>
-  <ul class="capabilities"><li>zsh, bash, fish</li><li>cwd con OSC 7</li><li>bloques OSC 133</li></ul>
-  <div class="detail-columns"><article id="section-1"><h2>Respeta dotfiles</h2><p>Los wrappers restauran HOME, ZDOTDIR y XDG_CONFIG_HOME sin apropiarse del entorno de login.</p></article><article id="section-2"><h2>Límites de comando</h2><p>OSC 133 y OSC 7 entregan cwd y ciclo de vida del comando a la app.</p></article><article id="section-3"><h2>Varias shells</h2><p>zsh, bash y fish tienen rutas documentadas y probables.</p></article></div>
+  <ul class="capabilities"><li>zsh, bash, fish</li><li>cwd con <code>OSC 7</code></li><li>bloques <code>OSC 133</code></li></ul>
+  <div class="detail-columns"><article id="section-1"><h2>Respeta dotfiles</h2><p>Los wrappers restauran <code>HOME</code>, <code>ZDOTDIR</code> y <code>XDG_CONFIG_HOME</code> sin apropiarse del entorno de login.</p></article><article id="section-2"><h2>Límites de comando</h2><p><code>OSC 133</code> y <code>OSC 7</code> entregan cwd y ciclo de vida del comando a la app.</p></article><article id="section-3"><h2>Varias shells</h2><p>zsh, bash y fish tienen rutas documentadas y probables.</p></article></div>
   <div class="note is-done"><h2>Local primero</h2><p>La función opera desde tu Mac o desde conexiones que inicias explícitamente.</p></div>
 </div></section>
 <section class="section section-band" aria-labelledby="related-title"><div class="container">
@@ -111,11 +108,7 @@
       <article class="card download-card">
         <h3>Homebrew</h3>
         <p>Instala y actualiza desde el tap oficial.</p>
-        <div class="code-block install">
-  <div class="install__bar"><span>Terminal</span><button class="copy-button" type="button" aria-label="Copiar comando de Homebrew">Copiar</button></div>
-  <pre><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code></pre>
-  <span class="sr-only" aria-live="polite" data-copy-status></span>
-</div>
+        <div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</span></code></pre></div>
       </article>
       <article class="card download-card">
         <h3>Canales</h3>
@@ -127,39 +120,10 @@
 </section>
 </main>
 <script type="application/ld+json">
-{
- "@context": "https://schema.org",
- "@type": "BreadcrumbList",
- "itemListElement": [
-  {
-   "@type": "ListItem",
-   "position": 1,
-   "name": "Inicio",
-   "item": "https://cocxy.dev/es/"
-  },
-  {
-   "@type": "ListItem",
-   "position": 2,
-   "name": "Funciones",
-   "item": "https://cocxy.dev/es/features.html"
-  },
-  {
-   "@type": "ListItem",
-   "position": 3,
-   "name": "Integración de shell",
-   "item": "https://cocxy.dev/features/shell.html"
-  }
- ]
-}
+{"@context": "https://schema.org","@type": "BreadcrumbList","itemListElement": [{"@type": "ListItem","position": 1,"name": "Inicio","item": "https://cocxy.dev/es/"},{"@type": "ListItem","position": 2,"name": "Funciones","item": "https://cocxy.dev/es/features.html"},{"@type": "ListItem","position": 3,"name": "Integración de shell","item": "https://cocxy.dev/features/shell.html"}]}
 </script>
 <script type="application/ld+json">
-{
- "@context": "https://schema.org",
- "@type": "TechArticle",
- "name": "Integración de shell",
- "description": "Wrappers para zsh, bash y fish preservan dotfiles y añaden cwd, límites de comandos y apertura de navegador.",
- "inLanguage": "es-HN"
-}
+{"@context": "https://schema.org","@type": "TechArticle","name": "Integración de shell","description": "Wrappers para zsh, bash y fish preservan dotfiles y añaden cwd, límites de comandos y apertura de navegador.","inLanguage": "es-HN"}
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">

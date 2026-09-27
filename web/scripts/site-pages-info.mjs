@@ -114,7 +114,7 @@ export function channelsBody(lang) {
     [es ? 'Nocturno' : 'Nightly', es ? 'Canal de mayor riesgo para pruebas tempranas.' : 'Higher-risk channel for early testing.', 'brew install --cask cocxy-nightly', 'appcast-nightly.xml', 'is-working'],
   ];
   return `<section class="section section--tight"><div class="container cards-3">${channels
-    .map(([title, text, command, feed, state]) => `<article class="card download-card ${state}"><h2 class="channel-title"><span class="state-dot"></span>${title}</h2><p>${text}</p>${installBlock({ lang, label: 'Homebrew', subject: title, command })}<p class="card-meta">${feed}</p></article>`)
+    .map(([title, text, command, feed, state]) => `<article class="card download-card ${state}"><h2 class="channel-title"><span class="state-dot"></span>${title}</h2><p>${text}</p>${installBlock({ label: 'Homebrew', command })}<p class="card-meta">${feed}</p></article>`)
     .join('\n  ')}</div></section>`;
 }
 

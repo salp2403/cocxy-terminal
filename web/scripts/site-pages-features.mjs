@@ -1,19 +1,17 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
-import { escapeHTML, icon } from './site-core.mjs';
-import { appArtwork, reviewArtwork } from './site-components.mjs';
+import { escapeHTML, icon, renderInline } from './site-core.mjs';
+import { appArtwork, codeBlock, reviewArtwork } from './site-components.mjs';
 import { agents, featureAnchors, featurePages, localizedBullets } from './site-data.mjs';
 import { note, pageHero } from './site-sections.mjs';
 import { productShot } from './site-shots.mjs';
-
-const copyLabel = (es) => (es ? 'Copiar' : 'Copy');
 
 export function featureTile(feature, lang = 'en', { anchor = true, bullets = false } = {}) {
   const es = lang === 'es';
   const href = `${es ? '/es' : ''}/features/${feature.slug}.html`;
   const id = anchor ? ` id="${feature.anchor}"` : '';
   const list = bullets
-    ? `\n  <ul>${localizedBullets(feature, lang).map((item) => `<li>${escapeHTML(item)}</li>`).join('')}</ul>`
+    ? `\n  <ul>${localizedBullets(feature, lang).map((item) => `<li>${renderInline(item)}</li>`).join('')}</ul>`
     : '';
   return `<article class="feature-tile ${feature.cssClass}"${id}>
   ${icon(feature.icon)}
@@ -52,7 +50,7 @@ export function featureHubBody(lang, description) {
   const extras = [
     ['quicklook', 'Quick Look', es ? 'Vista previa local y sanitizada para archivos y documentos.' : 'Local sanitized previews for files and documents.'],
     ['web-terminal', es ? 'Terminal remota' : 'Remote terminal', es ? 'Sesiones remotas iniciadas por el usuario con adjuntar y reconectar.' : 'User-started remote sessions with attach and reconnect paths.'],
-    ['per-project', es ? 'Configuración por proyecto' : 'Per-project configuration', es ? '.cocxy.toml separa ajustes del repo y perfil global.' : '.cocxy.toml separates repo-local settings from the global profile.'],
+    ['per-project', es ? 'Configuración por proyecto' : 'Per-project configuration', es ? '`.cocxy.toml` separa ajustes del repo y perfil global.' : '`.cocxy.toml` separates repo-local settings from the global profile.'],
     ['applescript', 'AppleScript', es ? 'Automatización de ventanas y pestañas mediante permisos del sistema.' : 'Window and tab automation through system permissions.'],
   ];
   return `${pageHero({ lang, eyebrow: es ? 'Funciones' : 'Features', title: es ? 'Funciones de Cocxy' : 'Cocxy features', description })}
@@ -68,10 +66,8 @@ export function featureHubBody(lang, description) {
       <h2>${es ? 'Capas adicionales' : 'Additional layers'}</h2>
       <p>${es ? 'Completan el mapa y se explican en la documentación.' : 'They complete the map and are covered in the docs.'}</p>
     </div>
-    <div class="cards-2">${extras.map(([id, title, text]) => `<article class="card" id="${id}"><h3>${escapeHTML(title)}</h3><p>${escapeHTML(text)}</p></article>`).join('')}</div>
-    <div class="callout"><h2>${es ? 'Comandos locales' : 'Local commands'}</h2><pre class="code-block"><code>cocxy setup-hooks
-cocxy github status
-cocxy remote status</code><button class="copy-button" type="button">${copyLabel(es)}</button></pre><p>${es ? 'Todo queda local y explícito, con cero telemetr&iacute;a.' : 'Everything stays local and explicit, with zero telemetry.'}</p></div>
+    <div class="cards-2">${extras.map(([id, title, text]) => `<article class="card" id="${id}"><h3>${escapeHTML(title)}</h3><p>${renderInline(text)}</p></article>`).join('')}</div>
+    <div class="callout"><h2>${es ? 'Comandos locales' : 'Local commands'}</h2>${codeBlock({ label: 'Terminal', lines: ['cocxy setup-hooks', 'cocxy github status', 'cocxy remote status'] })}<p>${es ? 'Todo queda local y explícito, con cero telemetr&iacute;a.' : 'Everything stays local and explicit, with zero telemetry.'}</p></div>
   </div>
 </div></section>`;
 }
@@ -92,8 +88,8 @@ export function featureDetailBody(feature, lang) {
     ? agentsSections(lang)
     : `<section class="section"><div class="container">
   <h2 class="sr-only">${es ? 'Capacidades' : 'Capabilities'}</h2>
-  <ul class="capabilities">${localizedBullets(feature, lang).map((item) => `<li>${escapeHTML(item)}</li>`).join('')}</ul>
-  <div class="detail-columns">${sections.map(([heading, text], index) => `<article id="section-${index + 1}"><h2>${escapeHTML(heading)}</h2><p>${escapeHTML(text)}</p></article>`).join('')}</div>
+  <ul class="capabilities">${localizedBullets(feature, lang).map((item) => `<li>${renderInline(item)}</li>`).join('')}</ul>
+  <div class="detail-columns">${sections.map(([heading, text], index) => `<article id="section-${index + 1}"><h2>${escapeHTML(heading)}</h2><p>${renderInline(text)}</p></article>`).join('')}</div>
   ${note({ title: es ? 'Local primero' : 'Local-first', body: es ? 'La función opera desde tu Mac o desde conexiones que inicias explícitamente.' : 'The feature operates on your Mac or through connections you explicitly start.' })}
 </div></section>`;
   return `${hero}
@@ -115,10 +111,7 @@ function agentsSections(lang) {
     </table>
   </div>
   <div class="detail-grid section-mini">
-    <article class="card"><h2>${es ? 'Añade los tuyos' : 'Add your own'}</h2><p>${es ? 'Define agentes propios en agents.toml con comandos, patrones y reglas de reanudación sin modificar el código de la app.' : 'Define custom agents in agents.toml with commands, patterns, and resume rules without changing app code.'}</p><pre class="code-block"><code>[agents.local-reviewer]
-command = "reviewer"
-resume = "resume &lt;session-id&gt;"
-patterns = ["waiting", "working"]</code><button class="copy-button" type="button">${copyLabel(es)}</button></pre></article>
+    <article class="card"><h2>${es ? 'Añade los tuyos' : 'Add your own'}</h2><p>${renderInline(es ? 'Define agentes propios en `agents.toml` con comandos, patrones y reglas de reanudación sin modificar el código de la app.' : 'Define custom agents in `agents.toml` with commands, patterns, and resume rules without changing app code.')}</p>${codeBlock({ kind: 'config', label: 'agents.toml', lines: ['[agents.local-reviewer]', 'command = &quot;reviewer&quot;', 'resume = &quot;resume &lt;session-id&gt;&quot;', 'patterns = [&quot;waiting&quot;, &quot;working&quot;]'] })}</article>
     <article class="card"><h2>${es ? 'Cómo funciona' : 'How detection works'}</h2><p>${es ? 'Cocxy combina hooks, señales OSC, patrones de proceso y heurísticas de tiempo para mostrar estado local.' : 'Cocxy combines hooks, OSC signals, process patterns, and timing heuristics to show local state.'}</p></article>
     <article class="card"><h2>${es ? 'Integración con Bóveda' : 'Vault integration'}</h2><p>${es ? 'Las sesiones detectadas pueden buscarse y reanudarse desde la Bóveda cifrada.' : 'Detected sessions can be searched and resumed from the encrypted Vault.'}</p></article>
   </div>
