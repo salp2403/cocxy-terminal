@@ -715,7 +715,7 @@ struct SOCKS5ProxyTests {
 
         proxy.stop()
         client.cancel()
-
+        await waitForSOCKSProxyEffect { forwarder.lastTransport == nil }
         #expect(forwarder.lastTransport == nil)
     }
 

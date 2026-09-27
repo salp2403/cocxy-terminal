@@ -765,7 +765,7 @@ struct HTTPConnectProxyTests {
 
         proxy.stop()
         client.cancel()
-
+        await waitForHTTPProxyEffect { forwarder.lastTransport == nil }
         #expect(forwarder.lastTransport == nil)
     }
 }
