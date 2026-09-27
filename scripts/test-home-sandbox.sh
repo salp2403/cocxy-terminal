@@ -57,7 +57,7 @@ cocxy_test_home_end() {
     <(cocxy_test_home_preferences))"
   if [[ -n "$created" ]]; then
     echo "error: the test run created preference files in $cocxy_test_home_real/Library/Preferences:" >&2
-    printf '%s\n' "$created" | head -20 >&2
+    printf '%s\n' "$created" | head -20 >&2 || true
     status=1
   fi
   if ! cocxy_test_home_config | cmp -s "$cocxy_test_home_state/config.before" -; then
