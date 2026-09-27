@@ -10,6 +10,7 @@ struct TestHomeSandboxSwiftTestingTests {
     private enum Mutation: String {
         case none
         case preference
+        case hostDomains
         case config
     }
 
@@ -99,6 +100,13 @@ struct TestHomeSandboxSwiftTestingTests {
         #expect(result.stderr.contains("leaked.suite.plist"))
     }
 
+    @Test("system and test host preference domains created during a run are not leaks")
+    func hostDomainsAreIgnored() throws {
+        let result = try runSandbox(.hostDomains, appRunning: false)
+
+        #expect(result.status == 0, "\(result.stderr)")
+    }
+
     @Test("a change under the real cocxy config fails unless a Cocxy app owns it")
     func configChangeFailsWithoutApp() throws {
         let unattended = try runSandbox(.config, appRunning: false)
@@ -146,6 +154,8 @@ struct TestHomeSandboxSwiftTestingTests {
         [[ "$(readlink "$HOME/Library/Keychains")" == "$REAL/Library/Keychains" ]] || exit 4
         case "$mutation" in
           preference) printf x > "$REAL/Library/Preferences/leaked.suite.plist" ;;
+          hostDomains) for name in com.apple.dt.xctest.tool swiftpm-testing-helper; do
+              printf x > "$REAL/Library/Preferences/$name.plist"; done ;;
           config) printf '[{}]' > "$REAL/.config/cocxy/projects/registry.json" ;;
         esac
         cocxy_test_home_end

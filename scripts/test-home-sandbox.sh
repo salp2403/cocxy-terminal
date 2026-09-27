@@ -33,7 +33,13 @@ cocxy_test_home_preferences() {
   local directory="$cocxy_test_home_real/Library/Preferences"
   [[ -d "$directory" ]] || return 0
   # cfprefsd writes through temporary siblings; only settled domains count.
-  ls -1 "$directory" | { grep '\.plist$' || true; } | LC_ALL=C sort
+  # macOS services create com.apple.* domains at any time, and AppKit saves
+  # window frames into the test host's own domain, which a fresh machine does
+  # not have yet; neither is state a test left in the user's account.
+  ls -1 "$directory" \
+    | { grep '\.plist$' || true; } \
+    | { grep -Ev '^(com\.apple\..*|swiftpm-testing-helper\.plist)$' || true; } \
+    | LC_ALL=C sort
 }
 
 cocxy_test_home_config() {
