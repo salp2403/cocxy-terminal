@@ -82,7 +82,7 @@ struct CocxyCoreCommandBlockWiringSwiftTestingTests {
     private func makeFixture(named name: String) throws -> CommandBlockWiringFixture {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-\(name)-\(UUID().uuidString)", isDirectory: true)
-        let bridge = try makeBridge()
+        let bridge = try makeSilentBridge()
         let store = TerminalBlockStore(rootDirectory: root)
         let controller = MainWindowController(
             bridge: bridge,
@@ -125,6 +125,24 @@ private struct CommandBlockWiringFixture {
         controller.close()
         try? FileManager.default.removeItem(at: root)
     }
+}
+
+/// The fixture feeds its own OSC 133 marks. A real shell would print prompt
+/// marks into the same terminal whenever it finishes starting, which on a slow
+/// machine lands inside the fed block, so the surface runs `cat` instead.
+@MainActor
+private func makeSilentBridge() throws -> CocxyCoreBridge {
+    let bridge = CocxyCoreBridge()
+    try bridge.initialize(config: TerminalEngineConfig(
+        fontFamily: "Menlo",
+        fontSize: 14,
+        themeName: "Test",
+        shell: "/bin/cat",
+        workingDirectory: URL(fileURLWithPath: NSTemporaryDirectory()),
+        windowPaddingX: 8,
+        windowPaddingY: 4
+    ))
+    return bridge
 }
 
 private func feedCommandBlock(
