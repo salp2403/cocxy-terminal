@@ -56,17 +56,17 @@ extension AppDelegate {
             ? controller.focusedSplitSurfaceView?.terminalViewModel?.surfaceID
                 ?? controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
             : nil
-        let surfaceID = requiredSurfaceID.flatMap {
-            availableSurfaceIDs.contains($0) ? $0 : nil
-        } ?? (requiredSurfaceID == nil
-            ? visibleSurfaceID.flatMap { availableSurfaceIDs.contains($0) ? $0 : nil }
-                ?? controller.tabSurfaceMap[tabID].flatMap {
-                    availableSurfaceIDs.contains($0) ? $0 : nil
-                }
-                ?? availableSurfaceIDs.sorted {
-                    $0.rawValue.uuidString < $1.rawValue.uuidString
-                }.first
-            : nil)
+        let surfaceID: SurfaceID?
+        if let requiredSurfaceID {
+            surfaceID = availableSurfaceIDs.contains(requiredSurfaceID) ? requiredSurfaceID : nil
+        } else if let visibleSurfaceID, availableSurfaceIDs.contains(visibleSurfaceID) {
+            surfaceID = visibleSurfaceID
+        } else if let mappedSurfaceID = controller.tabSurfaceMap[tabID],
+                  availableSurfaceIDs.contains(mappedSurfaceID) {
+            surfaceID = mappedSurfaceID
+        } else {
+            surfaceID = availableSurfaceIDs.min { $0.rawValue.uuidString < $1.rawValue.uuidString }
+        }
         guard let surfaceID else { return nil }
 
         return SocketPrivilegedCommandPresentationTarget(

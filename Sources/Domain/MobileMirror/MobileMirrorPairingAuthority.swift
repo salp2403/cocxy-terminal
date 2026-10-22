@@ -260,11 +260,11 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
                 throw MobileMirrorError.pairingExpired
             }
             switch current.decision {
-            case nil:
+            case .none:
                 return .pending
-            case false:
+            case .some(false):
                 return .denied
-            case true:
+            case .some(true):
                 guard let cookie = current.cookieDeliveryToken else {
                     throw MobileMirrorError.sessionExpired
                 }

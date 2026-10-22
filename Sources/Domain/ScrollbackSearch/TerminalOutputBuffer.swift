@@ -139,7 +139,7 @@ final class TerminalOutputBuffer {
     private static func decodeLine(_ bytes: [UInt8]) -> String {
         // Head truncation can land inside a multi-byte scalar. Dropping only
         // leading continuation bytes preserves valid UTF-8 for the retained tail.
-        let firstScalarStart = bytes.firstIndex { ($0 & 0xC0) != 0x80 } ?? bytes.endIndex
+        let firstScalarStart = bytes.firstIndex(where: { ($0 & 0xC0) != 0x80 }) ?? bytes.endIndex
         return String(decoding: bytes[firstScalarStart...], as: UTF8.self)
     }
 }

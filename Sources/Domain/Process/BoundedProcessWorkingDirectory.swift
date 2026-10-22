@@ -48,18 +48,10 @@ struct BoundedProcessWorkingDirectory: Sendable {
         switch storage {
         case .path:
             result = displayURL.path.withCString { path in
-                if #available(macOS 26.0, *) {
-                    posix_spawn_file_actions_addchdir(&actions, path)
-                } else {
-                    posix_spawn_file_actions_addchdir_np(&actions, path)
-                }
+                posix_spawn_file_actions_addchdir_np(&actions, path)
             }
         case .descriptor(let descriptor):
-            if #available(macOS 26.0, *) {
-                result = posix_spawn_file_actions_addfchdir(&actions, descriptor)
-            } else {
-                result = posix_spawn_file_actions_addfchdir_np(&actions, descriptor)
-            }
+            result = posix_spawn_file_actions_addfchdir_np(&actions, descriptor)
         }
         guard result == 0 else {
             throw BoundedProcessRunnerError.systemCallFailed(
