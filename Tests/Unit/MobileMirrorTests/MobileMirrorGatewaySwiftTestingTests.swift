@@ -194,7 +194,8 @@ struct MobileMirrorGatewaySwiftTestingTests: MobileMirrorRouterTestSupport {
             await stalled.wait()
             return .response(.json(["status": "ok"]))
         }
-        weak var retainedGateway = gateway
+        weak var retainedGateway: MobileMirrorGateway?
+        retainedGateway = gateway
         let port = try #require(try gateway?.start())
         let stalledURL = try #require(URL(
             string: "http://127.0.0.1:\(port)/stalled"
