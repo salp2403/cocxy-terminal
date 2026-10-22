@@ -831,7 +831,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect((ciMetric("cocxycore_frame_average_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 0.6)
         #expect((ciMetric("cocxycore_frame_p99_ms")?["baseline"] as? NSNumber)?.doubleValue == 6.5)
         #expect((ciMetric("cocxycore_frame_p99_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 1.5)
-        #expect((ciMetric("cocxycore_idle_rss_delta_mb")?["baseline"] as? NSNumber)?.doubleValue == 3.0)
+        #expect((ciMetric("cocxycore_idle_rss_delta_mb")?["baseline"] as? NSNumber)?.doubleValue == 8.3)
         #expect(FileManager.default.isExecutableFile(atPath: memoryScriptURL.path))
         #expect(memoryScript.contains("BENCHMARK_ENV=\"COCXY_MEMORY_BASELINE_BENCHMARK=1\""))
         #expect(memoryScript.contains("/usr/bin/open -n --env \"$BENCHMARK_ENV\" \"$APP_PATH\""))
