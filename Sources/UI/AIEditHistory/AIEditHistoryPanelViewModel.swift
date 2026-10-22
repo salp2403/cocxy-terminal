@@ -3,6 +3,7 @@
 
 import Combine
 import Foundation
+import os.log
 
 struct AIEditRecordPresentation: Identifiable, Equatable {
     let id: UUID
@@ -36,6 +37,11 @@ extension AIEditReverter: AIEditReverting {}
 
 @MainActor
 final class AIEditHistoryPanelViewModel: ObservableObject {
+    private static let presentationLogger = Logger(
+        subsystem: "dev.cocxy.terminal",
+        category: "AIEditHistoryPresentation"
+    )
+
     private enum StatusState: Equatable {
         case noEdits
         case noSession
@@ -152,6 +158,9 @@ final class AIEditHistoryPanelViewModel: ObservableObject {
         do {
             try action()
         } catch {
+            Self.presentationLogger.error(
+                "Edit history action failed: \(String(describing: error), privacy: .private)"
+            )
             currentError = error
             errorText = Self.localizedErrorDescription(error, localizer: localizer)
         }
@@ -259,7 +268,10 @@ final class AIEditHistoryPanelViewModel: ObservableObject {
                 )
             }
         }
-        return (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+        return localizer.string(
+            "project.error.message",
+            fallback: "The project action could not be completed."
+        )
     }
 
 }

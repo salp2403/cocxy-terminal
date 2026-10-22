@@ -243,10 +243,69 @@ struct TerminalFontMetricsSnapshot: Equatable, Sendable, Encodable {
 
 struct TerminalViewportSnapshot: Equatable, Sendable, Encodable {
     let visibleStartRow: UInt32
+    let historyMaxVisibleStart: UInt32
     let visibleRowCount: UInt16
+    let visibleColumnCount: UInt16
     let cellWidth: Float
     let cellHeight: Float
     let isAltScreen: Bool
+    let mouseTrackingMode: UInt8
+    let mouseEncodingMode: UInt8
+    let alternateScrollMode: Bool
+
+    var viewOffset: UInt32 {
+        guard historyMaxVisibleStart >= visibleStartRow else { return 0 }
+        return historyMaxVisibleStart - visibleStartRow
+    }
+}
+
+struct TerminalCommandBlockOverlayMarker: Equatable, Sendable {
+    let blockCount: UInt32
+    let newestBlockType: UInt8
+    let newestStartRow: UInt32
+    let newestEndRow: UInt32
+    let newestStartTimeNs: UInt64
+    let newestEndTimeNs: UInt64
+    let newestStreamID: UInt32
+}
+
+struct TerminalCommandBlockOverlaySnapshot: Equatable, Sendable {
+    let viewport: TerminalViewportSnapshot
+    let marker: TerminalCommandBlockOverlayMarker
+}
+
+/// One physical row in the editable command range captured for cursor-click
+/// movement. Widths use the core's 0=narrow, 1=wide, 2=continuation encoding;
+/// semantics use 2 for command-input cells.
+struct TerminalCursorClickRow: Equatable, Sendable {
+    let absoluteRow: UInt32
+    let wrapped: Bool
+    let cellWidths: [UInt8]
+    let cellSemantics: [UInt8]
+}
+
+/// Atomic CocxyCore state used to decide whether a prompt click may synthesize
+/// cursor movement. `rows` spans the captured OSC 133;B position through the
+/// live cursor so multiline movement cannot mix metadata from different frames.
+struct TerminalCursorClickSnapshot: Equatable, Sendable {
+    let visibleStartRow: UInt32
+    let historyMaxVisibleStart: UInt32
+    let cursorScreenRow: UInt16
+    let cursorColumn: UInt16
+    let semanticState: UInt8
+    let isAltScreen: Bool
+    let mouseTrackingMode: UInt8
+    let selectionActive: Bool
+    let shellClickMode: UInt8
+    let rows: [TerminalCursorClickRow]
+
+    var cursorAbsoluteRow: UInt32 {
+        historyMaxVisibleStart + UInt32(cursorScreenRow)
+    }
+
+    var cellWidths: [UInt8] {
+        rows.first { $0.absoluteRow == cursorAbsoluteRow }?.cellWidths ?? []
+    }
 }
 
 struct TerminalSelectionSnapshot: Equatable, Sendable, Encodable {
@@ -345,80 +404,6 @@ struct TerminalStreamSnapshot: Equatable, Sendable {
     let exitCode: Int16
 }
 
-struct WebTerminalConfiguration: Equatable, Sendable {
-    let bindAddress: String
-    let port: UInt16
-    let authToken: String
-    let maxConnections: UInt16
-    let maxFrameRate: UInt32
-    let stopAfterFirstConnection: Bool
-    let firstConnectionHandler: (@Sendable () -> Void)?
-
-    init(
-        bindAddress: String,
-        port: UInt16,
-        authToken: String,
-        maxConnections: UInt16,
-        maxFrameRate: UInt32,
-        stopAfterFirstConnection: Bool = false,
-        firstConnectionHandler: (@Sendable () -> Void)? = nil
-    ) {
-        self.bindAddress = bindAddress
-        self.port = port
-        self.authToken = authToken
-        self.maxConnections = maxConnections
-        self.maxFrameRate = maxFrameRate
-        self.stopAfterFirstConnection = stopAfterFirstConnection
-        self.firstConnectionHandler = firstConnectionHandler
-    }
-
-    static let defaultBindAddress = "127.0.0.1"
-    static let defaultPort: UInt16 = 7770
-    static let defaultMaxConnections: UInt16 = 4
-    static let defaultMaxFrameRate: UInt32 = 60
-    static let maximumAuthenticationTokenByteCount = 127
-
-    static func normalizedLoopbackBindAddress(_ value: String) -> String? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        switch trimmed {
-        case "127.0.0.1", "::1":
-            return trimmed
-        default:
-            return nil
-        }
-    }
-
-    static func isValidAuthenticationToken(_ value: String) -> Bool {
-        let bytes = Array(value.utf8)
-        guard !bytes.isEmpty,
-              bytes.count <= maximumAuthenticationTokenByteCount else {
-            return false
-        }
-        return bytes.allSatisfy { (0x21...0x7E).contains($0) }
-    }
-
-    static func == (lhs: WebTerminalConfiguration, rhs: WebTerminalConfiguration) -> Bool {
-        lhs.bindAddress == rhs.bindAddress
-            && lhs.port == rhs.port
-            && lhs.authToken == rhs.authToken
-            && lhs.maxConnections == rhs.maxConnections
-            && lhs.maxFrameRate == rhs.maxFrameRate
-            && lhs.stopAfterFirstConnection == rhs.stopAfterFirstConnection
-    }
-}
-
-struct WebTerminalStatus: Equatable, Sendable {
-    let running: Bool
-    let bindAddress: String
-    let port: UInt16
-    let connectionCount: UInt16
-    let authRequired: Bool
-    let maxFrameRate: UInt32
-    let oneShot: Bool
-    let lastEventType: String?
-    let lastEventConnectionID: UInt16?
-}
-
 // MARK: - CocxyCore Bridge
 
 /// Concrete implementation of `TerminalEngine` using CocxyCore's C API.
@@ -448,16 +433,23 @@ struct WebTerminalStatus: Equatable, Sendable {
 /// happens on the source's queue; callbacks are dispatched to main before
 /// touching Swift-owned state.
 @MainActor
-final class CocxyCoreBridge: TerminalEngine {
+final class CocxyCoreBridge: DescriptorBoundTerminalEngine {
 
     // MARK: - Per-Surface State
 
     /// All state associated with a single terminal surface.
     struct SurfaceState {
+        struct ExternalTransport {
+            let write: (Data) -> Bool
+            let resize: (TerminalSize) -> Void
+            let close: () -> Void
+        }
+
         struct WebServerState {
             let handle: OpaquePointer
             let bindAddress: String
             let authToken: String
+            let allowsInput: Bool
             let stopAfterFirstConnection: Bool
             let firstConnectionHandler: (@Sendable () -> Void)?
             var maxFrameRate: UInt32
@@ -467,11 +459,11 @@ final class CocxyCoreBridge: TerminalEngine {
         }
 
         let terminal: OpaquePointer      // cocxycore_terminal*
-        let pty: OpaquePointer           // cocxycore_pty*
+        let pty: OpaquePointer?          // cocxycore_pty* for local surfaces
         let masterFD: Int32
         let childPID: pid_t
         let childProcessIdentity: TerminalProcessIdentity?
-        let readSource: DispatchSourceRead
+        let readSource: DispatchSourceRead?
         let contextBox: Unmanaged<CallbackContext>
         /// Serializes access to the C terminal state between the PTY read
         /// loop (background queue, calls `cocxycore_terminal_feed`) and the
@@ -496,6 +488,7 @@ final class CocxyCoreBridge: TerminalEngine {
         var configuredImageDiskCacheDirectory: URL?
         var configuredImageDiskCacheLimitBytes: UInt64 = 512 * 1024 * 1024
         var accessibilityNotificationHandler: ((TerminalAccessibilityNotification) -> Void)?
+        let externalTransport: ExternalTransport?
 
         var outputHandler: (@Sendable (Data) -> Void)?
         var oscHandler: (@Sendable (OSCNotification) -> Void)?
@@ -504,10 +497,12 @@ final class CocxyCoreBridge: TerminalEngine {
     /// Boxed context passed to C callbacks to recover the bridge + surface ID.
     final class CallbackContext {
         let surfaceID: SurfaceID
+        let terminal: OpaquePointer
         weak var bridge: CocxyCoreBridge?
 
-        init(surfaceID: SurfaceID, bridge: CocxyCoreBridge) {
+        init(surfaceID: SurfaceID, terminal: OpaquePointer, bridge: CocxyCoreBridge) {
             self.surfaceID = surfaceID
+            self.terminal = terminal
             self.bridge = bridge
         }
     }
@@ -516,6 +511,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
     private var surfaces: [SurfaceID: SurfaceState] = [:]
     private var reapedPTYChildren = Set<SurfaceID>()
+    private var reportedPTYChildExits = Set<SurfaceID>()
     private var lastPTYExitPollAt: TimeInterval = 0
     private var exitReapTimer: DispatchSourceTimer?
     private var config: TerminalEngineConfig?
@@ -534,6 +530,12 @@ final class CocxyCoreBridge: TerminalEngine {
     /// host does not need it, and tests can exercise the bridge without
     /// a subscriber.
     var inputDeliveryObserver: (@MainActor (SurfaceID, InputDeliveryEvent) -> Void)?
+
+    /// Test-only probe used to prove that metadata-only overlay refreshes do
+    /// not copy command output from CocxyCore.
+    var commandBlockOutputCopyObserver: (() -> Void)?
+    var commandBlockMetadataLoadObserver: (() -> Void)?
+    var commandBlockVisibleRowMapObserver: ((UInt32) -> Void)?
 
     /// Semantic adapter that converts CocxyCore events to HookEvent/TimelineEvent
     /// format for the existing agent detection and timeline systems.
@@ -579,7 +581,7 @@ final class CocxyCoreBridge: TerminalEngine {
     private static let readBufferSize = 262144
 
     /// DSR/DECRQSS response buffer size.
-    private static let responseBufferSize = 256
+    private static let responseBufferSize = 4 * 1024
 
     /// Scrollback capacity (rows stored in ring buffer).
     private static let scrollbackCapacity: UInt32 = 10000
@@ -650,9 +652,39 @@ final class CocxyCoreBridge: TerminalEngine {
         workingDirectory: URL?,
         command: String?
     ) throws -> SurfaceID {
+        try createSurface(
+            in: view,
+            workingDirectory: workingDirectory,
+            verifiedWorkingDirectory: nil,
+            command: command
+        )
+    }
+
+    func createSurface(
+        in view: NativeTerminalView,
+        verifiedWorkingDirectory: ProjectDirectoryRoot,
+        command: String?
+    ) throws -> SurfaceID {
+        try createSurface(
+            in: view,
+            workingDirectory: nil,
+            verifiedWorkingDirectory: verifiedWorkingDirectory,
+            command: command
+        )
+    }
+
+    private func createSurface(
+        in view: NativeTerminalView,
+        workingDirectory: URL?,
+        verifiedWorkingDirectory: ProjectDirectoryRoot?,
+        command: String?
+    ) throws -> SurfaceID {
         guard let config = self.config else {
             throw TerminalEngineError.initializationFailed(reason: "Bridge not initialized")
         }
+        let resolvedWorkingDirectory = try verifiedWorkingDirectory?.descriptorBoundURL()
+            ?? workingDirectory
+            ?? config.workingDirectory
 
         let surfaceID = SurfaceID()
 
@@ -675,7 +707,8 @@ final class CocxyCoreBridge: TerminalEngine {
             rows: initialRows,
             cols: initialCols,
             shell: shellPath,
-            workingDirectory: workingDirectory ?? config.workingDirectory
+            workingDirectory: resolvedWorkingDirectory,
+            workingDirectoryDescriptor: verifiedWorkingDirectory?.descriptor
         ) else {
             cocxycore_terminal_destroy(terminal)
             throw TerminalEngineError.surfaceCreationFailed(reason: "PTY spawn failed")
@@ -697,7 +730,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
         // 6. Register C callbacks
         let contextBox = Unmanaged.passRetained(
-            CallbackContext(surfaceID: surfaceID, bridge: self)
+            CallbackContext(surfaceID: surfaceID, terminal: terminal, bridge: self)
         )
         registerCallbacks(terminal: terminal, context: contextBox.toOpaque())
 
@@ -744,9 +777,11 @@ final class CocxyCoreBridge: TerminalEngine {
             configuredImageFileTransferEnabled: config.imageFileTransferEnabled,
             configuredImageITerm2Enabled: config.iterm2ImagesEnabled,
             configuredImageDiskCacheDirectory: config.imageDiskCacheDirectory,
-            configuredImageDiskCacheLimitBytes: config.imageDiskCacheLimitBytes
+            configuredImageDiskCacheLimitBytes: config.imageDiskCacheLimitBytes,
+            externalTransport: nil
         )
         reapedPTYChildren.remove(surfaceID)
+        reportedPTYChildExits.remove(surfaceID)
 
         applyFont(family: config.fontFamily, size: config.fontSize, to: surfaceID)
         readSource.resume()
@@ -754,9 +789,69 @@ final class CocxyCoreBridge: TerminalEngine {
         return surfaceID
     }
 
+    /// Creates a renderer-backed terminal surface whose bytes are carried by
+    /// an external transport instead of a locally spawned PTY.
+    ///
+    /// The CocxyCore parser, mode-aware key encoder, Metal renderer, IME state,
+    /// semantic callbacks, and accessibility model remain identical to local
+    /// surfaces. Only byte delivery, resize propagation, and teardown are
+    /// delegated to the caller-provided transport.
+    func createExternalSurface(
+        in view: NativeTerminalView,
+        workingDirectory: URL?,
+        transport: SurfaceState.ExternalTransport
+    ) throws -> SurfaceID {
+        guard let config else {
+            throw TerminalEngineError.initializationFailed(reason: "Bridge not initialized")
+        }
+
+        let initialRows: UInt16 = 24
+        let initialCols: UInt16 = 80
+        guard let terminal = cocxycore_terminal_create(initialRows, initialCols) else {
+            throw TerminalEngineError.surfaceCreationFailed(reason: "Terminal allocation failed")
+        }
+
+        configureTerminal(terminal, config: config)
+        applyNativeSemanticPatterns(to: terminal)
+
+        let surfaceID = SurfaceID()
+        let contextBox = Unmanaged.passRetained(
+            CallbackContext(surfaceID: surfaceID, terminal: terminal, bridge: self)
+        )
+        registerCallbacks(terminal: terminal, context: contextBox.toOpaque())
+
+        surfaces[surfaceID] = SurfaceState(
+            terminal: terminal,
+            pty: nil,
+            masterFD: -1,
+            childPID: -1,
+            childProcessIdentity: nil,
+            readSource: nil,
+            contextBox: contextBox,
+            terminalLock: NSLock(),
+            hostView: view,
+            lastKnownWorkingDirectory: (workingDirectory ?? config.workingDirectory).standardizedFileURL,
+            lastReportedFocus: nil,
+            configuredImageMemoryLimitBytes: config.imageMemoryLimitBytes,
+            configuredImageFileTransferEnabled: config.imageFileTransferEnabled,
+            configuredImageITerm2Enabled: config.iterm2ImagesEnabled,
+            configuredImageDiskCacheDirectory: config.imageDiskCacheDirectory,
+            configuredImageDiskCacheLimitBytes: config.imageDiskCacheLimitBytes,
+            externalTransport: transport
+        )
+
+        applyFont(family: config.fontFamily, size: config.fontSize, to: surfaceID)
+        return surfaceID
+    }
+
     func destroySurface(_ id: SurfaceID) {
         guard let state = surfaces.removeValue(forKey: id) else { return }
         reapedPTYChildren.remove(id)
+        reportedPTYChildExits.remove(id)
+
+        state.terminalLock.withLock {
+            cocxycore_terminal_preedit_clear(state.terminal)
+        }
 
         state.pendingFallbackWorkingDirectoryProbe?.cancel()
 
@@ -769,9 +864,15 @@ final class CocxyCoreBridge: TerminalEngine {
             cocxycore_web_destroy(webState.handle)
         }
 
-        // Resource teardown is deferred to the source's cancel handler so
-        // any in-flight read callback drains before the raw pointers vanish.
-        state.readSource.cancel()
+        if let readSource = state.readSource {
+            // Local PTY resource teardown is deferred to the source's cancel
+            // handler so an in-flight read drains before pointers vanish.
+            readSource.cancel()
+        } else {
+            state.externalTransport?.close()
+            cocxycore_terminal_destroy(state.terminal)
+            state.contextBox.release()
+        }
     }
 
     @discardableResult
@@ -789,7 +890,11 @@ final class CocxyCoreBridge: TerminalEngine {
 
     @discardableResult
     private func writeBytes(_ bytes: [UInt8], to state: SurfaceState) -> Bool {
-        writeAttachedPTYBytes(bytes, terminal: state.terminal, pty: state.pty) > 0
+        if let pty = state.pty {
+            return writeAttachedPTYBytes(bytes, terminal: state.terminal, pty: pty) == bytes.count
+        }
+        guard let transport = state.externalTransport else { return false }
+        return transport.write(Data(bytes))
     }
 
     @discardableResult
@@ -802,7 +907,13 @@ final class CocxyCoreBridge: TerminalEngine {
 
         let attachedWritten = bytes.withUnsafeBufferPointer { buffer in
             guard let baseAddress = buffer.baseAddress else { return 0 }
-            return Int(cocxycore_terminal_write_attached_pty(terminal, baseAddress, buffer.count))
+            return TerminalByteWriteCompleter.writeAll(byteCount: buffer.count) { offset, remaining in
+                Int(cocxycore_terminal_write_attached_pty(
+                    terminal,
+                    baseAddress.advanced(by: offset),
+                    remaining
+                ))
+            }
         }
 
         if attachedWritten > 0 {
@@ -811,16 +922,100 @@ final class CocxyCoreBridge: TerminalEngine {
 
         return bytes.withUnsafeBufferPointer { buffer in
             guard let baseAddress = buffer.baseAddress else { return 0 }
-            return Int(cocxycore_pty_write(pty, baseAddress, buffer.count))
+            return TerminalByteWriteCompleter.writeAll(byteCount: buffer.count) { offset, remaining in
+                Int(cocxycore_pty_write(pty, baseAddress.advanced(by: offset), remaining))
+            }
         }
+    }
+
+    /// Drains every response queued by CocxyCore while the caller owns the
+    /// surface terminal lock. Parser feed, resize, font, and focus operations
+    /// can all enqueue protocol replies, so leaving this logic in the PTY read
+    /// loop alone can strand responses until unrelated output arrives.
+    private func drainTerminalResponsesLocked(
+        terminal: OpaquePointer,
+        pty: OpaquePointer
+    ) {
+        var responseBuffer = [UInt8](repeating: 0, count: Self.responseBufferSize)
+        while cocxycore_terminal_has_response(terminal) {
+            let count = cocxycore_terminal_read_response(
+                terminal,
+                &responseBuffer,
+                responseBuffer.count
+            )
+            guard count > 0 else { break }
+            _ = writeAttachedPTYBytes(
+                Array(responseBuffer.prefix(count)),
+                terminal: terminal,
+                pty: pty
+            )
+        }
+    }
+
+    private func drainTerminalResponsesLocked(for state: SurfaceState) {
+        if let pty = state.pty {
+            drainTerminalResponsesLocked(terminal: state.terminal, pty: pty)
+            return
+        }
+
+        guard let transport = state.externalTransport else { return }
+        var responseBuffer = [UInt8](repeating: 0, count: Self.responseBufferSize)
+        while cocxycore_terminal_has_response(state.terminal) {
+            let count = cocxycore_terminal_read_response(
+                state.terminal,
+                &responseBuffer,
+                responseBuffer.count
+            )
+            guard count > 0 else { break }
+            _ = transport.write(Data(responseBuffer.prefix(count)))
+        }
+    }
+
+    /// Feeds bytes received from an external session into CocxyCore's normal
+    /// parser and redraw pipeline. Returns false for a local or missing surface.
+    @discardableResult
+    func feedExternalOutput(_ data: Data, to surface: SurfaceID) -> Bool {
+        guard !data.isEmpty else {
+            return surfaces[surface]?.externalTransport != nil
+        }
+
+        let altScreenChanged = withTerminalLock(surface) { state -> Bool? in
+            guard state.externalTransport != nil else { return nil }
+            let wasAltScreen = cocxycore_terminal_is_alt_screen(state.terminal)
+            let bytes = [UInt8](data)
+            bytes.withUnsafeBufferPointer { buffer in
+                guard let baseAddress = buffer.baseAddress else { return }
+                cocxycore_terminal_feed(state.terminal, baseAddress, buffer.count)
+            }
+            drainTerminalResponsesLocked(for: state)
+            return wasAltScreen != cocxycore_terminal_is_alt_screen(state.terminal)
+        } ?? nil
+
+        guard let altScreenChanged else { return false }
+        let hostView = surfaces[surface]?.hostView as? TerminalHostView
+        if altScreenChanged {
+            hostView?.updateInteractionMetrics()
+        }
+        hostView?.requestImmediateRedraw()
+        surfaces[surface]?.outputHandler?(data)
+        return true
     }
 
     @discardableResult
     func sendKeyEvent(_ event: KeyEvent, to surface: SurfaceID) -> Bool {
-        // Drop key-up events before acquiring the lock — they are no-ops
-        // for the C terminal and we should not stall the caller behind the
-        // background feed loop just to bail out.
-        guard event.isKeyDown else { return false }
+        sendKeyEvent(event, to: surface, requiresDelivery: false)
+    }
+
+    func sendKeyEventConfirmingDelivery(_ event: KeyEvent, to surface: SurfaceID) -> Bool {
+        sendKeyEvent(event, to: surface, requiresDelivery: true)
+    }
+
+    private func sendKeyEvent(
+        _ event: KeyEvent,
+        to surface: SurfaceID,
+        requiresDelivery: Bool
+    ) -> Bool {
+        guard !event.isComposing else { return false }
 
         // Encode + write the key sequence atomically inside the per-surface
         // lock. `cocxycore_terminal_encode_key` and `encode_char` read the
@@ -832,33 +1027,94 @@ final class CocxyCoreBridge: TerminalEngine {
         // that the parser is mid-update, which is the suspected trigger for
         // the transparent-on-Claude-launch bug.
         let lockedResult = withTerminalLock(surface) { state -> DeliveryOutcome in
-            var buf = [UInt8](repeating: 0, count: 32)
-            var bytesWritten = 0
-
-            if let chars = event.characters,
-               let scalar = chars.unicodeScalars.first {
-                let codepoint = scalar.value
-                let mods = mapModifiers(event.modifiers)
-
-                // Try special key mapping first (arrows, function keys, etc.)
-                if let key = mapKeyCodeToSpecialKey(event.keyCode) {
-                    bytesWritten = cocxycore_terminal_encode_key(
-                        state.terminal, key, mods, &buf, buf.count
-                    )
-                } else {
-                    bytesWritten = cocxycore_terminal_encode_char(
-                        state.terminal, codepoint, mods, &buf, buf.count
-                    )
-                }
-            } else if let key = mapKeyCodeToSpecialKey(event.keyCode) {
-                // No characters — try special key mapping.
-                let mods = mapModifiers(event.modifiers)
-                bytesWritten = cocxycore_terminal_encode_key(
-                    state.terminal, key, mods, &buf, buf.count
-                )
+            // Only a key press crosses the AppKit composition boundary. A
+            // progressive key release must never erase a newly started preedit.
+            if event.isKeyDown, cocxycore_terminal_preedit_active(state.terminal) {
+                cocxycore_terminal_preedit_clear(state.terminal)
             }
 
-            if bytesWritten > 0 {
+            let mods = mapModifiers(event.modifiers)
+            let eventType: UInt8 = event.isKeyDown
+                ? (event.isRepeat ? 2 : 1)
+                : 3
+            var encodedBytes: [UInt8] = []
+            let characterScalars = event.characters?.unicodeScalars.map(\.value) ?? []
+
+            // Hardware-special keys win even when AppKit supplies a private-use
+            // character for the event (for example, an arrow key).
+            if let key = TerminalKeyMapping.specialKey(forMacKeyCode: event.keyCode) {
+                let associatedText = event.isKeyDown && TerminalKeyMapping.carriesAssociatedText(key)
+                    ? Array(characterScalars.prefix(8))
+                    : []
+                var buffer = [UInt8](repeating: 0, count: 256)
+                let count = associatedText.withUnsafeBufferPointer { associatedBuffer in
+                    cocxycore_terminal_encode_key_event(
+                        state.terminal,
+                        key,
+                        mods,
+                        eventType,
+                        event.shiftedCodepoint,
+                        event.baseLayoutCodepoint,
+                        associatedBuffer.baseAddress,
+                        associatedBuffer.count,
+                        &buffer,
+                        buffer.count
+                    )
+                }
+                if count > 0 {
+                    encodedBytes.append(contentsOf: buffer.prefix(count))
+                }
+            } else if event.unshiftedCodepoint > 0 || characterScalars.isEmpty == false {
+                let hasCommandModifier = event.modifiers.contains(.command)
+                let hasControlModifier = event.modifiers.contains(.control)
+                let primaryCodepoint = event.unshiftedCodepoint > 0
+                    ? event.unshiftedCodepoint
+                    : (characterScalars.first ?? 0)
+                let associatedText = event.isKeyDown
+                    ? Array(characterScalars.prefix(8))
+                    : []
+                var buffer = [UInt8](repeating: 0, count: 256)
+                let count = associatedText.withUnsafeBufferPointer { associatedBuffer in
+                    cocxycore_terminal_encode_char_event(
+                        state.terminal,
+                        primaryCodepoint,
+                        mods,
+                        eventType,
+                        event.shiftedCodepoint,
+                        event.baseLayoutCodepoint,
+                        associatedBuffer.baseAddress,
+                        associatedBuffer.count,
+                        &buffer,
+                        buffer.count
+                    )
+                }
+                if count > 0 {
+                    encodedBytes.append(contentsOf: buffer.prefix(count))
+
+                    // Ctrl/Super encoding consumes the primary scalar before
+                    // associated text is considered. Preserve any additional
+                    // scalars exactly as the legacy bridge did. The core API
+                    // intentionally caps associated text at eight codepoints,
+                    // so append overflow rather than silently dropping it.
+                    let remainderStart: Int?
+                    if hasCommandModifier || hasControlModifier {
+                        remainderStart = 1
+                    } else if characterScalars.count > 8 {
+                        remainderStart = 8
+                    } else {
+                        remainderStart = nil
+                    }
+                    if let remainderStart, characterScalars.count > remainderStart {
+                        for scalar in characterScalars.dropFirst(remainderStart) {
+                            if let unicodeScalar = UnicodeScalar(scalar) {
+                                encodedBytes.append(contentsOf: String(unicodeScalar).utf8)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !encodedBytes.isEmpty {
                 // `writeBytes(_:to: SurfaceState)` calls `writeAttachedPTYBytes`
                 // which mutates the C terminal's response buffer. It must run
                 // inside the same critical section as the encode call so the
@@ -868,10 +1124,10 @@ final class CocxyCoreBridge: TerminalEngine {
                 // test surfaced a case where zsh autocorrect left a split
                 // silently unable to write, and this log is the observation
                 // channel we need to reproduce it in a controlled session.
-                let writeOK = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
+                let writeOK = writeBytes(encodedBytes, to: state)
                 if !writeOK {
                     cocxyInputLog.error(
-                        "sendKeyEvent: PTY write dropped \(bytesWritten) encoded bytes for surface \(surface.rawValue.uuidString, privacy: .public); keypress is lost"
+                        "sendKeyEvent: PTY write dropped \(encodedBytes.count) encoded bytes for surface \(surface.rawValue.uuidString, privacy: .public); keypress is lost"
                     )
                 }
                 return DeliveryOutcome(keyHandled: true, writeSucceeded: writeOK)
@@ -904,7 +1160,7 @@ final class CocxyCoreBridge: TerminalEngine {
                 outcome.writeSucceeded ? .delivered : .dropped(.ptyWriteFailed)
             )
         }
-        return outcome.keyHandled
+        return outcome.keyHandled && (!requiresDelivery || outcome.writeSucceeded)
     }
 
     /// Internal tuple that disambiguates the two boolean dimensions the
@@ -917,9 +1173,10 @@ final class CocxyCoreBridge: TerminalEngine {
         let writeSucceeded: Bool
     }
 
-    func sendText(_ text: String, to surface: SurfaceID) {
+    @discardableResult
+    func sendText(_ text: String, to surface: SurfaceID) -> Bool {
         let bytes = Array(text.utf8)
-        guard !bytes.isEmpty else { return }
+        guard !bytes.isEmpty else { return true }
 
         // Raw text injection is another PTY write path. Keep it under the
         // same lock as key events so manual agent launches and programmatic
@@ -949,9 +1206,14 @@ final class CocxyCoreBridge: TerminalEngine {
         } else {
             inputDeliveryObserver?(surface, .delivered)
         }
+        return writeResult == true
     }
 
-    func sendPreeditText(_ text: String, to surface: SurfaceID) {
+    func sendPreeditText(
+        _ text: String,
+        cursorByteOffset: Int?,
+        to surface: SurfaceID
+    ) {
         // IME composition state mutates the same terminal cell buffer the
         // background feed loop reads, so all preedit mutations run inside
         // the per-surface lock.
@@ -962,9 +1224,17 @@ final class CocxyCoreBridge: TerminalEngine {
                 let row = cocxycore_terminal_cursor_row(state.terminal)
                 let col = cocxycore_terminal_cursor_col(state.terminal)
                 let bytes = Array(text.utf8)
-                let displayWidth = Self.terminalDisplayWidth(of: text)
+                let boundedCursorOffset = min(
+                    max(0, cursorByteOffset ?? bytes.count),
+                    bytes.count
+                )
                 cocxycore_terminal_preedit_set(
-                    state.terminal, row, col, bytes, bytes.count, displayWidth
+                    state.terminal,
+                    row,
+                    col,
+                    bytes,
+                    bytes.count,
+                    UInt16(clamping: boundedCursorOffset)
                 )
             }
         }
@@ -994,6 +1264,12 @@ final class CocxyCoreBridge: TerminalEngine {
             let row = Int(cocxycore_terminal_cursor_row(state.terminal))
             let col = Int(cocxycore_terminal_cursor_col(state.terminal))
             return (row, col)
+        }
+    }
+
+    func isSynchronizedOutputActive(for surface: SurfaceID) -> Bool? {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_mode_synchronized_output(state.terminal)
         }
     }
 
@@ -1056,7 +1332,12 @@ final class CocxyCoreBridge: TerminalEngine {
         // transparent frame (see bug v0.1.52).
         let observesProtocolV2 = withTerminalLock(surface) { state -> Bool in
             cocxycore_terminal_resize(state.terminal, size.rows, size.columns)
-            cocxycore_pty_resize(state.pty, size.rows, size.columns)
+            if let pty = state.pty {
+                cocxycore_pty_resize(pty, size.rows, size.columns)
+            } else {
+                state.externalTransport?.resize(size)
+            }
+            drainTerminalResponsesLocked(for: state)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -1096,14 +1377,25 @@ final class CocxyCoreBridge: TerminalEngine {
         lastPTYExitPollAt = now
 
         for surfaceID in Array(surfaces.keys) where !reapedPTYChildren.contains(surfaceID) {
-            let didReap = withTerminalLock(surfaceID) { state -> Bool in
-                cocxycore_terminal_poll_processes(state.terminal)
+            let outcome = withTerminalLock(surfaceID) { state -> (didExit: Bool, didReap: Bool, exitCode: Int32?) in
+                guard let pty = state.pty else { return (false, false, nil) }
                 var waitResult = cocxycore_pty_wait_result()
-                _ = cocxycore_pty_wait_check(state.pty, &waitResult)
-                guard cocxycore_pty_is_alive(state.pty) == false else { return false }
-                return TerminalProcessBoundary.terminateAndReapPTYChild(state.childPID)
+                let didExit = cocxycore_pty_wait_check(pty, &waitResult)
+                    && cocxycore_pty_is_alive(pty) == false
+                cocxycore_terminal_poll_processes(state.terminal)
+                guard didExit else { return (false, false, nil) }
+                let exitCode = waitResult.status == 1 ? Int32(waitResult.exit_code) : nil
+                return (
+                    true,
+                    TerminalProcessBoundary.terminateAndReapPTYChild(state.childPID),
+                    exitCode
+                )
             }
-            if didReap == true {
+            guard let outcome else { continue }
+            if outcome.didExit {
+                reportRootProcessExitIfNeeded(surfaceID: surfaceID, exitCode: outcome.exitCode)
+            }
+            if outcome.didReap {
                 reapedPTYChildren.insert(surfaceID)
             }
         }
@@ -1159,7 +1451,7 @@ final class CocxyCoreBridge: TerminalEngine {
         }
     }
 
-    /// Updates the text selection on the given surface to the rectangular
+    /// Updates the text selection on the given surface to the linear
     /// range defined by `(startRow, startCol)` → `(endRow, endCol)` in
     /// absolute history coordinates.
     ///
@@ -1181,6 +1473,37 @@ final class CocxyCoreBridge: TerminalEngine {
         }
     }
 
+    /// Updates a rectangular selection in absolute history coordinates.
+    func setRectangularSelection(
+        for surface: SurfaceID,
+        startRow: UInt32,
+        startCol: UInt16,
+        endRow: UInt32,
+        endCol: UInt16
+    ) {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_selection_set_rectangular(
+                state.terminal,
+                startRow, startCol,
+                endRow, endCol
+            )
+        }
+    }
+
+    /// Selects the word-like run containing one absolute history cell.
+    func selectWord(for surface: SurfaceID, row: UInt32, col: UInt16) -> Bool {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_selection_select_word(state.terminal, row, col)
+        } ?? false
+    }
+
+    /// Selects the complete logical line containing one absolute history row.
+    func selectLogicalLine(for surface: SurfaceID, row: UInt32) -> Bool {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_selection_select_logical_line(state.terminal, row)
+        } ?? false
+    }
+
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {
         // Short-circuit BEFORE acquiring the lock so duplicate focus signals
         // (which arrive from both the responder chain and window-key delegate
@@ -1194,6 +1517,7 @@ final class CocxyCoreBridge: TerminalEngine {
         // observe a half-applied focus transition.
         withTerminalLock(surface) { lockedState in
             cocxycore_terminal_notify_focus(lockedState.terminal, focused)
+            drainTerminalResponsesLocked(for: lockedState)
         }
 
         // Persist the new focus state in the Swift-side surface map and
@@ -1206,12 +1530,104 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
-        guard let state = surfaces[surfaceID] else { return nil }
+        guard surfaces[surfaceID] != nil else { return nil }
         guard !options.query.isEmpty else { return [] }
-        guard let engine = cocxycore_gpu_search_init(state.terminal) else { return nil }
+        if options.useRegex,
+           (try? NSRegularExpression(pattern: options.query)) == nil {
+            return nil
+        }
+        return withTerminalLock(surfaceID) { state in
+            if options.useRegex {
+                return searchRegexScrollback(terminal: state.terminal, options: options)
+            }
+            return searchLiteralScrollback(terminal: state.terminal, options: options)
+        }
+    }
+
+    private func searchLiteralScrollback(
+        terminal: OpaquePointer,
+        options: SearchOptions
+    ) -> [SearchResult] {
+        let resultLimit = max(1, min(options.maxResults, Int(UInt32.max)))
+        let historyRowCount = cocxycore_terminal_history_rows(terminal)
+        let columnCount = cocxycore_terminal_cols(terminal)
+        guard historyRowCount > 0, columnCount > 0 else { return [] }
+
+        let queryBytes = Array(options.query.utf8)
+        var results: [SearchResult] = []
+        results.reserveCapacity(min(resultLimit, 64))
+        var fromRow: UInt32 = 0
+        var fromColumn: UInt16 = 0
+
+        queryBytes.withUnsafeBufferPointer { queryBuffer in
+            guard let queryBaseAddress = queryBuffer.baseAddress else { return }
+
+            while results.count < resultLimit {
+                var range = cocxycore_buffer_range()
+                guard cocxycore_terminal_search_next(
+                    terminal,
+                    queryBaseAddress,
+                    queryBuffer.count,
+                    fromRow,
+                    fromColumn,
+                    options.caseSensitive,
+                    &range
+                ) else {
+                    break
+                }
+
+                guard range.start_row < historyRowCount,
+                      range.end_row < historyRowCount,
+                      range.start_row <= range.end_row else {
+                    break
+                }
+
+                let spansRows = range.start_row != range.end_row
+                let firstRowEndColumn = spansRows
+                    ? columnCount - 1
+                    : min(range.end_col, columnCount - 1)
+                let line = historyLineText(
+                    terminal: terminal,
+                    absoluteRow: range.start_row,
+                    columnCount: columnCount,
+                    trimTrailingSpaces: !spansRows
+                )
+
+                // SearchResult currently models one physical row. Keep the
+                // logical match anchor and expose only its first-row fragment.
+                results.append(Self.makeSearchResult(
+                    line: line,
+                    lineNumber: Int(range.start_row),
+                    startColumn: Int(min(range.start_col, columnCount - 1)),
+                    endColumnInclusive: Int(firstRowEndColumn),
+                    fallbackMatchText: spansRows ? "" : options.query
+                ))
+
+                // CocxyCore reports an inclusive end coordinate. Resume one
+                // cell after it so literal results never overlap.
+                let matchEndColumn = min(range.end_col, columnCount - 1)
+                if matchEndColumn < columnCount - 1 {
+                    fromRow = range.end_row
+                    fromColumn = matchEndColumn + 1
+                } else {
+                    guard range.end_row < historyRowCount - 1 else { break }
+                    fromRow = range.end_row + 1
+                    fromColumn = 0
+                }
+            }
+        }
+
+        return results
+    }
+
+    private func searchRegexScrollback(
+        terminal: OpaquePointer,
+        options: SearchOptions
+    ) -> [SearchResult] {
+        guard let engine = cocxycore_gpu_search_init(terminal) else { return [] }
         defer { cocxycore_gpu_search_destroy(engine) }
 
-        cocxycore_gpu_search_sync(engine, state.terminal)
+        cocxycore_gpu_search_sync(engine, terminal)
 
         let cappedResultCount = max(1, min(options.maxResults, Int(UInt32.max)))
         var matches = Array(
@@ -1225,7 +1641,7 @@ final class CocxyCoreBridge: TerminalEngine {
                 guard let baseAddress = buffer.baseAddress else { return 0 }
                 return cocxycore_gpu_search_find(
                     engine,
-                    state.terminal,
+                    terminal,
                     queryPtr,
                     UInt32(options.query.utf8.count),
                     options.useRegex,
@@ -1242,10 +1658,10 @@ final class CocxyCoreBridge: TerminalEngine {
 
         guard matchCount > 0 else { return [] }
 
-        let columnCount = cocxycore_terminal_cols(state.terminal)
+        let columnCount = cocxycore_terminal_cols(terminal)
         return matches.prefix(Int(matchCount)).map { match in
             let line = historyLineText(
-                terminal: state.terminal,
+                terminal: terminal,
                 absoluteRow: match.row,
                 columnCount: columnCount
             )
@@ -1355,6 +1771,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
     func processMonitorRegistration(for id: SurfaceID) -> TerminalProcessMonitorRegistration? {
         guard let state = surfaces[id],
+              state.pty != nil,
               state.childPID > 0,
               state.masterFD >= 0 else {
             return nil
@@ -1840,14 +2257,16 @@ final class CocxyCoreBridge: TerminalEngine {
     func setCursorColorOverride(_ rgba: UInt32, for surface: SurfaceID) {
         withTerminalLock(surface) { state in
             cocxycore_terminal_set_cursor_color_override(state.terminal, rgba)
+            drainTerminalResponsesLocked(for: state)
         }
+        (surfaces[surface]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
 
     func processDiagnostics(for surface: SurfaceID) -> TerminalProcessDiagnostics? {
-        guard let state = surfaces[surface] else { return nil }
+        guard let state = surfaces[surface], let pty = state.pty else { return nil }
         return TerminalProcessDiagnostics(
             childPID: state.childPID,
-            isAlive: cocxycore_pty_is_alive(state.pty)
+            isAlive: cocxycore_pty_is_alive(pty)
         )
     }
 
@@ -1870,19 +2289,191 @@ final class CocxyCoreBridge: TerminalEngine {
 
     func terminalViewportSnapshot(for surface: SurfaceID) -> TerminalViewportSnapshot? {
         withTerminalLock(surface) { state -> TerminalViewportSnapshot? in
-            var metrics = cocxycore_font_metrics()
-            guard cocxycore_terminal_get_font_metrics(state.terminal, &metrics),
-                  metrics.cell_width > 0,
-                  metrics.cell_height > 0 else {
+            Self.viewportSnapshot(from: state.terminal)
+        } ?? nil
+    }
+
+    func commandBlockOverlaySnapshot(
+        for surface: SurfaceID
+    ) -> TerminalCommandBlockOverlaySnapshot? {
+        withTerminalLock(surface) { state -> TerminalCommandBlockOverlaySnapshot? in
+            guard let viewport = Self.viewportSnapshot(from: state.terminal) else { return nil }
+            let blockCount = cocxycore_terminal_semantic_block_count(state.terminal)
+            var newest = cocxycore_semantic_block()
+            let hasNewest = blockCount > 0
+                && cocxycore_terminal_semantic_get_block(state.terminal, 0, &newest)
+            return TerminalCommandBlockOverlaySnapshot(
+                viewport: viewport,
+                marker: TerminalCommandBlockOverlayMarker(
+                    blockCount: blockCount,
+                    newestBlockType: hasNewest ? newest.block_type : 0,
+                    newestStartRow: hasNewest ? newest.start_row : 0,
+                    newestEndRow: hasNewest ? newest.end_row : 0,
+                    newestStartTimeNs: hasNewest ? newest.timestamp_start : 0,
+                    newestEndTimeNs: hasNewest ? newest.timestamp_end : 0,
+                    newestStreamID: hasNewest ? newest.stream_id : 0
+                )
+            )
+        } ?? nil
+    }
+
+    private static func viewportSnapshot(
+        from terminal: OpaquePointer
+    ) -> TerminalViewportSnapshot? {
+        var metrics = cocxycore_font_metrics()
+        guard cocxycore_terminal_get_font_metrics(terminal, &metrics),
+              metrics.cell_width > 0,
+              metrics.cell_height > 0 else {
+            return nil
+        }
+        return TerminalViewportSnapshot(
+            visibleStartRow: cocxycore_terminal_history_visible_start(terminal),
+            historyMaxVisibleStart: cocxycore_terminal_history_max_visible_start(terminal),
+            visibleRowCount: cocxycore_terminal_rows(terminal),
+            visibleColumnCount: cocxycore_terminal_cols(terminal),
+            cellWidth: metrics.cell_width,
+            cellHeight: metrics.cell_height,
+            isAltScreen: cocxycore_terminal_is_alt_screen(terminal),
+            mouseTrackingMode: cocxycore_terminal_mode_mouse_tracking(terminal),
+            mouseEncodingMode: cocxycore_terminal_mode_mouse_encoding(terminal),
+            alternateScrollMode: cocxycore_terminal_mode_alternate_scroll(terminal)
+        )
+    }
+
+    func detectedContent(
+        atAbsoluteRow row: UInt32,
+        column: UInt16,
+        for surface: SurfaceID
+    ) -> TerminalDetectedContent? {
+        withTerminalLock(surface) { state -> TerminalDetectedContent? in
+            var detected = cocxycore_detected_content()
+            guard cocxycore_terminal_detect_content_at(
+                state.terminal,
+                row,
+                column,
+                &detected
+            ) else {
                 return nil
             }
+            return Self.detectedContent(from: detected)
+        } ?? nil
+    }
 
-            return TerminalViewportSnapshot(
-                visibleStartRow: cocxycore_terminal_history_visible_start(state.terminal),
-                visibleRowCount: cocxycore_terminal_rows(state.terminal),
-                cellWidth: metrics.cell_width,
-                cellHeight: metrics.cell_height,
-                isAltScreen: cocxycore_terminal_is_alt_screen(state.terminal)
+    func visibleDetectedContents(for surface: SurfaceID) -> [TerminalDetectedContent] {
+        withTerminalLock(surface) { state -> [TerminalDetectedContent] in
+            let terminal = state.terminal
+            let rows = cocxycore_terminal_rows(terminal)
+            let columns = cocxycore_terminal_cols(terminal)
+            guard rows > 0, columns > 0 else { return [] }
+
+            let visibleStart = cocxycore_terminal_history_visible_start(terminal)
+            let (maxRow, overflowed) = visibleStart.addingReportingOverflow(UInt32(rows - 1))
+            guard overflowed == false else { return [] }
+            var fromRow = visibleStart
+            var fromColumn: UInt16 = 0
+            var contents: [TerminalDetectedContent] = []
+            contents.reserveCapacity(8)
+
+            for _ in 0..<256 {
+                var detected = cocxycore_detected_content()
+                guard cocxycore_terminal_detect_content_next(
+                    terminal,
+                    fromRow,
+                    fromColumn,
+                    maxRow,
+                    &detected
+                ), let content = Self.detectedContent(from: detected) else {
+                    break
+                }
+                guard detected.end_row >= fromRow,
+                      detected.end_row <= maxRow,
+                      detected.end_col < columns,
+                      detected.end_row > fromRow || detected.end_col >= fromColumn else {
+                    break
+                }
+                let nextColumn = Int(detected.end_col) + 1
+                contents.append(content)
+                if nextColumn < Int(columns) {
+                    fromRow = detected.end_row
+                    fromColumn = UInt16(nextColumn)
+                } else {
+                    guard detected.end_row < maxRow else { break }
+                    fromRow = detected.end_row + 1
+                    fromColumn = 0
+                }
+            }
+            return contents
+        } ?? []
+    }
+
+    func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction,
+        for surface: SurfaceID
+    ) -> TerminalSemanticNavigationResult? {
+        let resolved: TerminalSemanticNavigationResult?? = withTerminalLock(surface) { state in
+            Self.performSemanticNavigation(action, terminal: state.terminal)
+        }
+        guard let result = resolved ?? nil else { return nil }
+
+        if surfaces[surface]?.protocolV2Observed == true {
+            _ = sendProtocolV2Viewport(for: surface, requestID: nil)
+        }
+        (surfaces[surface]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
+        return result
+    }
+
+    func terminalCursorClickSnapshot(
+        for surface: SurfaceID,
+        fromAbsoluteRow requestedFirstRow: UInt32? = nil
+    ) -> TerminalCursorClickSnapshot? {
+        withTerminalLock(surface) { state -> TerminalCursorClickSnapshot? in
+            let terminal = state.terminal
+            let cursorRow = cocxycore_terminal_cursor_row(terminal)
+            let visibleStartRow = cocxycore_terminal_history_visible_start(terminal)
+            let historyMaxVisibleStart = cocxycore_terminal_history_max_visible_start(terminal)
+            let (cursorAbsoluteRow, overflowed) = historyMaxVisibleStart.addingReportingOverflow(
+                UInt32(cursorRow)
+            )
+            guard !overflowed else { return nil }
+
+            let firstRow = requestedFirstRow ?? cursorAbsoluteRow
+            guard firstRow <= cursorAbsoluteRow else { return nil }
+            let rowCount = UInt64(cursorAbsoluteRow) - UInt64(firstRow) + 1
+            guard rowCount <= 4_096 else { return nil }
+
+            let columnCount = cocxycore_terminal_cols(terminal)
+            let rows = (firstRow...cursorAbsoluteRow).map { absoluteRow in
+                TerminalCursorClickRow(
+                    absoluteRow: absoluteRow,
+                    wrapped: cocxycore_terminal_row_wrapped(terminal, absoluteRow),
+                    cellWidths: (0..<Int(columnCount)).map { column in
+                        cocxycore_terminal_history_cell_width(
+                            terminal,
+                            absoluteRow,
+                            UInt16(column)
+                        )
+                    },
+                    cellSemantics: (0..<Int(columnCount)).map { column in
+                        cocxycore_terminal_cell_semantic(
+                            terminal,
+                            absoluteRow,
+                            UInt16(column)
+                        )
+                    }
+                )
+            }
+
+            return TerminalCursorClickSnapshot(
+                visibleStartRow: visibleStartRow,
+                historyMaxVisibleStart: historyMaxVisibleStart,
+                cursorScreenRow: cursorRow,
+                cursorColumn: cocxycore_terminal_cursor_col(terminal),
+                semanticState: cocxycore_terminal_semantic_state(terminal),
+                isAltScreen: cocxycore_terminal_is_alt_screen(terminal),
+                mouseTrackingMode: cocxycore_terminal_mode_mouse_tracking(terminal),
+                selectionActive: cocxycore_terminal_selection_active(terminal),
+                shellClickMode: cocxycore_terminal_shell_click_mode(terminal),
+                rows: rows
             )
         } ?? nil
     }
@@ -2147,24 +2738,244 @@ final class CocxyCoreBridge: TerminalEngine {
         } ?? []
     }
 
-    func commandBlocks(for surface: SurfaceID, limit: UInt32) -> [TerminalCommandBlock] {
+    private static func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction,
+        terminal: OpaquePointer
+    ) -> TerminalSemanticNavigationResult? {
+        let visibleStart = cocxycore_terminal_history_visible_start(terminal)
+        let maximumVisibleStart = cocxycore_terminal_history_max_visible_start(terminal)
+        let blockCount = cocxycore_terminal_semantic_block_count(terminal)
+        let promptRegions = semanticPromptRegions(
+            terminal: terminal,
+            blockCount: blockCount
+        )
+
+        switch action {
+        case .previousPrompt, .nextPrompt:
+            guard let target = TerminalSemanticNavigationResolver.promptRegion(
+                for: action,
+                visibleStartRow: visibleStart,
+                regions: promptRegions,
+                maximumSearchSteps: Int(blockCount),
+                findOlder: { offset in
+                    cocxycore_terminal_semantic_find_next(
+                        terminal,
+                        UInt8(COCXYCORE_BLOCK_PROMPT.rawValue),
+                        offset
+                    )
+                },
+                findNewer: { offset in
+                    cocxycore_terminal_semantic_find_prev(
+                        terminal,
+                        UInt8(COCXYCORE_BLOCK_PROMPT.rawValue),
+                        offset
+                    )
+                }
+            ) else { return nil }
+            let viewportStart = min(target.startRow, maximumVisibleStart)
+            guard cocxycore_terminal_history_set_visible_start(terminal, viewportStart) else {
+                return nil
+            }
+            cocxycore_terminal_selection_clear(terminal)
+            return TerminalSemanticNavigationResult(
+                action: action,
+                viewportStartRow: viewportStart
+            )
+
+        case .selectCommandOutput:
+            let outputRegions = commandOutputRegions(terminal: terminal)
+            guard let target = TerminalSemanticNavigationResolver.commandOutputRegion(
+                visibleStartRow: visibleStart,
+                regions: promptRegions + outputRegions
+            ), let blockID = target.blockID else { return nil }
+            let columns = cocxycore_terminal_cols(terminal)
+            guard columns > 0 else { return nil }
+            let viewportStart = min(target.startRow, maximumVisibleStart)
+            guard cocxycore_terminal_history_set_visible_start(terminal, viewportStart) else {
+                return nil
+            }
+            let endColumn = columns - 1
+            cocxycore_terminal_selection_set(
+                terminal,
+                target.startRow,
+                0,
+                target.endRow,
+                endColumn
+            )
+            return TerminalSemanticNavigationResult(
+                action: action,
+                viewportStartRow: viewportStart,
+                selection: TerminalSemanticSelection(
+                    blockID: blockID,
+                    startRow: target.startRow,
+                    startColumn: 0,
+                    endRow: target.endRow,
+                    endColumn: endColumn,
+                    text: blockOutput(from: terminal, blockID: blockID)
+                )
+            )
+        }
+    }
+
+    private static func semanticPromptRegions(
+        terminal: OpaquePointer,
+        blockCount: UInt32
+    ) -> [TerminalSemanticRegion] {
+        guard blockCount > 0 else { return [] }
+        var regions: [TerminalSemanticRegion] = []
+        regions.reserveCapacity(Int(blockCount))
+
+        for offset in 0..<blockCount {
+            var block = cocxycore_semantic_block()
+            guard cocxycore_terminal_semantic_get_block(terminal, offset, &block),
+                  block.block_type == UInt8(COCXYCORE_BLOCK_PROMPT.rawValue) else {
+                continue
+            }
+            var startRow: UInt32 = 0
+            var endRow: UInt32 = 0
+            guard cocxycore_block_visible_row(terminal, block.start_row, &startRow),
+                  cocxycore_block_visible_row(terminal, block.end_row, &endRow) else {
+                continue
+            }
+            regions.append(TerminalSemanticRegion(
+                offset: offset,
+                kind: .prompt,
+                startRow: startRow,
+                endRow: endRow
+            ))
+        }
+        return regions
+    }
+
+    private static func commandOutputRegions(
+        terminal: OpaquePointer
+    ) -> [TerminalSemanticRegion] {
+        guard let iterator = cocxycore_block_iterator_create(terminal) else { return [] }
+        defer { cocxycore_block_iterator_destroy(iterator) }
+        var regions: [TerminalSemanticRegion] = []
+
+        while cocxycore_block_iterator_next(iterator) {
+            let blockID = cocxycore_block_iterator_current_id(iterator)
+            var metadata = cocxycore_block_metadata()
+            guard blockID != 0,
+                  cocxycore_block_get_metadata(terminal, blockID, &metadata),
+                  let kind = TerminalSemanticBlockKind(rawValue: metadata.block_type),
+                  kind == .commandOutput || kind == .errorOutput else {
+                continue
+            }
+            var startRow: UInt32 = 0
+            var endRow: UInt32 = 0
+            guard cocxycore_block_visible_row(terminal, metadata.start_row, &startRow),
+                  cocxycore_block_visible_row(terminal, metadata.end_row, &endRow) else {
+                continue
+            }
+            regions.append(TerminalSemanticRegion(
+                blockID: blockID,
+                kind: kind,
+                startRow: startRow,
+                endRow: endRow
+            ))
+        }
+        return regions
+    }
+
+    func commandBlocks(
+        for surface: SurfaceID,
+        limit: UInt32,
+        includeOutput: Bool = true,
+        includeVisibleMapping: Bool = true
+    ) -> [TerminalCommandBlock] {
         withTerminalLock(surface) { state in
-            guard limit > 0, let iterator = cocxycore_block_iterator_create(state.terminal) else {
+            let blockIDs = Self.latestCommandBlockIDs(
+                from: state.terminal,
+                limit: min(limit, Self.semanticBlockCapacity)
+            )
+            return blockIDs.compactMap { blockID in
+                Self.commandBlock(
+                    from: state.terminal,
+                    blockID: blockID,
+                    includeOutput: includeOutput,
+                    includeVisibleMapping: includeVisibleMapping,
+                    metadataLoadObserver: self.commandBlockMetadataLoadObserver,
+                    outputCopyObserver: includeOutput ? self.commandBlockOutputCopyObserver : nil
+                )
+            }
+        } ?? []
+    }
+
+    /// Refreshes only the viewport-relative row mapping for cached command
+    /// block metadata. This deliberately avoids metadata and output reads so
+    /// geometry/display refreshes stay bounded to two core calls per block.
+    func remapCommandBlocksForOverlay(
+        _ blocks: [TerminalCommandBlock],
+        liveBlockIDs: Set<UInt64>,
+        for surface: SurfaceID
+    ) -> [TerminalCommandBlock] {
+        withTerminalLock(surface) { state in
+            blocks.prefix(32).map { block in
+                guard liveBlockIDs.contains(block.id) else {
+                    return block.withoutVisibleMapping()
+                }
+
+                var mappedStartRow: UInt32 = 0
+                var mappedEndRow: UInt32 = 0
+                self.commandBlockVisibleRowMapObserver?(block.startRow)
+                let hasMappedStart = cocxycore_block_visible_row(
+                    state.terminal,
+                    block.startRow,
+                    &mappedStartRow
+                )
+                self.commandBlockVisibleRowMapObserver?(block.endRow)
+                let hasMappedEnd = cocxycore_block_visible_row(
+                    state.terminal,
+                    block.endRow,
+                    &mappedEndRow
+                )
+                guard hasMappedStart, hasMappedEnd else {
+                    return block.withoutVisibleMapping()
+                }
+                return block.withVisibleMapping(
+                    startRow: mappedStartRow,
+                    endRow: mappedEndRow
+                )
+            }
+        } ?? blocks.map { $0.withoutVisibleMapping() }
+    }
+
+    private static func latestCommandBlockIDs(
+        from terminal: OpaquePointer,
+        limit: UInt32
+    ) -> [UInt64] {
+        let blockCount = cocxycore_terminal_semantic_block_count(terminal)
+        guard blockCount > 0,
+              limit > 0,
+              let iterator = cocxycore_block_iterator_create(terminal) else {
+            return []
+        }
+        defer { cocxycore_block_iterator_destroy(iterator) }
+
+        var blockIDs: [UInt64] = []
+        blockIDs.reserveCapacity(Int(blockCount))
+        while cocxycore_block_iterator_next(iterator) {
+            let blockID = cocxycore_block_iterator_current_id(iterator)
+            guard blockID != 0 else { return [] }
+            blockIDs.append(blockID)
+        }
+        guard blockIDs.count == Int(blockCount) else { return [] }
+
+        var newestCommandIDs: [UInt64] = []
+        newestCommandIDs.reserveCapacity(Int(min(limit, blockCount)))
+        for offset in 0..<blockCount {
+            var block = cocxycore_semantic_block()
+            guard cocxycore_terminal_semantic_get_block(terminal, offset, &block) else {
                 return []
             }
-            defer { cocxycore_block_iterator_destroy(iterator) }
+            guard isCommandBlockType(block.block_type) else { continue }
 
-            var blocks: [TerminalCommandBlock] = []
-            while cocxycore_block_iterator_next(iterator) {
-                let blockID = cocxycore_block_iterator_current_id(iterator)
-                guard blockID != 0 else { continue }
-                guard let block = Self.commandBlock(from: state.terminal, blockID: blockID) else { continue }
-                blocks.append(block)
-            }
-
-            let maxCount = Int(limit)
-            return blocks.count > maxCount ? Array(blocks.suffix(maxCount)) : blocks
-        } ?? []
+            newestCommandIDs.append(blockIDs[blockIDs.count - 1 - Int(offset)])
+            if newestCommandIDs.count == Int(limit) { break }
+        }
+        return newestCommandIDs.reversed()
     }
 
     func completedCommandBlockReferences(
@@ -2201,7 +3012,14 @@ final class CocxyCoreBridge: TerminalEngine {
 
     func commandBlock(for surface: SurfaceID, blockID: UInt64) -> TerminalCommandBlock? {
         let block: TerminalCommandBlock?? = withTerminalLock(surface) { state in
-            Self.commandBlock(from: state.terminal, blockID: blockID)
+            Self.commandBlock(
+                from: state.terminal,
+                blockID: blockID,
+                includeOutput: true,
+                includeVisibleMapping: true,
+                metadataLoadObserver: self.commandBlockMetadataLoadObserver,
+                outputCopyObserver: self.commandBlockOutputCopyObserver
+            )
         }
         return block ?? nil
     }
@@ -2221,8 +3039,16 @@ final class CocxyCoreBridge: TerminalEngine {
         } ?? ""
     }
 
-    private static func commandBlock(from terminal: OpaquePointer, blockID: UInt64) -> TerminalCommandBlock? {
+    private static func commandBlock(
+        from terminal: OpaquePointer,
+        blockID: UInt64,
+        includeOutput: Bool,
+        includeVisibleMapping: Bool,
+        metadataLoadObserver: (() -> Void)?,
+        outputCopyObserver: (() -> Void)?
+    ) -> TerminalCommandBlock? {
         var metadata = cocxycore_block_metadata()
+        metadataLoadObserver?()
         guard cocxycore_block_get_metadata(terminal, blockID, &metadata) else {
             return nil
         }
@@ -2230,10 +3056,31 @@ final class CocxyCoreBridge: TerminalEngine {
         let blockType = metadata.block_type
         guard isCommandBlockType(blockType) else { return nil }
 
+        var mappedStartRow: UInt32 = 0
+        var mappedEndRow: UInt32 = 0
+        let hasVisibleRows = includeVisibleMapping
+            && cocxycore_block_visible_row(
+                terminal,
+                metadata.start_row,
+                &mappedStartRow
+            )
+            && cocxycore_block_visible_row(
+                terminal,
+                metadata.end_row,
+                &mappedEndRow
+            )
+        let output: String
+        if includeOutput {
+            outputCopyObserver?()
+            output = blockOutput(from: terminal, blockID: blockID)
+        } else {
+            output = ""
+        }
+
         return TerminalCommandBlock(
             id: metadata.id,
             command: string(from: metadata.command, length: metadata.command_len),
-            output: blockOutput(from: terminal, blockID: blockID),
+            output: output,
             exitCode: metadata.exit_code >= 0 ? metadata.exit_code : nil,
             pwd: optionalString(from: metadata.pwd, length: metadata.pwd_len),
             startTimeNs: metadata.start_time_ns,
@@ -2241,6 +3088,8 @@ final class CocxyCoreBridge: TerminalEngine {
             durationNs: metadata.duration_ns,
             startRow: metadata.start_row,
             endRow: metadata.end_row,
+            visibleStartRow: hasVisibleRows ? mappedStartRow : nil,
+            visibleEndRow: hasVisibleRows ? mappedEndRow : nil,
             streamID: metadata.stream_id,
             blockType: blockType
         )
@@ -2271,6 +3120,31 @@ final class CocxyCoreBridge: TerminalEngine {
             row: metadata.row,
             column: metadata.column,
             length: metadata.length
+        )
+    }
+
+    private static func detectedContent(
+        from raw: cocxycore_detected_content
+    ) -> TerminalDetectedContent? {
+        guard let kind = TerminalDetectedContentKind(rawValue: raw.kind),
+              let pointer = raw.text,
+              raw.text_len > 0 else {
+            return nil
+        }
+        let bytes = UnsafeBufferPointer(start: pointer, count: raw.text_len)
+            .map { UInt8(bitPattern: $0) }
+        let targetLength = min(raw.target_len, bytes.count)
+        return TerminalDetectedContent(
+            kind: kind,
+            text: String(decoding: bytes, as: UTF8.self),
+            target: String(decoding: bytes.prefix(targetLength), as: UTF8.self),
+            startRow: raw.start_row,
+            startColumn: raw.start_col,
+            endRow: raw.end_row,
+            endColumn: raw.end_col,
+            line: raw.line > 0 ? Int(raw.line) : nil,
+            column: raw.column > 0 ? Int(raw.column) : nil,
+            isExplicitHyperlink: raw.explicit_hyperlink
         )
     }
 
@@ -2338,8 +3212,8 @@ final class CocxyCoreBridge: TerminalEngine {
     @discardableResult
     func sendSignal(_ signal: Int32, to surface: SurfaceID) -> Bool {
         withTerminalLock(surface) { state -> Bool in
-            guard cocxycore_pty_is_alive(state.pty) else { return false }
-            cocxycore_pty_send_signal(state.pty, signal)
+            guard let pty = state.pty, cocxycore_pty_is_alive(pty) else { return false }
+            cocxycore_pty_send_signal(pty, signal)
             return true
         } ?? false
     }
@@ -2513,6 +3387,7 @@ final class CocxyCoreBridge: TerminalEngine {
         if let existing = state.webServer {
             if existing.bindAddress != configuration.bindAddress
                 || existing.authToken != configuration.authToken
+                || existing.allowsInput != configuration.allowsInput
                 || existing.stopAfterFirstConnection != configuration.stopAfterFirstConnection {
                 destroyWebServer(existing)
                 state.webServer = nil
@@ -2539,6 +3414,7 @@ final class CocxyCoreBridge: TerminalEngine {
         webConfig.auth_token_len = UInt32(configuration.authToken.utf8.count)
         webConfig.max_connections = configuration.maxConnections
         webConfig.max_frame_rate = configuration.maxFrameRate
+        webConfig.read_only = configuration.allowsInput ? 0 : 1
 
         guard let server = cocxycore_web_create(&webConfig) else { return nil }
         cocxycore_web_set_event_callback(server, { eventType, connectionID, ctx in
@@ -2568,6 +3444,7 @@ final class CocxyCoreBridge: TerminalEngine {
             handle: server,
             bindAddress: configuration.bindAddress,
             authToken: configuration.authToken,
+            allowsInput: configuration.allowsInput,
             stopAfterFirstConnection: configuration.stopAfterFirstConnection,
             firstConnectionHandler: configuration.firstConnectionHandler,
             maxFrameRate: configuration.maxFrameRate,
@@ -2601,8 +3478,9 @@ final class CocxyCoreBridge: TerminalEngine {
 
     /// Returns the visible-history top row for a surface.
     func historyVisibleStart(for surface: SurfaceID) -> UInt32? {
-        guard let state = surfaces[surface] else { return nil }
-        return cocxycore_terminal_history_visible_start(state.terminal)
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_history_visible_start(state.terminal)
+        }
     }
 
     /// Sets the visible-history top row for best-effort session restore.
@@ -2723,34 +3601,15 @@ final class CocxyCoreBridge: TerminalEngine {
     /// Apply a theme change without destroying surfaces.
     ///
     /// CocxyCore supports runtime theme updates, so the active surface can
-    /// redraw immediately without teardown/recreation. The 18+ individual C
-    /// mutations (`set_theme`, 16× `set_theme_base16`, `set_selection_color`)
-    /// run as one atomic critical section so the background feed loop never
-    /// observes a partially-applied palette.
+    /// redraw immediately without teardown/recreation. Apply the complete
+    /// palette through one C mutation so DEC mode 2031 observes one coherent
+    /// color-scheme change instead of a burst of intermediate palettes.
     func applyTheme(_ palette: ThemePalette, to surface: SurfaceID) {
-        // Parse hex colors BEFORE acquiring the lock to keep the critical
-        // section as short as possible. Parsing is pure Swift and never
-        // touches the terminal state.
-        let fg = Self.parseHexColor(palette.foreground)
-        let bg = Self.parseHexColor(palette.background)
-        let cur = Self.parseHexColor(palette.cursor)
-        let sel = Self.parseHexColor(palette.selectionBackground)
-        let ansi: [(r: UInt8, g: UInt8, b: UInt8)] = (0..<min(palette.ansiColors.count, 16)).map {
-            Self.parseHexColor(palette.ansiColors[$0])
-        }
+        var theme = Self.runtimeTheme(from: palette)
 
-        // Apply the full palette atomically inside the lock.
         withTerminalLock(surface) { state in
-            cocxycore_terminal_set_theme(
-                state.terminal,
-                fg.r, fg.g, fg.b,
-                bg.r, bg.g, bg.b,
-                cur.r, cur.g, cur.b
-            )
-            for (index, c) in ansi.enumerated() {
-                cocxycore_terminal_set_theme_base16(state.terminal, UInt8(index), c.r, c.g, c.b)
-            }
-            cocxycore_terminal_set_selection_color(state.terminal, sel.r, sel.g, sel.b, 128)
+            cocxycore_terminal_set_theme_with_transition_ms(state.terminal, &theme, 0)
+            drainTerminalResponsesLocked(for: state)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -2770,6 +3629,7 @@ final class CocxyCoreBridge: TerminalEngine {
         var theme = Self.runtimeTheme(from: palette)
         withTerminalLock(surface) { state in
             cocxycore_terminal_set_theme_with_transition_ms(state.terminal, &theme, transitionMs)
+            drainTerminalResponsesLocked(for: state)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -2781,6 +3641,7 @@ final class CocxyCoreBridge: TerminalEngine {
     func advanceThemeTransitionMs(_ deltaMs: UInt32, for surface: SurfaceID) {
         withTerminalLock(surface) { state in
             cocxycore_terminal_advance_theme_transition_ms(state.terminal, deltaMs)
+            drainTerminalResponsesLocked(for: state)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -2863,6 +3724,10 @@ final class CocxyCoreBridge: TerminalEngine {
         }
     }
 
+    func updateFontDefaults(family: String, size: Double) {
+        updateDefaults(fontFamily: family, fontSize: size)
+    }
+
     /// Apply a font change to a specific live surface only.
     ///
     /// Runs the underlying `cocxycore_terminal_set_font` call — which
@@ -2886,6 +3751,7 @@ final class CocxyCoreBridge: TerminalEngine {
                 ligaturesEnabled: ligaturesEnabled,
                 to: state.terminal
             )
+            drainTerminalResponsesLocked(for: state)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -2921,8 +3787,8 @@ final class CocxyCoreBridge: TerminalEngine {
 
     /// Check if PTY child process is still alive.
     func isProcessAlive(for surface: SurfaceID) -> Bool {
-        guard let state = surfaces[surface] else { return false }
-        return cocxycore_pty_is_alive(state.pty)
+        guard let state = surfaces[surface], let pty = state.pty else { return false }
+        return cocxycore_pty_is_alive(pty)
     }
 
     /// Check if selection is active for a surface.
@@ -3078,7 +3944,8 @@ final class CocxyCoreBridge: TerminalEngine {
         rows: UInt16,
         cols: UInt16,
         shell: String,
-        workingDirectory: URL
+        workingDirectory: URL,
+        workingDirectoryDescriptor: Int32? = nil
     ) -> OpaquePointer? {
         // INVARIANT: This method mutates global process state (cwd, env vars)
         // and MUST run on the main actor to prevent concurrent access.
@@ -3088,7 +3955,11 @@ final class CocxyCoreBridge: TerminalEngine {
         // CocxyCore's current C API inherits cwd/env from the host process at
         // fork time. Scope those mutations carefully and restore them
         // immediately after spawn so other modules/windows do not observe them.
-        let previousCwd = FileManager.default.currentDirectoryPath
+        let previousCwdDescriptor = Darwin.open(
+            ".",
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC
+        )
+        guard previousCwdDescriptor >= 0 else { return nil }
         let envVars = buildShellIntegrationEnvVars(
             forShell: shell,
             hookIntegration: config?.hookIntegration ?? .defaults
@@ -3101,8 +3972,16 @@ final class CocxyCoreBridge: TerminalEngine {
             previousEnv[key] = Self.environmentValue(for: key)
         }
 
-        let cwd = workingDirectory.path
-        _ = FileManager.default.changeCurrentDirectoryPath(cwd)
+        let directoryChangeResult: Int32
+        if let workingDirectoryDescriptor {
+            directoryChangeResult = Darwin.fchdir(workingDirectoryDescriptor)
+        } else {
+            directoryChangeResult = workingDirectory.path.withCString(Darwin.chdir)
+        }
+        guard directoryChangeResult == 0 else {
+            Darwin.close(previousCwdDescriptor)
+            return nil
+        }
         for key in envKeysToUnset { unsetenv(key) }
         for (key, value) in envVars { setenv(key, value, 1) }
 
@@ -3114,7 +3993,8 @@ final class CocxyCoreBridge: TerminalEngine {
                     unsetenv(key)
                 }
             }
-            _ = FileManager.default.changeCurrentDirectoryPath(previousCwd)
+            _ = Darwin.fchdir(previousCwdDescriptor)
+            Darwin.close(previousCwdDescriptor)
         }
 
         let pty = shell.withCString { shellPtr in
@@ -3336,9 +4216,9 @@ final class CocxyCoreBridge: TerminalEngine {
 
             // Serialize all C terminal mutation against the render path.
             // The renderer (main thread) calls cocxycore_terminal_build_frame
-            // which reads the same internal state we mutate here with feed,
-            // response drain, and process poll. Holding the lock across all
-            // three is cheap (per-surface, no contention outside the frame
+            // which reads the same internal state we mutate here with feed
+            // and response drain. Holding the lock across both operations
+            // is cheap (per-surface, no contention outside the frame
             // boundary) and keeps the C core consistent from the renderer's
             // point of view.
             terminalLock.lock()
@@ -3348,23 +4228,9 @@ final class CocxyCoreBridge: TerminalEngine {
             // Feed bytes through terminal pipeline (parser → executor → screen)
             cocxycore_terminal_feed(terminal, buf, bytesRead)
 
-            // Write back any DSR/DECRQSS responses to the PTY
-            var responseBuf = [UInt8](repeating: 0, count: Self.responseBufferSize)
-            while cocxycore_terminal_has_response(terminal) {
-                let rn = cocxycore_terminal_read_response(
-                    terminal, &responseBuf, responseBuf.count
-                )
-                if rn > 0 {
-                    _ = self?.writeAttachedPTYBytes(
-                        Array(responseBuf.prefix(rn)),
-                        terminal: terminal,
-                        pty: pty
-                    )
-                }
-            }
-
-            // Poll process tracker (non-blocking kqueue check)
-            cocxycore_terminal_poll_processes(terminal)
+            // Write back every parser-generated response before releasing the
+            // terminal lock so FIFO ordering is preserved against host events.
+            self?.drainTerminalResponsesLocked(terminal: terminal, pty: pty)
 
             let altScreenChanged = wasAltScreen != cocxycore_terminal_is_alt_screen(terminal)
 
@@ -3461,8 +4327,19 @@ final class CocxyCoreBridge: TerminalEngine {
             guard let ctx = ctx, let event = event else { return }
             let eventCopy = event.pointee
             let box = Unmanaged<CallbackContext>.fromOpaque(ctx).takeUnretainedValue()
+            let screenRow = cocxycore_terminal_cursor_row(box.terminal)
+            let position = TerminalGridPosition(
+                screenRow: screenRow,
+                absoluteRow: cocxycore_terminal_history_max_visible_start(box.terminal)
+                    + UInt32(screenRow),
+                column: cocxycore_terminal_cursor_col(box.terminal)
+            )
             DispatchQueue.main.async {
-                box.bridge?.handleSemanticEvent(eventCopy, for: box.surfaceID)
+                box.bridge?.handleSemanticEvent(
+                    eventCopy,
+                    gridPosition: position,
+                    for: box.surfaceID
+                )
             }
         }, context)
 
@@ -3734,6 +4611,7 @@ final class CocxyCoreBridge: TerminalEngine {
     /// AND feeds ALL event types to the semantic adapter for agent detection + timeline.
     private func handleSemanticEvent(
         _ event: cocxycore_semantic_event,
+        gridPosition: TerminalGridPosition,
         for surfaceID: SurfaceID
     ) {
         // Shell integration → OSCNotification for existing tab wiring
@@ -3741,9 +4619,9 @@ final class CocxyCoreBridge: TerminalEngine {
         case 0: // PROMPT_SHOWN
             emitFallbackWorkingDirectoryIfNeeded(for: surfaceID)
             scheduleFallbackWorkingDirectoryProbe(for: surfaceID, delay: 0.12)
-            dispatchOSC(.shellPrompt, for: surfaceID)
+            dispatchOSC(.shellPrompt(position: gridPosition), for: surfaceID)
         case 1: // COMMAND_STARTED
-            dispatchOSC(.commandStarted, for: surfaceID)
+            dispatchOSC(.commandStarted(inputPosition: gridPosition), for: surfaceID)
         case 2: // COMMAND_FINISHED
             emitFallbackWorkingDirectoryIfNeeded(for: surfaceID)
             scheduleFallbackWorkingDirectoryProbe(for: surfaceID, delay: 0.12)
@@ -3765,36 +4643,33 @@ final class CocxyCoreBridge: TerminalEngine {
         surfaces[surfaceID]?.accessibilityNotificationHandler?(notification)
     }
 
-    /// Handle process tracking events from CocxyCore.
-    ///
-    /// Routes the ROOT shell exit as `OSCNotification.processExited` and
-    /// feeds ALL events (including subprocess exits) to the semantic
-    /// adapter for subagent visualization.
-    ///
-    /// **Critical**: `OSCNotification.processExited` is ONLY emitted when
-    /// the root PTY child (the shell itself) terminates. Subprocess exits
-    /// — `git status`, `cat`, `bash -c ...`, or any tool that an AI agent
-    /// like Claude Code spawns while it runs — are delivered to the
-    /// semantic adapter only. The window controller treats `processExited`
-    /// as "the session is over, reset the tab to idle", so forwarding
-    /// every subprocess exit would wipe the detected agent every time the
-    /// agent used a tool. That is the v0.1.52 "sidebar stays Ready while
-    /// Claude Code is clearly running" bug.
+    /// Routes authoritative root PTY exits while keeping subprocess events
+    /// available to the semantic adapter without ending the session.
     private func handleProcessEvent(
         _ event: cocxycore_process_event,
         for surfaceID: SurfaceID
     ) {
-        if event.event_type == 1 { // CHILD_EXITED
-            // Only the shell's root process exit counts as a session end.
-            // `state.childPID` is the shell's PID captured in createSurface;
-            // `event.pid` is the PID of the process that just exited.
-            if let state = surfaces[surfaceID], event.pid == state.childPID {
-                dispatchOSC(.processExited, for: surfaceID)
+        if event.event_type == 1, // CHILD_EXITED
+           let state = surfaces[surfaceID], event.pid == state.childPID,
+           let pty = state.pty {
+            var waitResult = cocxycore_pty_wait_result()
+            let didExit = cocxycore_pty_wait_check(pty, &waitResult)
+                && cocxycore_pty_is_alive(pty) == false
+            if didExit {
+                reportRootProcessExitIfNeeded(
+                    surfaceID: surfaceID,
+                    exitCode: waitResult.status == 1 ? Int32(waitResult.exit_code) : nil
+                )
             }
         }
 
         let cwd = currentWorkingDirectory(for: surfaceID)
         semanticAdapter.processProcessEvent(event, for: surfaceID, cwd: cwd)
+    }
+
+    private func reportRootProcessExitIfNeeded(surfaceID: SurfaceID, exitCode: Int32?) {
+        guard reportedPTYChildExits.insert(surfaceID).inserted else { return }
+        dispatchOSC(.processExited(exitCode: exitCode), for: surfaceID)
     }
 
     private func handleProtocolV2Message(type: String, payload: String, for surfaceID: SurfaceID) {
@@ -3953,11 +4828,9 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     private func verifiedChildPID(for state: SurfaceState) -> pid_t? {
-        guard state.childPID > 0 else { return nil }
+        guard state.childPID > 0, let pty = state.pty else { return nil }
 
-        var waitResult = cocxycore_pty_wait_result()
-        _ = cocxycore_pty_wait_check(state.pty, &waitResult)
-        guard cocxycore_pty_is_alive(state.pty) else { return nil }
+        guard cocxycore_pty_is_alive(pty) else { return nil }
 
         guard let currentIdentity = processIdentity(for: state.childPID) else { return nil }
         if let expectedIdentity = state.childProcessIdentity,
@@ -3997,6 +4870,7 @@ final class CocxyCoreBridge: TerminalEngine {
             connectionCount: cocxycore_web_connection_count(webState.handle),
             authRequired: !webState.authToken.isEmpty,
             maxFrameRate: webState.maxFrameRate,
+            allowsInput: webState.allowsInput,
             oneShot: webState.stopAfterFirstConnection,
             lastEventType: webState.lastEventType,
             lastEventConnectionID: webState.lastEventConnectionID
@@ -4019,19 +4893,24 @@ final class CocxyCoreBridge: TerminalEngine {
     // MARK: - Private: Key Mapping
 
     /// Map KeyModifiers to CocxyCore modifier bitmask.
-    private func mapModifiers(_ mods: KeyModifiers) -> UInt8 {
-        var result: UInt8 = 0
+    private func mapModifiers(_ mods: KeyModifiers) -> UInt16 {
+        var result: UInt16 = 0
         if mods.contains(.shift)   { result |= 1 }  // COCXYCORE_MOD_SHIFT
         if mods.contains(.option)  { result |= 2 }  // COCXYCORE_MOD_ALT
         if mods.contains(.control) { result |= 4 }  // COCXYCORE_MOD_CTRL
-        if mods.contains(.command) { result |= 8 }  // COCXYCORE_MOD_META
+        if mods.contains(.command) { result |= 8 }  // COCXYCORE_MOD_SUPER
+        if mods.contains(.hyper) { result |= 16 }
+        if mods.contains(.meta) { result |= 32 }
+        if mods.contains(.capsLock) { result |= 64 }
+        if mods.contains(.numLock) { result |= 128 }
         return result
     }
 
     private func historyLineText(
         terminal: OpaquePointer,
         absoluteRow: UInt32,
-        columnCount: UInt16
+        columnCount: UInt16,
+        trimTrailingSpaces: Bool = true
     ) -> String {
         guard columnCount > 0 else { return "" }
 
@@ -4046,8 +4925,10 @@ final class CocxyCoreBridge: TerminalEngine {
             }
         }
 
-        while line.last == " " {
-            line.removeLast()
+        if trimTrailingSpaces {
+            while line.last == " " {
+                line.removeLast()
+            }
         }
 
         return line
@@ -4147,40 +5028,6 @@ final class CocxyCoreBridge: TerminalEngine {
             g: UInt8((value >> 8) & 0xFF),
             b: UInt8(value & 0xFF)
         )
-    }
-
-    /// Map macOS key codes to CocxyCore special key identifiers.
-    /// Returns nil for printable keys (handled via encode_char).
-    private func mapKeyCodeToSpecialKey(_ keyCode: UInt16) -> UInt8? {
-        switch keyCode {
-        case 126: return 0   // Up         → COCXYCORE_KEY_UP
-        case 125: return 1   // Down       → COCXYCORE_KEY_DOWN
-        case 124: return 2   // Right      → COCXYCORE_KEY_RIGHT
-        case 123: return 3   // Left       → COCXYCORE_KEY_LEFT
-        case 115: return 4   // Home       → COCXYCORE_KEY_HOME
-        case 119: return 5   // End        → COCXYCORE_KEY_END
-        case 114: return 6   // Insert     → COCXYCORE_KEY_INSERT
-        case 117: return 7   // Delete     → COCXYCORE_KEY_DELETE
-        case 116: return 8   // Page Up    → COCXYCORE_KEY_PAGE_UP
-        case 121: return 9   // Page Down  → COCXYCORE_KEY_PAGE_DOWN
-        case 122: return 10  // F1         → COCXYCORE_KEY_F1
-        case 120: return 11  // F2         → COCXYCORE_KEY_F2
-        case 99:  return 12  // F3         → COCXYCORE_KEY_F3
-        case 118: return 13  // F4         → COCXYCORE_KEY_F4
-        case 96:  return 14  // F5         → COCXYCORE_KEY_F5
-        case 97:  return 15  // F6         → COCXYCORE_KEY_F6
-        case 98:  return 16  // F7         → COCXYCORE_KEY_F7
-        case 100: return 17  // F8         → COCXYCORE_KEY_F8
-        case 101: return 18  // F9         → COCXYCORE_KEY_F9
-        case 109: return 19  // F10        → COCXYCORE_KEY_F10
-        case 103: return 20  // F11        → COCXYCORE_KEY_F11
-        case 111: return 21  // F12        → COCXYCORE_KEY_F12
-        case 51:  return 22  // Backspace  → COCXYCORE_KEY_BACKSPACE
-        case 48:  return 23  // Tab        → COCXYCORE_KEY_TAB
-        case 36:  return 24  // Enter      → COCXYCORE_KEY_ENTER
-        case 53:  return 25  // Escape     → COCXYCORE_KEY_ESCAPE
-        default:  return nil
-        }
     }
 
     private static func environmentValue(for key: String) -> String? {

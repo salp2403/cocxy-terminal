@@ -47,8 +47,9 @@ extension AppDelegate {
         )
         connectionManager.proxyManager = proxyManager
 
+        MobileMirrorEphemeralTLSIdentity.removeStaleKeychainItems()
+
         // Relay manager — optional, zero overhead when unused.
-        let relayAuditLog = RelayAuditLog(writer: DiskAuditLogWriter())
         let relayManager = RelayManagerImpl(
             tunnelManager: tunnelManager,
             forwarder: connectionManager,
@@ -62,6 +63,7 @@ extension AppDelegate {
             }
         )
         connectionManager.relayManager = relayManager
+        self.relayManager = relayManager
 
         // Daemon manager — optional, zero overhead when unused.
         let deployAdapter = DaemonDeployAdapter(connectionManager: connectionManager)
@@ -158,6 +160,7 @@ extension AppDelegate {
                 }
             }
             .store(in: &hookCancellables)
+        setupMobileMirror()
     }
 }
 

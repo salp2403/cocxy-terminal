@@ -61,6 +61,10 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     @Published var isVisible: Bool = false
     @Published private(set) var currentDiffs: [FileDiff] = []
     @Published var selectedFilePath: String?
+
+    /// External Dashboard selection retained while an asynchronous diff refresh
+    /// is still discovering the corresponding repository-relative path.
+    private var pendingRequestedFilePath: String?
     @Published var diffMode: DiffMode = .sinceSessionStart
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var activeSessionId: String?
@@ -364,21 +368,23 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     }
 
     func selectFile(_ path: String) {
-        if path == selectedFilePath {
-            if isEditorVisible, editorFilePath != path {
+        pendingRequestedFilePath = path
+        let resolvedPath = matchingDiffPath(for: path, in: currentDiffs) ?? path
+        if resolvedPath == selectedFilePath {
+            if isEditorVisible, editorFilePath != resolvedPath {
                 if isEditorDirty {
-                    pendingEditorSwitch = CodeReviewPendingEditorSwitch(targetFilePath: path)
+                    pendingEditorSwitch = CodeReviewPendingEditorSwitch(targetFilePath: resolvedPath)
                 } else {
-                    openFileInEditor(path)
+                    openFileInEditor(resolvedPath)
                 }
             }
             return
         }
-        if isEditorVisible, isEditorDirty, editorFilePath != path {
-            pendingEditorSwitch = CodeReviewPendingEditorSwitch(targetFilePath: path)
+        if isEditorVisible, isEditorDirty, editorFilePath != resolvedPath {
+            pendingEditorSwitch = CodeReviewPendingEditorSwitch(targetFilePath: resolvedPath)
             return
         }
-        applyFileSelection(path, syncEditorIfOpen: true)
+        applyFileSelection(resolvedPath, syncEditorIfOpen: true)
     }
 
     func refreshDiffs() {
@@ -1315,6 +1321,12 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
             return
         }
 
+        if let requestedPath = pendingRequestedFilePath,
+           let matchingPath = matchingDiffPath(for: requestedPath, in: diffs) {
+            selectedFilePath = matchingPath
+            pendingRequestedFilePath = nil
+        }
+
         if let selectedFilePath,
            diffs.contains(where: { $0.filePath == selectedFilePath }) == false {
             self.selectedFilePath = nil
@@ -1343,6 +1355,25 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
            fileDiff.hunks.flatMap(\.lines).contains(where: { $0.displayLineNumber == selectedLineNumber }) == false {
             self.selectedLineNumber = nil
         }
+    }
+
+    private func matchingDiffPath(for requestedPath: String, in diffs: [FileDiff]) -> String? {
+        if let exact = diffs.first(where: { $0.filePath == requestedPath }) {
+            return exact.filePath
+        }
+
+        guard let root = activeTabCwdProvider?() ?? activeWorkingDirectory ?? resolvedWorkingDirectory else {
+            return nil
+        }
+        let requestedURL = requestedPath.hasPrefix("/")
+            ? URL(fileURLWithPath: requestedPath)
+            : root.appendingPathComponent(requestedPath)
+        let normalizedRequest = requestedURL.standardizedFileURL.path
+        return diffs.first { diff in
+            let candidate = root.appendingPathComponent(diff.filePath)
+                .standardizedFileURL.path
+            return candidate == normalizedRequest
+        }?.filePath
     }
 
     private static func loadDirectDiff(

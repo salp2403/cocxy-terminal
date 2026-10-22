@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyMacOSFloor } from './verify-macos-floor.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(__dirname, '..');
@@ -54,6 +56,7 @@ const requiredPages = [
   'service-worker.js',
   'sitemap.xml',
   'robots.txt',
+  '404.html',
 ];
 
 const requiredPreviewFiles = [
@@ -94,6 +97,9 @@ const blockedTraceTerms = [
 const competitorPattern = new RegExp(`\\b(${blockedProductTerms.map(escapeRegExp).join('|')})\\b`, 'i');
 const aiTracePattern = new RegExp(blockedTraceTerms.map(escapeRegExp).join('|'), 'i');
 const forbiddenEmailPattern = /salp2403@gmail\.com/i;
+// Captures that show a personal shell prompt or internal test output; they
+// must not appear on any page until they are replaced.
+const retiredMediaPattern = /\/(?:images\/cocxy-preview|images\/getting-started-(?:dashboard|splits|command-palette|sidebar)|videos\/cocxy-demo)[.-]/;
 const externalScriptPattern = /<script[^>]+src=["']https?:\/\//i;
 const externalImagePattern = /<(?:img|source)[^>]+(?:src|srcset)=["']https?:\/\//i;
 const externalStylesheetPattern = /<link[^>]+rel=["'][^"']*stylesheet[^"']*["'][^>]+href=["']https?:\/\//i;
@@ -102,13 +108,28 @@ const styleAttrPattern = /\sstyle=/i;
 const localStoragePattern = /localStorage\.(?:getItem|setItem|removeItem)\(["']([^"']+)["']/g;
 
 const failures = [];
+const openGraphReferences = new Map();
 
 function fail(message) {
   failures.push(message);
 }
 
+function readUTF8(filePath, label) {
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      fail(`Missing required file: ${label}`);
+    } else {
+      const detail = error instanceof Error ? error.message : String(error);
+      fail(`Unable to read ${label}: ${detail}`);
+    }
+    return '';
+  }
+}
+
 function read(relative) {
-  return fs.readFileSync(path.join(publicRoot, relative), 'utf8');
+  return readUTF8(path.join(publicRoot, relative), `web/public/${relative}`);
 }
 
 function exists(relative) {
@@ -146,6 +167,7 @@ for (const file of publicFiles) {
   if (competitorPattern.test(content)) fail(`Competitor reference in ${relative}`);
   if (aiTracePattern.test(content)) fail(`AI trace in ${relative}`);
   if (forbiddenEmailPattern.test(content)) fail(`Forbidden email in ${relative}`);
+  if (retiredMediaPattern.test(content)) fail(`Retired capture referenced in ${relative}: ${content.match(retiredMediaPattern)[0]}`);
 }
 
 const htmlFiles = publicFiles.filter((file) => file.endsWith('.html'));
@@ -153,6 +175,7 @@ for (const file of htmlFiles) {
   const relative = path.relative(publicRoot, file);
   const content = fs.readFileSync(file, 'utf8');
   if (styleAttrPattern.test(content)) fail(`Inline style attribute in ${relative}`);
+  if (/`|\[\[|\{\{/.test(content.replace(/<script\b[\s\S]*?<\/script>/g, ''))) fail(`Unrendered inline markup in ${relative}`);
   if (externalScriptPattern.test(content)) fail(`External script in ${relative}`);
   if (externalImagePattern.test(content)) fail(`External image in ${relative}`);
   if (externalStylesheetPattern.test(content)) fail(`External stylesheet in ${relative}`);
@@ -218,11 +241,14 @@ for (const featureClass of [
 ]) {
   if (!home.includes(featureClass)) fail(`Homepage missing ${featureClass}`);
 }
-for (const schemaType of ['FAQPage', 'VideoObject', 'SoftwareApplication', 'WebSite']) {
+for (const schemaType of ['FAQPage', 'SoftwareApplication', 'WebSite']) {
   if (!home.includes(`"@type": "${schemaType}"`)) fail(`Homepage missing ${schemaType} JSON-LD`);
 }
-if (!home.includes('<source src="/videos/cocxy-demo.webm" type="video/webm">')) {
-  fail('Homepage demo missing WebM fallback');
+if (home.includes('<video')) {
+  if (!/<video[^>]*>\s*<source src="\/videos\/cocxy-tour\.webm\?h=[0-9a-f]+" type="video\/webm">/.test(home)) {
+    fail('Homepage tour video must list its WebM source first');
+  }
+  if (!home.includes('"@type": "VideoObject"')) fail('Homepage tour video missing VideoObject JSON-LD');
 }
 if (!home.includes('/images/architecture-diagram.svg')) {
   fail('Homepage missing static architecture SVG teaser');
@@ -231,6 +257,14 @@ if (!home.includes('/images/architecture-diagram.svg')) {
 const spanishHome = read('es/index.html');
 for (const section of ['hero', 'features', 'demo', 'comparison', 'faq', 'download', 'opensource']) {
   if (!spanishHome.includes(`id="${section}"`)) fail(`Spanish homepage missing #${section}`);
+}
+for (const failure of verifyMacOSFloor({
+  repoRoot,
+  webRoot,
+  homeContent: home,
+  spanishHomeContent: spanishHome,
+})) {
+  fail(failure);
 }
 
 const featuresHub = read('features.html');
@@ -301,9 +335,9 @@ for (const name of agentNames) {
   if (!agentsPage.includes(name)) fail(`Agent page missing ${name}`);
 }
 
-const swiftAgents = fs.readFileSync(
+const swiftAgents = readUTF8(
   path.join(repoRoot, 'Sources/Domain/Vault/VaultBuiltInAgents.swift'),
-  'utf8'
+  'Sources/Domain/Vault/VaultBuiltInAgents.swift'
 );
 for (const name of agentNames) {
   if (!swiftAgents.includes(name)) fail(`Swift source missing expected agent ${name}`);
@@ -311,7 +345,7 @@ for (const name of agentNames) {
 
 const sitemap = read('sitemap.xml');
 for (const page of requiredPages.filter((page) => page.endsWith('.html'))) {
-  if (page === 'getting-started.html') continue;
+  if (page === 'getting-started.html' || page === '404.html') continue;
   const url = page === 'index.html'
     ? 'https://cocxy.dev/'
     : page === 'docs/index.html'
@@ -320,10 +354,28 @@ for (const page of requiredPages.filter((page) => page.endsWith('.html'))) {
   if (!sitemap.includes(url)) fail(`Sitemap missing ${url}`);
 }
 
+for (const url of sitemap.split('<url>').slice(1)) {
+  if (!/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/.test(url)) fail(`Sitemap entry without lastmod: ${url.match(/<loc>([^<]+)/)?.[1]}`);
+}
+
+for (const relative of ['404.html', 'es/404.html']) {
+  const notFound = read(relative);
+  if (!notFound.includes('<meta name="robots" content="noindex, follow">')) fail(`${relative} must be noindex`);
+  if (sitemap.includes(`/${relative}`)) fail(`Sitemap must not list ${relative}`);
+}
+
+for (const relative of ['security.html', 'es/security.html', 'faq.html', 'es/faq.html', 'press.html', 'es/press.html']) {
+  const page = read(relative);
+  const bare = page.replace(/<!--email_off-->[\s\S]*?<!--\/email_off-->/g, '').replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, '');
+  if (bare.includes('dev@cocxy.dev')) fail(`${relative} publishes an email outside an email_off region`);
+}
+
+verifyOpenGraphImages();
+
 verifyRSSFeed('feed.xml');
 verifyRSSFeed('releases.xml');
 
-const server = fs.readFileSync(path.join(webRoot, 'server.js'), 'utf8');
+const server = readUTF8(path.join(webRoot, 'server.js'), 'web/server.js');
 for (const needle of [
   '"/getting-started.html"',
   '"/docs/first-run.html"',
@@ -346,15 +398,18 @@ for (const needle of [
 ]) {
   if (!server.includes(needle)) fail(`server.js missing ${needle}`);
 }
+if (!server.includes('res.status(404).sendFile') || !server.includes('"es/404.html"') || !server.includes('"404.html"')) {
+  fail('server.js must answer unknown pages with the localized 404 page and a 404 status');
+}
 
 for (const workflow of ['.github/workflows/deploy-website.yml', '.github/workflows/release.yml']) {
-  const content = fs.readFileSync(path.join(repoRoot, workflow), 'utf8');
+  const content = readUTF8(path.join(repoRoot, workflow), workflow);
   for (const needle of ['web/public/feed.xml', 'web/public/releases.xml', 'web/public/service-worker.js']) {
     if (!content.includes(needle)) fail(`${workflow} missing deploy copy for ${needle}`);
   }
 }
 
-for (const asset of ['images/cocxy-preview.webp', 'images/cocxy-preview.avif', 'og/og-index.png']) {
+for (const asset of ['og/og-index.jpg', 'og/og-es-index.jpg']) {
   if (!exists(asset)) fail(`Missing generated asset: ${asset}`);
 }
 
@@ -418,6 +473,45 @@ function verifyOpenGraphImage(relative, content) {
     return;
   }
   if (!exists(match[1])) fail(`Missing og:image asset for ${relative}: ${match[1]}`);
+  const spanish = relative.startsWith('es/');
+  if (spanish !== match[1].startsWith('og/og-es-')) fail(`${relative} uses an og:image from the other locale: ${match[1]}`);
+  const title = content.match(/<meta property="og:title" content="([^"]*)"/)?.[1] ?? '';
+  const description = content.match(/<meta property="og:description" content="([^"]*)"/)?.[1] ?? '';
+  const previous = openGraphReferences.get(match[1]);
+  if (previous && (previous.title !== title || previous.description !== description)) {
+    fail(`${relative} shares ${match[1]} with ${previous.relative} but has different card text`);
+  }
+  openGraphReferences.set(match[1], { relative, title, description });
+}
+
+// Cards are rendered by render-og-images.mjs, which records the text each
+// card was drawn from; a page whose title or description changed since then
+// needs a fresh render.
+function verifyOpenGraphImages() {
+  const manifestPath = path.join(webRoot, 'assets', 'og-manifest.json');
+  let manifest = {};
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  } catch (error) {
+    fail(`Unable to read assets/og-manifest.json: ${error.message}`);
+    return;
+  }
+  const digests = new Map();
+  for (const [image, page] of openGraphReferences) {
+    const entry = manifest[image];
+    if (!entry) {
+      fail(`${image} is not in assets/og-manifest.json; run npm run render:og`);
+      continue;
+    }
+    if (entry.title !== page.title || entry.description !== page.description) {
+      fail(`${image} was rendered for different text than ${page.relative}; run npm run render:og`);
+    }
+    if (!exists(image)) continue;
+    const digest = crypto.createHash('sha256').update(fs.readFileSync(path.join(publicRoot, image))).digest('hex');
+    if (entry.sha256 !== digest) fail(`${image} does not match its rendered digest; run npm run render:og`);
+    if (digests.has(digest)) fail(`${image} is identical to ${digests.get(digest)}`);
+    digests.set(digest, image);
+  }
 }
 
 function verifyRSSFeed(relative) {

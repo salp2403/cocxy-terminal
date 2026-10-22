@@ -352,7 +352,7 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
 
         """
         engine.processTerminalOutput(Data(claudeBanner.utf8), surfaceID: surface)
-        try await Task.sleep(nanoseconds: 80_000_000)
+        for _ in 0..<1_500 where engine._stateForTesting(surfaceID: surface) != .agentLaunched { try await Task.sleep(nanoseconds: 10_000_000) }
 
         #expect(engine._stateForTesting(surfaceID: surface) == .agentLaunched)
         #expect(engine._agentNameForTesting(surfaceID: surface) == "claude")
@@ -388,7 +388,7 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
             Data("Opus 4.7 (1M context) with xhigh effort · Claude Max\n".utf8),
             surfaceID: surfaceA
         )
-        try await Task.sleep(nanoseconds: 80_000_000)
+        for _ in 0..<1_500 where captured.isEmpty { try await Task.sleep(nanoseconds: 10_000_000) }
 
         #expect(captured.count == 1)
         #expect(captured.last?.surfaceID == surfaceA)
@@ -417,7 +417,7 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
             Data("OpenAI Codex (v0.121.0)\nOpenAI Codex\n".utf8),
             surfaceID: codexSurface
         )
-        try await Task.sleep(nanoseconds: 120_000_000)
+        for _ in 0..<1_500 where captured.filter({ $0.state == .agentLaunched }).count < 2 { try await Task.sleep(nanoseconds: 10_000_000) }
 
         let launches = captured.filter { $0.state == .agentLaunched }
         #expect(launches.count == 2)

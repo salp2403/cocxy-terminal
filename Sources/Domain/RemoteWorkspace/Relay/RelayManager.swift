@@ -4,47 +4,6 @@
 import Foundation
 import Combine
 
-// MARK: - Relay Managing Protocol
-
-/// Defines the public API for relay channel management.
-@MainActor
-protocol RelayManaging: AnyObject {
-    func openChannel(config: RelayChannelConfig, profileID: UUID) async throws -> RelayChannel
-    func closeChannel(channelID: UUID) async
-    func closeAllChannels(profileID: UUID) async
-    func listChannels(profileID: UUID) -> [RelayChannel]
-    func rotateToken(channelID: UUID) throws
-    func updateACL(channelID: UUID, acl: RelayACL)
-}
-
-enum RelayManagerError: Error, LocalizedError, Equatable {
-    case invalidName
-    case invalidPort
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidName:
-            return "Relay channel name is required"
-        case .invalidPort:
-            return "Relay ports must be between 1 and 65535"
-        }
-    }
-}
-
-typealias RelayAuthBrokerFactory = @MainActor (
-    _ channelID: UUID,
-    _ token: RelayToken,
-    _ acl: RelayACL,
-    _ targetHost: String,
-    _ targetPort: UInt16,
-    _ auditLog: RelayAuditLog?
-) -> any RelayAuthBrokering
-
-typealias RelayProfileSessionRevoker = @MainActor (
-    _ profileID: UUID,
-    _ connectionLeaseID: UUID
-) async -> Bool
-
 // MARK: - Relay Manager Implementation
 
 /// Orchestrates relay channels: creates reverse tunnels, manages tokens,
@@ -71,6 +30,7 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
 
     @Published private(set) var channels: [UUID: RelayChannel] = [:]
     @Published private(set) var tokens: [UUID: RelayToken] = [:]
+    @Published private(set) var auditFailureDescription: String?
 
     // MARK: - Dependencies
 
@@ -91,6 +51,7 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
     private var openingFailures: [UUID: String] = [:]
     private var closingChannelIDs: Set<UUID> = []
     private var profileRevocationTasks: [ProfileLeaseKey: ProfileRevocationTask] = [:]
+    let mobileMirrorRelayPool = MobileMirrorLocalRelayPool()
 
     // MARK: - Auto-Cleanup
 
@@ -213,7 +174,8 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
         let forward = RemoteConnectionProfile.PortForward.remote(
             remotePort: config.remotePort,
             localPort: Int(brokerPort),
-            localHost: "127.0.0.1"
+            localHost: "127.0.0.1",
+            remoteBindHost: RemoteConnectionProfile.PortForward.remoteLoopbackBindHost
         )
 
         forwards[channel.id] = forward
@@ -268,7 +230,12 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
         channelLeaseIDs[channel.id] = connectionLeaseID
         channels[channel.id] = channel
         tokens[channel.id] = token
-        auditLog?.log(.channelOpened(channelID: channel.id, name: channel.name))
+        do {
+            try recordAudit(.channelOpened(channelID: channel.id, name: channel.name))
+        } catch {
+            await closeChannel(channelID: channel.id)
+            throw error
+        }
 
         return channel
     }
@@ -405,11 +372,9 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
     }
 
     // MARK: - List Channels
-
     /// Returns all active channels for a given profile.
     func listChannels(profileID: UUID) -> [RelayChannel] {
-        channels.values
-            .filter { $0.profileID == profileID }
+        channels.values.filter { $0.profileID == profileID }
             .sorted { $0.name < $1.name }
     }
 
@@ -432,7 +397,7 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
         try tokenStore.save(token: newToken, channelID: channelID)
         tokens[channelID] = newToken
         brokers[channelID]?.updateAuthorization(token: newToken, acl: channel.acl)
-        auditLog?.log(.tokenRotated(channelID: channelID))
+        try recordAudit(.tokenRotated(channelID: channelID))
     }
 
     /// Returns the current token for a channel.
@@ -507,6 +472,7 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
             revocation.task.cancel()
         }
         profileRevocationTasks.removeAll()
+        mobileMirrorRelayPool.stopAll()
     }
 
     /// Closes all channels that have passed their `expiresAt` time.
@@ -715,6 +681,21 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
         tunnelIDs.removeValue(forKey: channelID)
         channelLeaseIDs.removeValue(forKey: channelID)
         try? tokenStore.delete(channelID: channelID)
-        auditLog?.log(.channelClosed(channelID: channelID))
+        do {
+            try recordAudit(.channelClosed(channelID: channelID))
+        } catch {
+            auditFailureDescription = error.localizedDescription
+        }
+    }
+
+    private func recordAudit(_ event: RelayAuditEvent) throws {
+        guard let auditLog else { return }
+        do {
+            try auditLog.log(event)
+            auditFailureDescription = nil
+        } catch {
+            auditFailureDescription = error.localizedDescription
+            throw error
+        }
     }
 }

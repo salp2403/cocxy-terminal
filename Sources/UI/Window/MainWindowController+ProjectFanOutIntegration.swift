@@ -1,0 +1,131 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+// MainWindowController+ProjectFanOutIntegration.swift - Project-bound fan-out services.
+
+import AppKit
+import Foundation
+
+@MainActor
+extension MainWindowController {
+    func makeProjectFanOutViewModel(
+        projectID: ProjectID,
+        projectRoot: URL,
+        preferredSourceTabID: TabID?,
+        record: ProjectRecord?,
+        worktreeConfig: WorktreeConfig
+    ) -> ProjectFanOutFlowViewModel {
+        let sourceTabID = launchSourceTabID(
+            preferred: preferredSourceTabID,
+            projectID: projectID
+        )
+        let actions = ProjectFanOutActions(
+            launch: { [weak self] request in
+                guard let self,
+                      let delegate = NSApp.delegate as? AppDelegate,
+                      let sourceTabID,
+                      let tab = tabManager.tab(for: sourceTabID),
+                      projectResolver.resolveProject(for: tab.workingDirectory).groupingID
+                        == projectID,
+                      let context = delegate.makeTaskRunLaunchContext(
+                          controller: self,
+                          tab: tab
+                      ) else {
+                    throw ProjectHomeActionFailure.projectSessionChanged
+                }
+                guard context.worktreeConfig.enabled else {
+                    throw TaskRunExecutionError.featureDisabled
+                }
+                return try await delegate.performTaskRunLaunch(
+                    request: request,
+                    context: context
+                )
+            },
+            loadSnapshot: { runID in
+                guard let delegate = NSApp.delegate as? AppDelegate else {
+                    throw ProjectHomeActionFailure.servicesUnavailable
+                }
+                let comparisons = try await delegate.taskRunComparisons(runID: runID)
+                guard let run = delegate.taskRunsSnapshot().first(where: { $0.id == runID }),
+                      run.projectID == projectID else {
+                    throw TaskRunError.runNotFound(runID)
+                }
+                return ProjectFanOutSnapshot(
+                    run: run,
+                    comparisons: comparisons,
+                    candidateCollisions: TaskCollisionDetector.betweenCandidates(
+                        comparisons,
+                        projectRoot: projectRoot
+                    ),
+                    persistenceIssue: delegate.taskRunPersistenceIssue(for: runID)
+                )
+            },
+            launchCollisions: { prompt, seedPaths in
+                guard let delegate = NSApp.delegate as? AppDelegate else { return .empty }
+                return await delegate.taskLaunchCollisionAnalysis(
+                    prompt: prompt,
+                    seedPaths: seedPaths,
+                    projectID: projectID,
+                    projectRoot: projectRoot
+                )
+            },
+            preparePromotion: { runID, candidateID in
+                guard let delegate = NSApp.delegate as? AppDelegate else {
+                    throw ProjectHomeActionFailure.servicesUnavailable
+                }
+                return try await delegate.prepareTaskRunPromotion(
+                    runID: runID,
+                    candidateID: candidateID
+                )
+            },
+            executePromotion: { preview in
+                guard let delegate = NSApp.delegate as? AppDelegate else {
+                    throw ProjectHomeActionFailure.servicesUnavailable
+                }
+                return try await delegate.executeTaskRunPromotion(preview)
+            },
+            recycle: { runID, candidateID in
+                guard let delegate = NSApp.delegate as? AppDelegate else {
+                    throw ProjectHomeActionFailure.servicesUnavailable
+                }
+                return try await delegate.recycleTaskRunCandidate(
+                    runID: runID,
+                    candidateID: candidateID
+                )
+            },
+            cancel: { runID in
+                guard let delegate = NSApp.delegate as? AppDelegate else {
+                    throw ProjectHomeActionFailure.servicesUnavailable
+                }
+                return try await delegate.cancelTaskRun(runID: runID)
+            },
+            forget: { runID in
+                guard let delegate = NSApp.delegate as? AppDelegate else {
+                    throw ProjectHomeActionFailure.servicesUnavailable
+                }
+                try await delegate.forgetTaskRun(runID: runID)
+            }
+        )
+        return ProjectFanOutFlowViewModel(
+            projectID: projectID,
+            projectRoot: projectRoot,
+            availableBaseRefs: availableWorktreeBaseRefs(for: projectRoot),
+            defaultBaseRef: record?.defaultBaseRef ?? worktreeConfig.baseRef,
+            defaultAgentNames: record?.defaultAgents ?? [],
+            localizer: appLocalizer(),
+            actions: actions
+        )
+    }
+
+    private func launchSourceTabID(
+        preferred: TabID?,
+        projectID: ProjectID
+    ) -> TabID? {
+        if let preferred,
+           let tab = tabManager.tab(for: preferred),
+           projectResolver.resolveProject(for: tab.workingDirectory).groupingID == projectID {
+            return preferred
+        }
+        return tabManager.tabs.first {
+            projectResolver.resolveProject(for: $0.workingDirectory).groupingID == projectID
+        }?.id
+    }
+}

@@ -4,7 +4,9 @@
   .nav-toggle,
   .theme-toggle,
   .copy-button,
-  .hero-media {
+  .state-chips,
+  .hero::before,
+  .closing::before {
     display: none !important;
   }
 
@@ -20,7 +22,12 @@
 
   .section,
   .page-hero,
-  .hero-inner {
+  .hero {
     padding-block: 1rem;
+  }
+
+  .hero-shot__stage {
+    animation: none;
+    transform: none;
   }
 }

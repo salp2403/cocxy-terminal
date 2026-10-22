@@ -194,6 +194,97 @@ struct MenuKeybindingsBinderSwiftTests {
         #expect(item.keyEquivalentModifierMask == [.command, .option])
     }
 
+    @Test("terminal page shortcuts bind function keys without entering the PTY")
+    func terminalPageShortcutsBindFunctionKeys() {
+        let (menu, item) = makeMenu(tagging: KeybindingActionCatalog.terminalScrollPageUp)
+
+        MenuKeybindingsBinder.apply(.defaults, to: menu)
+
+        let expected = String(Character(UnicodeScalar(NSPageUpFunctionKey)!))
+        #expect(item.keyEquivalent == expected)
+        #expect(item.keyEquivalentModifierMask == [.shift])
+        #expect(MenuKeybindingsBinder.actionId(of: item) == "terminal.scrollPageUp")
+    }
+
+    @Test("production View menu wires terminal viewport and command block actions")
+    func productionViewMenuWiresTerminalActions() throws {
+        let application = NSApplication.shared
+        let oldMenu = application.mainMenu
+        defer { application.mainMenu = oldMenu }
+        AppDelegate().setupMainMenuForTesting()
+        let viewMenu = try #require(application.mainMenu?.items.first {
+            $0.submenu?.title == "View"
+        }?.submenu)
+
+        let expected: [String: Selector] = [
+            KeybindingActionCatalog.terminalScrollPageUp.id:
+                #selector(MainWindowController.scrollTerminalPageUpAction(_:)),
+            KeybindingActionCatalog.terminalScrollPageDown.id:
+                #selector(MainWindowController.scrollTerminalPageDownAction(_:)),
+            KeybindingActionCatalog.terminalScrollToTop.id:
+                #selector(MainWindowController.scrollTerminalToTopAction(_:)),
+            KeybindingActionCatalog.terminalScrollToBottom.id:
+                #selector(MainWindowController.scrollTerminalToBottomAction(_:)),
+            KeybindingActionCatalog.terminalPreviousPrompt.id:
+                #selector(MainWindowController.previousTerminalPromptAction(_:)),
+            KeybindingActionCatalog.terminalNextPrompt.id:
+                #selector(MainWindowController.nextTerminalPromptAction(_:)),
+            KeybindingActionCatalog.terminalSelectCommandOutput.id:
+                #selector(MainWindowController.selectTerminalCommandOutputAction(_:)),
+            KeybindingActionCatalog.terminalHideCommandBlocks.id:
+                #selector(MainWindowController.hideCommandBlocksAction(_:)),
+            KeybindingActionCatalog.terminalShowDetectedContentHints.id:
+                #selector(MainWindowController.showDetectedContentHintsAction(_:)),
+        ]
+
+        for (actionId, selector) in expected {
+            let item = try #require(viewMenu.items.first {
+                MenuKeybindingsBinder.actionId(of: $0) == actionId
+            })
+            #expect(item.action == selector)
+            #expect(!item.keyEquivalent.isEmpty)
+        }
+
+        let hideItem = try #require(viewMenu.items.first {
+            MenuKeybindingsBinder.actionId(of: $0)
+                == KeybindingActionCatalog.terminalHideCommandBlocks.id
+        })
+        #expect(hideItem.keyEquivalent == "b")
+        #expect(hideItem.keyEquivalentModifierMask == [.command, .shift])
+
+        let hintsItem = try #require(viewMenu.items.first {
+            MenuKeybindingsBinder.actionId(of: $0)
+                == KeybindingActionCatalog.terminalShowDetectedContentHints.id
+        })
+        #expect(hintsItem.keyEquivalent == "l")
+        #expect(hintsItem.keyEquivalentModifierMask == [.command, .shift])
+
+        let previousPromptItem = try #require(viewMenu.items.first {
+            MenuKeybindingsBinder.actionId(of: $0)
+                == KeybindingActionCatalog.terminalPreviousPrompt.id
+        })
+        #expect(previousPromptItem.keyEquivalent == String(Character(
+            UnicodeScalar(NSUpArrowFunctionKey)!
+        )))
+        #expect(previousPromptItem.keyEquivalentModifierMask == [.command])
+
+        let nextPromptItem = try #require(viewMenu.items.first {
+            MenuKeybindingsBinder.actionId(of: $0)
+                == KeybindingActionCatalog.terminalNextPrompt.id
+        })
+        #expect(nextPromptItem.keyEquivalent == String(Character(
+            UnicodeScalar(NSDownArrowFunctionKey)!
+        )))
+        #expect(nextPromptItem.keyEquivalentModifierMask == [.command])
+
+        let outputItem = try #require(viewMenu.items.first {
+            MenuKeybindingsBinder.actionId(of: $0)
+                == KeybindingActionCatalog.terminalSelectCommandOutput.id
+        })
+        #expect(outputItem.keyEquivalent == "a")
+        #expect(outputItem.keyEquivalentModifierMask == [.command, .shift])
+    }
+
     // MARK: - Nested Menus
 
     @Test("apply walks into submenus")

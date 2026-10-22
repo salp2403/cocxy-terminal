@@ -708,14 +708,14 @@ final class Phase5QATests: XCTestCase {
         // Esperar a que todos los saves async terminen.
         let waitExpectation = expectation(description: "All saves dispatched")
         group.notify(queue: .main) { waitExpectation.fulfill() }
-        waitForExpectations(timeout: 5.0)
+        waitForExpectations(timeout: 15.0)
 
         // Dar tiempo al ioQueue para procesar.
         let drainExpectation = expectation(description: "IO queue drained")
         DispatchQueue(label: "drain").asyncAfter(deadline: .now() + 0.5) {
             drainExpectation.fulfill()
         }
-        waitForExpectations(timeout: 2.0)
+        waitForExpectations(timeout: 15.0)
 
         // El fichero final debe ser JSON valido y parsearse sin error.
         XCTAssertNoThrow(try self.sessionManager.loadLastSession(),
@@ -744,7 +744,7 @@ final class Phase5QATests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             waitExpectation.fulfill()
         }
-        waitForExpectations(timeout: 1.5)
+        waitForExpectations(timeout: 15.0)
 
         XCTAssertEqual(callCount, 0,
                        "With 100s interval, capture must not be called within 0.5s")

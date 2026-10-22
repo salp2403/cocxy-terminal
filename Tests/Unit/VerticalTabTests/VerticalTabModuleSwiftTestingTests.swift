@@ -3,6 +3,7 @@
 
 import CoreGraphics
 import Foundation
+import SwiftUI
 import Testing
 @testable import CocxyTerminal
 
@@ -58,9 +59,35 @@ struct VerticalTabModuleSwiftTestingTests {
         #expect(compact.showsPrimaryMetadata == false)
         #expect(compact.showsPaneMatrix == false)
         #expect(compact.showsCloseButton == false)
+        #expect(compact.showsRenameButton == true)
         #expect(summary.showsPrimaryMetadata == true)
         #expect(summary.showsPaneMatrix == true)
         #expect(summary.verticalPadding > compact.verticalPadding)
+    }
+
+    @Test("inline rename trims commits, resets blank names, and cancels without mutation")
+    func inlineRenameStateTransitionsAreDeterministic() {
+        var state = Design.AuroraInlineRenameState()
+        let session = Design.AuroraRenameTarget.session("session-1")
+
+        state.begin(target: session, currentName: "Current")
+        state.draft = "  Renamed  "
+        #expect(
+            state.commit(target: session)
+                == Design.AuroraRenameCommit(target: session, title: "Renamed")
+        )
+
+        state.begin(target: session, currentName: "Renamed")
+        state.draft = "   "
+        #expect(
+            state.commit(target: session)
+                == Design.AuroraRenameCommit(target: session, title: nil)
+        )
+
+        state.begin(target: session, currentName: "Automatic")
+        state.cancel(target: session)
+        #expect(state.target == nil)
+        #expect(state.draft.isEmpty)
     }
 
     @Test("summary mode uses the selected primary info with state fallback")
@@ -129,7 +156,8 @@ struct VerticalTabModuleSwiftTestingTests {
         let placement = Design.VerticalTabHoverSidecarPlacement.placement(
             for: tooltip,
             sidebarFrame: CGRect(x: 0, y: 0, width: 240, height: 620),
-            containerSize: CGSize(width: 920, height: 620)
+            containerSize: CGSize(width: 920, height: 620),
+            layoutDirection: .leftToRight
         )
 
         #expect(placement.width >= 260)
@@ -138,6 +166,16 @@ struct VerticalTabModuleSwiftTestingTests {
         #expect(placement.x + placement.width * 0.5 <= 908)
         #expect(placement.y >= 170)
         #expect(placement.y <= 450)
+
+        let rtlPlacement = Design.VerticalTabHoverSidecarPlacement.placement(
+            for: tooltip,
+            sidebarFrame: CGRect(x: 680, y: 0, width: 240, height: 620),
+            containerSize: CGSize(width: 920, height: 620),
+            layoutDirection: .rightToLeft
+        )
+        #expect(rtlPlacement.width == placement.width)
+        #expect(rtlPlacement.x == 482)
+        #expect(rtlPlacement.x + rtlPlacement.width * 0.5 < 680)
     }
 
     private func localizationBundle() throws -> Bundle {

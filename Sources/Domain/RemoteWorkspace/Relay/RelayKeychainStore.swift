@@ -44,7 +44,6 @@ final class RelayKeychainStore: RelayTokenStoring {
         ]
         let attributes: [String: Any] = [
             kSecValueData as String: token.secret,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
 
         let updateStatus = SecItemUpdate(

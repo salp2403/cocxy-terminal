@@ -23,7 +23,14 @@ if [[ -f web/scripts/build-site.mjs ]]; then
 
   echo "Generating public website test fixtures..."
   "$NODE_BIN" web/scripts/build-site.mjs
+
+  echo "Verifying public website fixtures..."
+  "$NODE_BIN" web/scripts/verify-site.mjs
 fi
+
+source "$ROOT_DIR/scripts/test-home-sandbox.sh"
+trap cocxy_test_home_cleanup EXIT
+cocxy_test_home_begin
 
 echo "Running XCTest suite..."
 swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks \
@@ -31,5 +38,6 @@ swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerfo
 
 echo "Running Swift Testing suite..."
 ./scripts/run-swift-testing-serial.sh
+cocxy_test_home_end
 
 echo "All XCTest and Swift Testing tests passed."

@@ -126,6 +126,26 @@ struct RemoteConnectionProfileTests {
         #expect(decoded.portForwards.count == 5)
     }
 
+    @Test func legacyRemoteForwardDecodesWithExplicitLoopbackBind() throws {
+        let data = Data(#"{"remote":{"remotePort":9090,"localPort":3000,"localHost":"localhost"}}"#.utf8)
+
+        let decoded = try JSONDecoder().decode(
+            RemoteConnectionProfile.PortForward.self,
+            from: data
+        )
+
+        #expect(decoded == .remote(
+            remotePort: 9090,
+            localPort: 3000,
+            localHost: "localhost",
+            remoteBindHost: "127.0.0.1"
+        ))
+        let encoded = try JSONEncoder().encode(decoded)
+        let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        let remote = try #require(object["remote"] as? [String: Any])
+        #expect(remote["remoteBindHost"] as? String == "127.0.0.1")
+    }
+
     // MARK: - Display Title
 
     @Test func displayTitleWithUserAndDefaultPort() {
@@ -247,7 +267,7 @@ struct RemoteConnectionProfileTests {
         )
 
         let command = profile.sshCommand
-        #expect(command.contains("-R 9090:localhost:3000"))
+        #expect(command.contains("-R 127.0.0.1:9090:localhost:3000"))
     }
 
     @Test func sshCommandOmitsLegacyDynamicForward() {
@@ -395,14 +415,14 @@ struct RemoteConnectionProfileTests {
         let forward = RemoteConnectionProfile.PortForward.remote(
             remotePort: 9090, localPort: 3000
         )
-        #expect(forward.sshFlag == "-R 9090:localhost:3000")
+        #expect(forward.sshFlag == "-R 127.0.0.1:9090:localhost:3000")
     }
 
     @Test func remoteForwardSSHFlagWithCustomLocalHost() {
         let forward = RemoteConnectionProfile.PortForward.remote(
             remotePort: 5432, localPort: 5432, localHost: "db.local"
         )
-        #expect(forward.sshFlag == "-R 5432:db.local:5432")
+        #expect(forward.sshFlag == "-R 127.0.0.1:5432:db.local:5432")
     }
 
     @Test func dynamicForwardSSHFlag() {

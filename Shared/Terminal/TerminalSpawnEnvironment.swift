@@ -17,6 +17,8 @@ public enum TerminalSpawnEnvironment {
     public static let keysToUnset: Set<String> = [
         "NO_COLOR",
         "COCXY_HOOKS_DISABLED",
+        "COCXY_HOOK_DEBUG_LOG",
+        "COCXY_HOOK_DEBUG_LOG_PATH",
         "COCXY_CLAUDE_HOOKS_DISABLED",
         "COCXY_CODEX_HOOKS_DISABLED",
         "COCXY_GEMINI_HOOKS_DISABLED",

@@ -73,6 +73,9 @@ struct TimelineEvent: Identifiable, Codable, Sendable, Equatable {
     /// Human-readable window label for UI display.
     let windowLabel: String?
 
+    /// Canonical project that owned the event when it was captured.
+    let projectIdentity: ProjectID?
+
     /// Tool name if applicable (e.g., "Write", "Read", "Bash", "Edit").
     let toolName: String?
 
@@ -107,6 +110,7 @@ struct TimelineEvent: Identifiable, Codable, Sendable, Equatable {
         sessionId: String,
         windowID: WindowID? = nil,
         windowLabel: String? = nil,
+        projectIdentity: ProjectID? = nil,
         toolName: String? = nil,
         filePath: String? = nil,
         summary: String,
@@ -119,11 +123,61 @@ struct TimelineEvent: Identifiable, Codable, Sendable, Equatable {
         self.sessionId = sessionId
         self.windowID = windowID
         self.windowLabel = windowLabel
+        self.projectIdentity = projectIdentity
         self.toolName = toolName
         self.filePath = filePath
         self.summary = summary
         self.durationMs = durationMs
         self.isError = isError
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case timestamp
+        case type
+        case sessionId
+        case windowID
+        case windowLabel
+        case projectIdentity
+        case toolName
+        case filePath
+        case summary
+        case durationMs
+        case isError
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+        type = try container.decode(TimelineEventType.self, forKey: .type)
+        sessionId = try container.decode(String.self, forKey: .sessionId)
+        windowID = try container.decodeIfPresent(WindowID.self, forKey: .windowID)
+        windowLabel = try container.decodeIfPresent(String.self, forKey: .windowLabel)
+        projectIdentity = try container.decodeIfPresent(ProjectID.self, forKey: .projectIdentity)
+        toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
+        filePath = try container.decodeIfPresent(String.self, forKey: .filePath)
+        summary = try container.decode(String.self, forKey: .summary)
+        durationMs = try container.decodeIfPresent(Int.self, forKey: .durationMs)
+        isError = try container.decode(Bool.self, forKey: .isError)
+    }
+
+    func assigningProjectIdentity(_ identity: ProjectID?) -> TimelineEvent {
+        guard projectIdentity == nil, let identity else { return self }
+        return TimelineEvent(
+            id: id,
+            timestamp: timestamp,
+            type: type,
+            sessionId: sessionId,
+            windowID: windowID,
+            windowLabel: windowLabel,
+            projectIdentity: identity,
+            toolName: toolName,
+            filePath: filePath,
+            summary: summary,
+            durationMs: durationMs,
+            isError: isError
+        )
     }
 
     /// Converts a `HookEvent` to a `TimelineEvent` for the timeline store.
@@ -133,7 +187,8 @@ struct TimelineEvent: Identifiable, Codable, Sendable, Equatable {
     static func from(
         hookEvent: HookEvent,
         windowID: WindowID? = nil,
-        windowLabel: String? = nil
+        windowLabel: String? = nil,
+        projectIdentity: ProjectID? = nil
     ) -> TimelineEvent {
         let eventType: TimelineEventType
         var toolName: String?
@@ -262,6 +317,7 @@ struct TimelineEvent: Identifiable, Codable, Sendable, Equatable {
             sessionId: hookEvent.sessionId,
             windowID: windowID,
             windowLabel: windowLabel,
+            projectIdentity: projectIdentity,
             toolName: toolName,
             filePath: filePath,
             summary: summary,

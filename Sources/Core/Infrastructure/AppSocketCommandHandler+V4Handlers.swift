@@ -469,7 +469,7 @@ extension AppSocketCommandHandler {
         if sent {
             return .ok(id: request.id, data: ["status": "sent", "length": "\(text.count)"])
         }
-        return .failure(id: request.id, error: "No active terminal surface")
+        return .failure(id: request.id, error: "Terminal input could not be delivered")
     }
 
     /// Sends a named key to the active terminal.
@@ -489,7 +489,7 @@ extension AppSocketCommandHandler {
         if sent {
             return .ok(id: request.id, data: ["status": "sent", "key": key])
         }
-        return .failure(id: request.id, error: "Unknown key: \(key)")
+        return .failure(id: request.id, error: "Terminal input could not be delivered")
     }
 }
 

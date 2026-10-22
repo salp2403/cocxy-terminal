@@ -58,17 +58,17 @@ extension Design {
     /// Snapshot of a single tab used as the adapter's input.
     ///
     /// `workspaceGroup` is the identifier the adapter groups tabs by.
-    /// The integration layer typically populates it with the git root
-    /// or the first path component under `~`, mirroring how Aurora's
-    /// sidebar groups sessions in the reference design. When the caller
-    /// cannot resolve a group (SSH session, detached tab), passing the
-    /// tab's own identifier keeps that tab in its own one-session
-    /// workspace instead of dropping it.
+    /// The integration layer populates it with the full standardized git
+    /// root path, falling back to the tab's full working-directory path.
+    /// `workspaceDefaultName` carries the short folder label separately,
+    /// so equal basenames never collapse unrelated projects.
     struct AuroraSourceTab: Hashable, Sendable {
         let id: String
         let name: String
         let workspaceGroup: String
         let workspaceTitle: String?
+        let workspaceDefaultName: String?
+        let workspaceBranch: String?
         let branch: String?
         let isPinned: Bool
         let surfaces: [AuroraSourceSurface]
@@ -79,14 +79,15 @@ extension Design {
         /// user has kept `[worktree].show-badge = true`. The builder
         /// applies the config gate so the adapter stays pure.
         let hasWorktree: Bool
-        /// Absolute filesystem path of the workspace root the tab
-        /// belongs to (the git ancestor when one exists, otherwise the
-        /// tab's own working directory). The adapter hashes this path
-        /// to compute the per-workspace `NoteWorkspaceID` so the
-        /// sidebar's notes section binds to the same identifier the
-        /// store uses on disk. Optional — SSH or detached tabs that
-        /// have no resolvable directory leave it `nil`, in which case
-        /// the adapter omits the notes hook entirely.
+        /// Absolute filesystem path of this tab's notes root (the origin
+        /// checkout for a linked worktree, the git ancestor when one
+        /// exists, otherwise the tab's own working directory). The
+        /// adapter hashes it into the session's
+        /// `NoteWorkspaceID`, which is the identifier the store uses on
+        /// disk. It is not the sidebar group: `workspaceGroup` may place
+        /// tabs with different notes roots under one project, and the
+        /// notes section aggregates their identities. When `nil`, the
+        /// adapter hashes `workingDirectory` instead.
         let workspaceRootPath: String?
 
         init(
@@ -94,6 +95,8 @@ extension Design {
             name: String,
             workspaceGroup: String,
             workspaceTitle: String? = nil,
+            workspaceDefaultName: String? = nil,
+            workspaceBranch: String? = nil,
             branch: String? = nil,
             isPinned: Bool = false,
             surfaces: [AuroraSourceSurface],
@@ -107,6 +110,8 @@ extension Design {
             self.name = name
             self.workspaceGroup = workspaceGroup
             self.workspaceTitle = workspaceTitle
+            self.workspaceDefaultName = workspaceDefaultName
+            self.workspaceBranch = workspaceBranch
             self.branch = branch
             self.isPinned = isPinned
             self.surfaces = surfaces
@@ -131,9 +136,8 @@ extension Design {
     /// 3. `workspaceGroup` values are compared verbatim; two tabs with
     ///    the same value end up in the same workspace regardless of
     ///    case. This mirrors how the live chrome groups paths.
-    /// 4. The first tab's `branch` wins when several tabs in the same
-    ///    workspace carry different values — matches "primary branch"
-    ///    semantics in the reference prototype.
+    /// 4. `workspaceBranch` identifies the origin branch while each
+    ///    session retains its own checkout branch.
     /// 5. A tab without surfaces degrades to a single synthetic pane
     ///    named "shell" so the sidebar still has something to render
     ///    (prevents the first tab from disappearing during bootstrap).
@@ -143,7 +147,10 @@ extension Design {
     ///    live pane dominates the user's attention.
     enum AuroraWorkspaceAdapter {
 
-        static func workspaces(from sources: [AuroraSourceTab]) -> [AuroraWorkspace] {
+        static func workspaces(
+            from sources: [AuroraSourceTab],
+            collapsedWorkspaceIDs: Set<String> = []
+        ) -> [AuroraWorkspace] {
             guard !sources.isEmpty else { return [] }
 
             // Preserve insertion order across groups by tracking the
@@ -160,19 +167,20 @@ extension Design {
 
             return order.map { group -> AuroraWorkspace in
                 let tabs = grouped[group] ?? []
-                let branch = tabs.lazy.compactMap(\.branch).first
+                let branch = tabs.lazy.compactMap(\.workspaceBranch).first
+                    ?? tabs.lazy.compactMap(\.branch).first
                 let sessions = tabs.map(session(from:))
-                let notesWorkspaceID = notesWorkspaceID(forTabs: tabs)
                 let workspaceName = tabs.lazy
                     .compactMap { cleaned($0.workspaceTitle) }
-                    .first ?? group
+                    .first
+                    ?? tabs.lazy.compactMap { cleaned($0.workspaceDefaultName) }.first
+                    ?? group
                 return AuroraWorkspace(
                     id: group,
                     name: workspaceName,
                     branch: branch,
-                    isCollapsed: false,
-                    sessions: sessions,
-                    notesWorkspaceID: notesWorkspaceID
+                    isCollapsed: collapsedWorkspaceIDs.contains(group),
+                    sessions: sessions
                 )
             }
         }
@@ -185,33 +193,16 @@ extension Design {
             return trimmed
         }
 
-        /// Computes the per-workspace `NoteWorkspaceID` raw value used
-        /// by the Aurora sidebar's notes section. Picks the first tab
-        /// in the group that exposes a resolvable workspace root path,
-        /// falls back to the first tab's `workingDirectory`, and
-        /// returns `nil` when neither is available so the sidebar can
-        /// hide the section instead of binding to a broken identifier.
-        ///
-        /// Pure helper — kept `static` so tests can pin the contract
-        /// without instantiating the adapter and so the implementation
-        /// stays trivially diff-able with the resolver used by the
-        /// Notes module on disk (`NoteWorkspaceID(workspaceRoot:)`).
-        static func notesWorkspaceID(forTabs tabs: [AuroraSourceTab]) -> String? {
-            for tab in tabs {
-                if let path = tab.workspaceRootPath, !path.isEmpty {
-                    return NoteWorkspaceID(
-                        workspaceRoot: URL(fileURLWithPath: path, isDirectory: true)
-                    ).rawValue
-                }
-            }
-            for tab in tabs {
-                if let path = tab.workingDirectory, !path.isEmpty {
-                    return NoteWorkspaceID(
-                        workspaceRoot: URL(fileURLWithPath: path, isDirectory: true)
-                    ).rawValue
-                }
-            }
-            return nil
+        /// Computes the filesystem-derived notes identity for one tab.
+        /// Presentation grouping may combine several of these identities.
+        static func notesWorkspaceID(for tab: AuroraSourceTab) -> String? {
+            let path = cleaned(tab.workspaceRootPath) ?? cleaned(tab.workingDirectory)
+            guard let path else { return nil }
+            return NoteWorkspaceID(
+                workspaceRoot: ProjectPathCanonicalizer.canonicalURL(
+                    URL(fileURLWithPath: path, isDirectory: true)
+                )
+            ).rawValue
         }
 
         /// Builds a session from a source tab, deriving the primary
@@ -225,11 +216,13 @@ extension Design {
                 name: tab.name,
                 agent: primary.agent,
                 state: primary.state,
+                branch: tab.branch,
                 isPinned: tab.isPinned,
                 panes: panes,
                 workingDirectory: tab.workingDirectory,
                 foregroundProcessName: tab.foregroundProcessName,
                 lastCommandSummary: tab.lastCommandSummary,
+                notesWorkspaceID: notesWorkspaceID(for: tab),
                 hasWorktree: tab.hasWorktree
             )
         }

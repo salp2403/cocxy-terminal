@@ -22,7 +22,10 @@ extension AppDelegate {
     /// - The matched tab's current CWD differs from the new CWD (race-free
     ///   dedup against OSC 7).
     /// - Tab matching is exact, never a parent-directory fallback.
-    func handleCwdChangedHook(_ event: HookEvent) {
+    @discardableResult
+    func handleCwdChangedHook(
+        _ event: HookEvent
+    ) -> (controller: MainWindowController, tabID: TabID)? {
         if let resolution = resolutionForCwdChanged(event) {
             let controller = allWindowControllers[resolution.controllerIndex]
             controller.tabManager.updateTab(id: resolution.tabID) { mutated in
@@ -31,8 +34,9 @@ extension AppDelegate {
             }
             controller.tabBarViewModel?.syncWithManager()
             controller.refreshStatusBar()
+            return (controller, resolution.tabID)
         } else {
-            return
+            return nil
         }
     }
 
@@ -85,6 +89,25 @@ extension AppDelegate {
             tabID: boundTabID,
             newWorkingDirectory: URL(fileURLWithPath: newCwd, isDirectory: true)
         )
+    }
+
+    /// Distinguishes an OSC 7 race from a rejected CwdChanged event without
+    /// routing the event by its untrusted `new_cwd`. A prior session binding is
+    /// required and the bound tab must already equal the canonical destination.
+    func isBoundCwdChangedAlreadyApplied(_ event: HookEvent) -> Bool {
+        guard event.type == .cwdChanged,
+              case .cwdChanged(let data) = event.data,
+              let previousCwd = data.previousCwd, !previousCwd.isEmpty,
+              let newCwd = event.cwd, !newCwd.isEmpty,
+              HookPathNormalizer.normalize(previousCwd) != HookPathNormalizer.normalize(newCwd),
+              let boundTabID = hookSessionTabBindings[event.sessionId],
+              let controller = controllerContainingTab(boundTabID),
+              let tab = controller.tabManager.tab(for: boundTabID) else {
+            return false
+        }
+
+        return HookPathNormalizer.normalize(tab.workingDirectory.path)
+            == HookPathNormalizer.normalize(newCwd)
     }
 }
 

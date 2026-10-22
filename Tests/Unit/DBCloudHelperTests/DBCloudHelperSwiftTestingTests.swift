@@ -271,9 +271,11 @@ struct DBCloudHelperSwiftTestingTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let pidFile = directory.appendingPathComponent("timeout.pid")
         let script = try longRunningScript(in: directory)
+        // The child must start and record its pid inside this budget, or the
+        // runner stops it first and there is no pid left to check for reaping.
         let runner = LocalDBCloudHelperRunner(
             configuration: DBCloudHelperRunnerConfiguration(
-                timeoutSeconds: 1,
+                timeoutSeconds: 5,
                 terminationGracePeriodSeconds: 0.2,
                 maximumRetainedBytesPerStream: 8 * 1_024
             )
@@ -289,16 +291,17 @@ struct DBCloudHelperSwiftTestingTests {
             )
         }
         try await waitForFile(pidFile)
+        let pid = try processID(from: pidFile)
+        let identity = try #require(LaunchdProcessSnapshot.current(for: pid)?.identity)
 
         do {
             _ = try await task.value
             Issue.record("Expected helper timeout")
         } catch let error as DBCloudHelperExecutionError {
-            #expect(error == .timedOut(seconds: 1))
+            #expect(error == .timedOut(seconds: 5))
         }
 
-        let pid = try processID(from: pidFile)
-        #expect(!processExists(pid))
+        #expect(LaunchdProcessSnapshot.current(for: pid)?.identity != identity)
     }
 
     @Test("continuous output cannot starve cancellation enforcement")
@@ -318,7 +321,7 @@ struct DBCloudHelperSwiftTestingTests {
         // The subject here is cancellation, not the timeout. A one-minute budget
         // keeps the runner's own deadline from firing first and satisfying the
         // `catch` with `.timedOut` instead — the timeout path has its own test
-        // (`timeoutTerminatesChild`) and keeps a one-second budget there.
+        // (`timeoutTerminatesChild`) and keeps a five-second budget there.
         let runner = LocalDBCloudHelperRunner(
             configuration: DBCloudHelperRunnerConfiguration(
                 timeoutSeconds: 60,
@@ -336,6 +339,8 @@ struct DBCloudHelperSwiftTestingTests {
             )
         }
         try await waitForFile(pidFile)
+        let pid = try processID(from: pidFile)
+        let identity = try #require(LaunchdProcessSnapshot.current(for: pid)?.identity)
         try await Task.sleep(nanoseconds: 50_000_000)
         task.cancel()
 
@@ -346,8 +351,7 @@ struct DBCloudHelperSwiftTestingTests {
             // Expected after the flood process has been terminated and reaped.
         }
 
-        let pid = try processID(from: pidFile)
-        #expect(!processExists(pid))
+        #expect(LaunchdProcessSnapshot.current(for: pid)?.identity != identity)
     }
 
     @Test("task cancellation terminates the child and removes credential artifacts")
@@ -386,6 +390,8 @@ struct DBCloudHelperSwiftTestingTests {
         let task = Task { try await runner.run(command) }
         try await waitForFile(pidFile)
         try await waitForFile(passfilePathFile)
+        let pid = try processID(from: pidFile)
+        let identity = try #require(LaunchdProcessSnapshot.current(for: pid)?.identity)
         task.cancel()
 
         do {
@@ -395,9 +401,8 @@ struct DBCloudHelperSwiftTestingTests {
             // Expected after the runner has terminated and reaped the child.
         }
 
-        let pid = try processID(from: pidFile)
         let passfilePath = try String(contentsOf: passfilePathFile, encoding: .utf8)
-        #expect(!processExists(pid))
+        #expect(LaunchdProcessSnapshot.current(for: pid)?.identity != identity)
         #expect(!FileManager.default.fileExists(atPath: passfilePath))
         #expect(try FileManager.default.contentsOfDirectory(atPath: credentialRoot.path).isEmpty)
     }
@@ -749,7 +754,7 @@ private func longRunningScript(in directory: URL) throws -> URL {
 }
 
 private func waitForFile(_ url: URL) async throws {
-    for _ in 0..<200 {
+    for _ in 0..<1_500 {
         if FileManager.default.fileExists(atPath: url.path) { return }
         try await Task.sleep(nanoseconds: 10_000_000)
     }
@@ -763,12 +768,6 @@ private func processID(from file: URL) throws -> pid_t {
         throw DBCloudHelperTestError.invalidProcessID
     }
     return pid
-}
-
-private func processExists(_ pid: pid_t) -> Bool {
-    errno = 0
-    if Darwin.kill(pid, 0) == 0 { return true }
-    return errno != ESRCH
 }
 
 private func repositoryRoot() -> URL {

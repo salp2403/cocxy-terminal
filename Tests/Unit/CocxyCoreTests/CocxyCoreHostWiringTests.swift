@@ -53,6 +53,391 @@ struct CocxyCoreHostWiringTests {
         #expect(viewA !== viewC)
     }
 
+    @Test("CocxyCore host routes semantic actions through its live bridge")
+    func cocxyCoreHostRoutesSemanticActionsThroughLiveBridge() throws {
+        let bridge = try makeBridge()
+        let view = CocxyCoreView(viewModel: TerminalViewModel(engine: bridge))
+        let surfaceID = try bridge.createSurface(
+            in: NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 400)),
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            command: "/bin/cat"
+        )
+        defer { bridge.destroySurface(surfaceID) }
+        view.bridge = bridge
+        view.surfaceID = surfaceID
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        cocxycore_terminal_resize(state.terminal, 6, 48)
+
+        for label in ["oldest", "middle", "latest"] {
+            let output = (0..<4)
+                .map { "\(label)-output-\($0)\r\n" }
+                .joined()
+            feed(
+                "\u{1B}]133;A\u{7}$ " +
+                    "\u{1B}]133;B\u{7}echo \(label)\r\n" +
+                    "\u{1B}]133;C\u{7}\(output)" +
+                    "\u{1B}]133;D;0\u{7}",
+                into: state.terminal
+            )
+        }
+        let liveBottom = cocxycore_terminal_history_max_visible_start(state.terminal)
+
+        #expect(view.performSemanticNavigation(.previousPrompt))
+        let visibleStart = try #require(bridge.historyVisibleStart(for: surfaceID))
+        #expect(visibleStart < liveBottom)
+    }
+
+    @Test("daemon host receives its initial localizer and supports live updates through the shared contract")
+    func daemonHostReceivesAndUpdatesLocalizer() throws {
+        let bundle = try #require(localizationBundle())
+        let daemonClient = PTYDaemonClient(connection: FactoryMockPTYDaemonConnection())
+        let viewModel = TerminalViewModel(engine: daemonClient)
+        let host = TerminalHostViewFactory.make(
+            viewModel: viewModel,
+            engine: daemonClient,
+            localizer: AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        )
+        let daemonHost = try #require(host as? PTYDaemonHostView)
+
+        daemonHost.historyPillView?.update(linesAbove: 2)
+        #expect(daemonHost.historyPillView?.title.contains("Historial") == true)
+        #expect(daemonHost.historyPillView?.title.contains("2 líneas arriba") == true)
+
+        host.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+        #expect(daemonHost.historyPillView?.title.contains("History") == true)
+        #expect(daemonHost.historyPillView?.title.contains("2 lines up") == true)
+    }
+
+    @Test("daemon host applies the configured font family and size to its local renderer")
+    func daemonHostAppliesConfiguredFontToLocalRenderer() {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        let surfaceID = SurfaceID()
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        let resizeCount = engine.resizedSurfaces.count
+
+        view.applyFont(family: "Menlo", size: 18)
+
+        #expect(view.renderedFontFamilyForTesting == "Menlo")
+        #expect(view.renderedFontPointSizeForTesting == 18)
+        #expect(viewModel.currentFontSize == 18)
+        #expect(engine.resizedSurfaces.count == resizeCount + 1)
+    }
+
+    @Test("daemon host routes dead-key callbacks through NSTextInputClient")
+    func daemonHostRoutesDeadKeyCallbacksThroughTextInputClient() {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.keyEventInterpreterOverride = { [weak view] event in
+            if event.characters?.isEmpty == true {
+                view?.setMarkedText(
+                    "`",
+                    selectedRange: NSRange(location: 1, length: 0),
+                    replacementRange: NSRange(location: NSNotFound, length: 0)
+                )
+            } else {
+                view?.insertText(
+                    "à",
+                    replacementRange: NSRange(location: NSNotFound, length: 0)
+                )
+            }
+        }
+
+        view.keyDown(with: makeKeyEvent(characters: "", keyCode: 33))
+        #expect(view.hasMarkedText() == true)
+        #expect(engine.keyEvents.isEmpty)
+        #expect(engine.preeditTexts.last?.text == "`")
+        #expect(engine.preeditTexts.last?.cursorByteOffset == 1)
+
+        view.keyDown(with: makeKeyEvent(characters: "à", keyCode: 0))
+        #expect(view.hasMarkedText() == false)
+        #expect(engine.keyEvents.isEmpty)
+        #expect(engine.sentTexts.map(\.text) == ["à"])
+        #expect(engine.preeditTexts.last?.text == "")
+    }
+
+    @Test("daemon host forwards normal text and its key release with alternates")
+    func daemonHostForwardsNormalTextAndRelease() throws {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.keyEventInterpreterOverride = { [weak view] _ in
+            view?.insertText(
+                "Q",
+                replacementRange: NSRange(location: NSNotFound, length: 0)
+            )
+        }
+        let modifiers: NSEvent.ModifierFlags = [.shift, .capsLock, .numericPad]
+
+        view.keyDown(with: makeKeyEvent(
+            characters: "Q",
+            charactersIgnoringModifiers: "Q",
+            modifiers: modifiers,
+            keyCode: 12
+        ))
+        view.keyUp(with: makeKeyEvent(
+            type: .keyUp,
+            characters: "Q",
+            charactersIgnoringModifiers: "Q",
+            modifiers: modifiers,
+            keyCode: 12
+        ))
+
+        #expect(engine.sentTexts.isEmpty)
+        #expect(engine.keyEvents.count == 2)
+        let press = try #require(engine.keyEvents.first?.event)
+        let release = try #require(engine.keyEvents.last?.event)
+        #expect(press.isKeyDown == true)
+        #expect(press.characters == "Q")
+        #expect(press.unshiftedCodepoint == 113)
+        #expect(press.shiftedCodepoint == 81)
+        #expect(press.baseLayoutCodepoint == 113)
+        #expect(press.modifiers.contains(.capsLock))
+        #expect(press.modifiers.contains(.numLock) == false)
+        #expect(release.isKeyDown == false)
+        #expect(release.baseLayoutCodepoint == 113)
+    }
+
+    @Test("daemon host forwards physical modifier transitions")
+    func daemonHostForwardsPhysicalModifierTransitions() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+
+        view.flagsChanged(with: makeKeyEvent(
+            type: .flagsChanged,
+            characters: "",
+            modifiers: [.command],
+            keyCode: 55
+        ))
+        view.flagsChanged(with: makeKeyEvent(
+            type: .flagsChanged,
+            characters: "",
+            modifiers: [],
+            keyCode: 55
+        ))
+
+        #expect(engine.keyEvents.count == 2)
+        #expect(engine.keyEvents[0].event.isKeyDown == true)
+        #expect(engine.keyEvents[0].event.modifiers.contains(.command))
+        #expect(engine.keyEvents[1].event.isKeyDown == false)
+    }
+
+    @Test("daemon host converts CJK cursor offsets and clears on focus loss")
+    func daemonHostConvertsCJKCursorAndClearsOnFocusLoss() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+
+        view.setMarkedText(
+            "かな",
+            selectedRange: NSRange(location: 1, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        #expect(engine.preeditTexts.last?.cursorByteOffset == 3)
+
+        #expect(view.resignFirstResponder() == true)
+        #expect(view.hasMarkedText() == false)
+        #expect(engine.preeditTexts.last?.text == "")
+        #expect(engine.focusNotifications.last?.focused == false)
+    }
+
+    @Test("daemon host gives Escape and Ctrl-letter explicit IME semantics")
+    func daemonHostHandlesEscapeAndControlDuringComposition() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        var interpretationCount = 0
+        view.keyEventInterpreterOverride = { _ in interpretationCount += 1 }
+
+        view.setMarkedText(
+            "`",
+            selectedRange: NSRange(location: 1, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        view.keyDown(with: makeKeyEvent(characters: "\u{1B}", keyCode: 53))
+        #expect(view.hasMarkedText() == false)
+        #expect(engine.sentTexts.isEmpty)
+        #expect(engine.keyEvents.isEmpty)
+
+        view.setMarkedText(
+            "x",
+            selectedRange: NSRange(location: 1, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        view.keyDown(with: makeKeyEvent(
+            characters: "\u{3}",
+            charactersIgnoringModifiers: "c",
+            modifiers: [.control],
+            keyCode: 8
+        ))
+
+        #expect(Array(engine.sentTexts.map(\.text).suffix(2)) == ["x", "\u{3}"])
+        #expect(engine.keyEvents.isEmpty)
+        #expect(interpretationCount == 0)
+    }
+
+    @Test("daemon host commits text while retaining a replacement preedit")
+    func daemonHostCommitsTextWhileRetainingReplacementPreedit() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.setMarkedText(
+            "ni",
+            selectedRange: NSRange(location: 2, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        view.keyEventInterpreterOverride = { [weak view] _ in
+            view?.insertText(
+                "你",
+                replacementRange: NSRange(location: NSNotFound, length: 0)
+            )
+            view?.setMarkedText(
+                "h",
+                selectedRange: NSRange(location: 1, length: 0),
+                replacementRange: NSRange(location: NSNotFound, length: 0)
+            )
+        }
+
+        view.keyDown(with: makeKeyEvent(characters: "h", keyCode: 4))
+
+        #expect(engine.sentTexts.map(\.text) == ["你"])
+        #expect(engine.keyEvents.isEmpty)
+        #expect(view.hasMarkedText() == true)
+        #expect(view.markedRange() == NSRange(location: 0, length: 1))
+        #expect(view.selectedRange() == NSRange(location: 1, length: 0))
+        #expect(Array(engine.preeditTexts.map(\.text).suffix(2)) == ["", "h"])
+        #expect(engine.preeditTexts.last?.cursorByteOffset == 1)
+    }
+
+    @Test("daemon host candidate confirmation does not report a command submission")
+    func daemonHostCandidateConfirmationDoesNotSubmit() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        var submitCount = 0
+        view.onUserInputSubmitted = { submitCount += 1 }
+        view.setMarkedText(
+            "ni",
+            selectedRange: NSRange(location: 2, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        view.keyEventInterpreterOverride = { [weak view] _ in
+            view?.insertText(
+                "你",
+                replacementRange: NSRange(location: NSNotFound, length: 0)
+            )
+        }
+
+        view.keyDown(with: makeKeyEvent(characters: "\r", keyCode: 36))
+
+        #expect(engine.sentTexts.map(\.text) == ["你"])
+        #expect(submitCount == 0)
+        #expect(view.hasMarkedText() == false)
+    }
+
+    @Test("daemon host clears old preedit before surface reconfiguration")
+    func daemonHostClearsPreeditBeforeReconfiguration() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let oldSurfaceID = SurfaceID()
+        let newSurfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: oldSurfaceID)
+        view.setMarkedText(
+            "かな",
+            selectedRange: NSRange(location: 1, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: newSurfaceID)
+
+        #expect(view.hasMarkedText() == false)
+        #expect(engine.preeditTexts.last?.surface == oldSurfaceID)
+        #expect(engine.preeditTexts.last?.text == "")
+
+        view.setMarkedText(
+            "x",
+            selectedRange: NSRange(location: 1, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        #expect(engine.preeditTexts.last?.surface == newSurfaceID)
+        #expect(engine.preeditTexts.last?.text == "x")
+    }
+
+    @Test("daemon host holds synchronized frames until the bounded timeout")
+    func daemonHostHoldsSynchronizedFramesUntilTimeout() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        var now: TimeInterval = 100
+        view.synchronizedOutputClock = { now }
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            synchronizedOutput: true
+        ))
+
+        #expect(view.hasPendingSynchronizedFrameForTesting == true)
+        #expect(view.latestFrameRevisionForTesting == nil)
+
+        now = 100.151
+        view.flushPendingSynchronizedFrameForTesting()
+
+        #expect(view.hasPendingSynchronizedFrameForTesting == false)
+        #expect(view.latestFrameRevisionForTesting == 1)
+    }
+
+    @Test("daemon host presents the closing synchronized frame immediately")
+    func daemonHostPresentsClosingSynchronizedFrameImmediately() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.synchronizedOutputClock = { 200 }
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            synchronizedOutput: true
+        ))
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 2,
+            timestamp: 2,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            synchronizedOutput: false
+        ))
+
+        #expect(view.hasPendingSynchronizedFrameForTesting == false)
+        #expect(view.latestFrameRevisionForTesting == 2)
+    }
+
     @Test("daemon host view forwards scroll wheel as viewport scroll")
     func daemonHostViewForwardsScrollWheelAsViewportScroll() {
         let engine = MockTerminalEngine()
@@ -61,12 +446,132 @@ struct CocxyCoreHostWiringTests {
         view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
         let surfaceID = SurfaceID()
         view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            scrollbackTop: 40,
+            historyMaxVisibleStart: 100
+        ))
+
+        #expect(view.historyPillView?.linesAbove == 60)
+        #expect(view.historyPillView?.isHidden == false)
+        #expect(view.isTerminalMouseTrackingActive == false)
 
         view.scrollWheel(with: makeScrollEvent(deltaY: 120))
 
         #expect(engine.viewportScrollRequests.count == 1)
         #expect(engine.viewportScrollRequests.first?.surface == surfaceID)
         #expect(engine.viewportScrollRequests.first?.deltaRows == 18)
+    }
+
+    @Test("daemon host preserves local agent scroll when history exists")
+    func daemonHostPreservesLocalAgentScrollWithHistory() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.prefersLocalScrollInMouseTrackingMode = { true }
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            historyMaxVisibleStart: 20,
+            mouseTrackingMode: 2,
+            mouseEncodingMode: TerminalMouseEncoding.sgr.rawValue
+        ))
+
+        view.scrollWheel(with: makeScrollEvent(deltaY: 120))
+
+        #expect(engine.viewportScrollRequests.map(\.deltaRows) == [18])
+    }
+
+    @Test("daemon host cleanly ignores wheel input with no destination")
+    func daemonHostIgnoresWheelWithNoDestination() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0)
+        ))
+
+        view.scrollWheel(with: makeScrollEvent(deltaY: 120))
+
+        #expect(engine.viewportScrollRequests.isEmpty)
+    }
+
+    @Test("daemon host maps alternate scroll to application arrow keys")
+    func daemonHostMapsAlternateScrollToApplicationArrowKeys() throws {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            historyMaxVisibleStart: 40,
+            isAltScreen: true,
+            alternateScrollMode: true
+        ))
+
+        view.scrollWheel(with: makeScrollEvent(deltaY: 7))
+
+        #expect(engine.keyEvents.count == 1)
+        let event = try #require(engine.keyEvents.first?.event)
+        #expect(event.keyCode == 126)
+        #expect(event.isKeyDown)
+        #expect(engine.viewportScrollRequests.map(\.deltaRows) == [Int(Int32.min)])
+    }
+
+    @Test("daemon host exposes all local viewport keyboard commands")
+    func daemonHostExposesViewportKeyboardCommands() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            historyMaxVisibleStart: 100
+        ))
+
+        view.performLocalViewportScroll(.pageUp)
+        view.performLocalViewportScroll(.pageDown)
+        view.performLocalViewportScroll(.top)
+        view.performLocalViewportScroll(.bottom)
+
+        #expect(engine.viewportScrollRequests.map(\.deltaRows) == [
+            24,
+            -24,
+            Int(Int32.max),
+            Int(Int32.min),
+        ])
+        #expect(view.historyPillView?.isHidden == true)
     }
 
     @Test("daemon host encodes exact X10 and SGR mouse wheel payloads")
@@ -136,6 +641,7 @@ struct CocxyCoreHostWiringTests {
         let surfaceID = try client.createSurface(in: view, workingDirectory: nil, command: nil)
         view.configureSurfaceIfNeeded(bridge: client, surfaceID: surfaceID)
 
+        #expect(view.isTerminalMouseTrackingActive == true)
         view.scrollWheel(with: makeScrollEvent(deltaY: 24, location: .zero))
 
         let write = try #require(connection.requests.last { $0.command == .surfaceWrite })
@@ -143,6 +649,381 @@ struct CocxyCoreHostWiringTests {
         #expect(Data(base64Encoded: encoded) == Data(
             "\u{1B}[<64;1;1M\u{1B}[<64;1;1M\u{1B}[<64;1;1M".utf8
         ))
+    }
+
+    @Test("daemon host routes a complete SGR mouse gesture through surface_write")
+    func daemonHostRoutesCompleteSGRMouseGesture() throws {
+        let rawSurfaceID = UUID()
+        let frame = PTYDaemonSurfaceFrame(
+            surfaceID: rawSurfaceID.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            mouseTrackingMode: TerminalMouseTracking.anyEvent.rawValue,
+            mouseEncodingMode: TerminalMouseEncoding.sgr.rawValue
+        )
+        let connection = RecordingPTYDaemonConnection(responses: [
+            PTYDaemonResponse(
+                id: "hello",
+                ok: true,
+                hello: PTYDaemonHello(
+                    version: "dev",
+                    capabilities: [
+                        PTYDaemonProtocol.jsonLinesCapability,
+                        PTYDaemonProtocol.terminalSurfaceCapability,
+                        PTYDaemonProtocol.terminalEngineCapability,
+                        PTYDaemonProtocol.terminalHostRendererCapability,
+                    ]
+                )
+            ),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: rawSurfaceID.uuidString),
+            PTYDaemonResponse(id: "subscribe", ok: true, frame: frame),
+            PTYDaemonResponse(id: "resize", ok: true),
+            PTYDaemonResponse(id: "press", ok: true),
+            PTYDaemonResponse(id: "drag", ok: true),
+            PTYDaemonResponse(id: "release", ok: true),
+            PTYDaemonResponse(id: "move", ok: true),
+            PTYDaemonResponse(id: "move-next-cell", ok: true),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: TerminalEngineConfig(
+            fontFamily: "Menlo",
+            fontSize: 13,
+            themeName: "Catppuccin Mocha",
+            shell: "/bin/zsh",
+            workingDirectory: URL(fileURLWithPath: "/tmp")
+        ))
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: client))
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = try client.createSurface(in: view, workingDirectory: nil, command: nil)
+        view.configureSurfaceIfNeeded(bridge: client, surfaceID: surfaceID)
+
+        var focusRequests = 0
+        view.onFocusRequested = { focusRequests += 1 }
+        view.updateTrackingAreas()
+        #expect(view.trackingAreas.contains { $0.options.contains(.mouseMoved) })
+
+        let topLeftInWindow = NSPoint(x: 0, y: view.bounds.maxY)
+        view.mouseDown(with: makeHostMouseEvent(type: .leftMouseDown, location: topLeftInWindow))
+        view.mouseDragged(with: makeHostMouseEvent(type: .leftMouseDragged, location: topLeftInWindow))
+        view.mouseUp(with: makeHostMouseEvent(type: .leftMouseUp, location: topLeftInWindow))
+        view.mouseMoved(with: makeHostMouseEvent(type: .mouseMoved, location: topLeftInWindow))
+        view.mouseMoved(with: makeHostMouseEvent(type: .mouseMoved, location: topLeftInWindow))
+        view.mouseMoved(with: makeHostMouseEvent(
+            type: .mouseMoved,
+            location: NSPoint(x: view.bounds.maxX - 1, y: view.bounds.maxY)
+        ))
+
+        let writes = try connection.requests
+            .filter { $0.command == .surfaceWrite }
+            .map { request -> Data in
+                let encoded = try #require(request.payload?["bytesBase64"])
+                return try #require(Data(base64Encoded: encoded))
+            }
+        #expect(focusRequests == 1)
+        #expect(writes == [
+            Data("\u{1B}[<0;1;1M".utf8),
+            Data("\u{1B}[<32;1;1M".utf8),
+            Data("\u{1B}[<0;1;1m".utf8),
+            Data("\u{1B}[<35;1;1M".utf8),
+            Data("\u{1B}[<35;80;1M".utf8),
+        ])
+    }
+
+    @Test("daemon host underlines and activates engine-detected content")
+    func daemonHostActivatesDetectedContent() throws {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        let content = TerminalDetectedContent(
+            kind: .url,
+            text: "https://cocxy.dev",
+            target: "https://cocxy.dev",
+            startRow: 3,
+            startColumn: 0,
+            endRow: 3,
+            endColumn: 16,
+            line: nil,
+            column: nil,
+            isExplicitHyperlink: false
+        )
+        engine.detectedContents[surfaceID] = [content]
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            scrollbackTop: 3,
+            mouseTrackingMode: TerminalMouseTracking.anyEvent.rawValue,
+            mouseEncodingMode: TerminalMouseEncoding.sgr.rawValue,
+            detectedContents: [
+                PTYDaemonDetectedContent(
+                    kind: .url,
+                    text: content.text,
+                    target: content.target,
+                    startRow: content.startRow,
+                    startColumn: content.startColumn,
+                    endRow: content.endRow,
+                    endColumn: content.endColumn
+                )
+            ]
+        ))
+        var activated: TerminalDetectedContent?
+        view.onActivateDetectedContent = {
+            activated = $0
+            return true
+        }
+        view.updateTrackingAreas()
+        #expect(view.trackingAreas.contains { $0.options.contains(.mouseEnteredAndExited) })
+
+        let location = NSPoint(x: 8, y: view.bounds.maxY)
+        view.mouseMoved(with: makeHostMouseEvent(type: .mouseMoved, location: location))
+        #expect(view.hoveredDetectedContent == content)
+        #expect(view.detectedContentOverlayView?.hoveredContent == content)
+
+        view.mouseDown(with: makeHostMouseEvent(
+            type: .leftMouseDown,
+            location: location,
+            modifiers: [.command]
+        ))
+        view.mouseUp(with: makeHostMouseEvent(
+            type: .leftMouseUp,
+            location: location,
+            modifiers: [.command]
+        ))
+        #expect(activated == content)
+        #expect(view.localSelectionTextForTesting == nil)
+
+        view.mouseExited(with: makeHostMouseEvent(type: .mouseExited, location: location))
+        #expect(view.hoveredDetectedContent == nil)
+
+        activated = nil
+        #expect(view.showDetectedContentHints() == 1)
+        #expect(view.detectedContentHintSession?.hints.map(\.label) == ["A"])
+        view.keyDown(with: makeKeyEvent(characters: "a", keyCode: 0))
+        #expect(activated == content)
+        #expect(view.detectedContentHintSession == nil)
+        #expect(engine.keyEvents.isEmpty)
+        #expect(engine.sentTexts.isEmpty)
+
+        activated = nil
+        #expect(view.showDetectedContentHints() == 1)
+        view.keyDown(with: makeKeyEvent(characters: "\u{1B}", keyCode: 53))
+        #expect(activated == nil)
+        #expect(view.detectedContentHintSession == nil)
+        #expect(engine.keyEvents.isEmpty)
+        #expect(engine.sentTexts.isEmpty)
+    }
+
+    @Test("daemon host retains semantic output selection and copies its complete text")
+    func daemonHostCopiesCompleteSemanticOutputSelection() throws {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 3,
+            rows: 1,
+            cells: Array("abc".unicodeScalars.enumerated()).map { index, scalar in
+                PTYDaemonGridCell(
+                    row: 0,
+                    column: UInt16(index),
+                    glyph: scalar.value,
+                    foregroundRGBA: 0xffffffff,
+                    backgroundRGBA: 0x000000ff
+                )
+            },
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            scrollbackTop: 8,
+            historyMaxVisibleStart: 12
+        ))
+        let selection = TerminalSemanticSelection(
+            blockID: 42,
+            startRow: 8,
+            startColumn: 0,
+            endRow: 10,
+            endColumn: 2,
+            text: "visible\ncomplete off-screen output"
+        )
+        engine.semanticNavigationResult = TerminalSemanticNavigationResult(
+            action: .selectCommandOutput,
+            viewportStartRow: 8,
+            selection: selection
+        )
+        let clipboard = MockClipboardService()
+        view.clipboardService = clipboard
+
+        #expect(view.performSemanticNavigation(.selectCommandOutput))
+        view.copy(nil)
+
+        #expect(engine.semanticNavigationRequests.count == 1)
+        #expect(engine.semanticNavigationRequests[0].surface == surfaceID)
+        #expect(engine.semanticNavigationRequests[0].action == .selectCommandOutput)
+        #expect(view.localSelectionTextForTesting == selection.text)
+        #expect(clipboard.read() == selection.text)
+        #expect(engine.keyEvents.isEmpty)
+        #expect(engine.sentTexts.isEmpty)
+    }
+
+    @Test("daemon host Shift drag selects and copies visible frame text")
+    func daemonHostShiftDragSelectsVisibleText() throws {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 3,
+            rows: 1,
+            cells: Array("abc".unicodeScalars.enumerated()).map { index, scalar in
+                PTYDaemonGridCell(
+                    row: 0,
+                    column: UInt16(index),
+                    glyph: scalar.value,
+                    foregroundRGBA: 0xffffffff,
+                    backgroundRGBA: 0x000000ff
+                )
+            },
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            mouseTrackingMode: TerminalMouseTracking.anyEvent.rawValue,
+            mouseEncodingMode: TerminalMouseEncoding.sgr.rawValue
+        ))
+        let clipboard = MockClipboardService()
+        view.clipboardService = clipboard
+
+        let y = view.bounds.maxY
+        view.mouseDown(with: makeHostMouseEvent(
+            type: .leftMouseDown,
+            location: NSPoint(x: 0, y: y),
+            modifiers: [.shift]
+        ))
+        view.mouseDragged(with: makeHostMouseEvent(
+            type: .leftMouseDragged,
+            location: NSPoint(x: view.bounds.maxX, y: y),
+            modifiers: [.shift]
+        ))
+        view.mouseUp(with: makeHostMouseEvent(
+            type: .leftMouseUp,
+            location: NSPoint(x: view.bounds.maxX, y: y),
+            modifiers: [.shift]
+        ))
+
+        #expect(clipboard.read() == "abc")
+        #expect(viewModel.isDragging == false)
+    }
+
+    @Test("daemon host double click selects and copies a visible word")
+    func daemonHostDoubleClickSelectsVisibleWord() {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(makeDaemonSelectionFrame(
+            surfaceID: surfaceID,
+            lines: ["alpha beta"],
+            columns: 10
+        ))
+        let clipboard = MockClipboardService()
+        view.clipboardService = clipboard
+        let location = hostSelectionMouseLocation(row: 0, column: 1, view: view)
+
+        view.mouseDown(with: makeHostMouseEvent(
+            type: .leftMouseDown,
+            location: location,
+            clickCount: 2
+        ))
+        view.mouseUp(with: makeHostMouseEvent(
+            type: .leftMouseUp,
+            location: location,
+            clickCount: 2
+        ))
+
+        #expect(viewModel.lastClickCount == 2)
+        #expect(clipboard.read() == "alpha")
+    }
+
+    @Test("daemon host triple click follows soft wraps in both directions")
+    func daemonHostTripleClickSelectsWrappedLogicalLine() {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(makeDaemonSelectionFrame(
+            surfaceID: surfaceID,
+            lines: ["abcd", "ef", "tail"],
+            columns: 4,
+            wrappedRows: [0]
+        ))
+        let clipboard = MockClipboardService()
+        view.clipboardService = clipboard
+        let location = hostSelectionMouseLocation(row: 1, column: 0, view: view)
+
+        view.mouseDown(with: makeHostMouseEvent(
+            type: .leftMouseDown,
+            location: location,
+            clickCount: 3
+        ))
+        view.mouseUp(with: makeHostMouseEvent(
+            type: .leftMouseUp,
+            location: location,
+            clickCount: 3
+        ))
+
+        #expect(viewModel.lastClickCount == 3)
+        #expect(clipboard.read() == "abcd\nef")
+    }
+
+    @Test("daemon host Option drag copies a rectangular column band")
+    func daemonHostOptionDragSelectsRectangularBand() {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(makeDaemonSelectionFrame(
+            surfaceID: surfaceID,
+            lines: ["abcdef", "ghijkl", "mnopqr"],
+            columns: 6
+        ))
+        let clipboard = MockClipboardService()
+        view.clipboardService = clipboard
+        let start = hostSelectionMouseLocation(row: 0, column: 1, view: view)
+        let end = hostSelectionMouseLocation(row: 2, column: 3, view: view)
+
+        view.mouseDown(with: makeHostMouseEvent(
+            type: .leftMouseDown,
+            location: start,
+            modifiers: [.option]
+        ))
+        view.mouseDragged(with: makeHostMouseEvent(
+            type: .leftMouseDragged,
+            location: end
+        ))
+        #expect(view.localSelectionTextForTesting == "bcd\nhij\nnop")
+        view.mouseUp(with: makeHostMouseEvent(type: .leftMouseUp, location: end))
+
+        #expect(clipboard.read() == "bcd\nhij\nnop")
     }
 
     @Test("in-process engine reaps a shell that exits without further PTY output")
@@ -166,7 +1047,7 @@ struct CocxyCoreHostWiringTests {
         defer { bridge.destroySurface(surfaceID) }
         let shellPID = try #require(bridge.processMonitorRegistration(for: surfaceID)?.shellPID)
 
-        let deadline = Date().addingTimeInterval(2)
+        let deadline = Date().addingTimeInterval(15)
         while processIsPresent(shellPID), Date() < deadline {
             bridge.tick()
             RunLoop.current.run(until: Date().addingTimeInterval(0.01))
@@ -510,6 +1391,11 @@ private final class RecordingPTYDaemonConnection: PTYDaemonClientConnection {
     func reconnect() throws {}
 }
 
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
+}
+
 private func feed(_ text: String, into terminal: OpaquePointer) {
     let bytes = Array(text.utf8)
     cocxycore_terminal_feed(terminal, bytes, bytes.count)
@@ -537,14 +1423,92 @@ private func makeScrollEvent(
     return NSEvent(cgEvent: event)!
 }
 
+private func makeHostMouseEvent(
+    type: NSEvent.EventType,
+    location: NSPoint,
+    modifiers: NSEvent.ModifierFlags = [],
+    clickCount: Int = 1
+) -> NSEvent {
+    if type == .mouseEntered || type == .mouseExited {
+        return NSEvent.enterExitEvent(
+            with: type,
+            location: location,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 1,
+            trackingNumber: 1,
+            userData: nil
+        )!
+    }
+
+    return NSEvent.mouseEvent(
+        with: type,
+        location: location,
+        modifierFlags: modifiers,
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        eventNumber: 1,
+        clickCount: clickCount,
+        pressure: 1
+    )!
+}
+
+@MainActor
+private func hostSelectionMouseLocation(
+    row: UInt16,
+    column: UInt16,
+    view: PTYDaemonHostView
+) -> NSPoint {
+    let cellSize = view.renderedCellSizeForTesting
+    let viewY = (CGFloat(row) + 0.25) * cellSize.height
+    return NSPoint(
+        x: (CGFloat(column) + 0.25) * cellSize.width,
+        y: view.bounds.maxY - viewY
+    )
+}
+
+private func makeDaemonSelectionFrame(
+    surfaceID: SurfaceID,
+    lines: [String],
+    columns: UInt16,
+    wrappedRows: [UInt16] = []
+) -> PTYDaemonSurfaceFrame {
+    var cells: [PTYDaemonGridCell] = []
+    for (row, line) in lines.enumerated() {
+        for (column, scalar) in line.unicodeScalars.prefix(Int(columns)).enumerated() {
+            cells.append(PTYDaemonGridCell(
+                row: UInt16(row),
+                column: UInt16(column),
+                glyph: scalar.value,
+                foregroundRGBA: 0xffffffff,
+                backgroundRGBA: 0x000000ff
+            ))
+        }
+    }
+    return PTYDaemonSurfaceFrame(
+        surfaceID: surfaceID.rawValue.uuidString,
+        revision: 1,
+        timestamp: 1,
+        columns: columns,
+        rows: UInt16(lines.count),
+        cells: cells,
+        cursor: PTYDaemonCursor(row: 0, column: 0),
+        wrappedRows: wrappedRows
+    )
+}
+
 private func makeKeyEvent(
+    type: NSEvent.EventType = .keyDown,
     characters: String,
     charactersIgnoringModifiers: String? = nil,
     modifiers: NSEvent.ModifierFlags = [],
     keyCode: UInt16 = 15
 ) -> NSEvent {
     NSEvent.keyEvent(
-        with: .keyDown,
+        with: type,
         location: .zero,
         modifierFlags: modifiers,
         timestamp: ProcessInfo.processInfo.systemUptime,

@@ -543,9 +543,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_tabConfigSave_routesNameThemeAndEnvToProviderWithoutCommand() {
-        let captured = LockedBox<(name: String?, command: String?, theme: String?, env: [String: String])>(
-            (nil, nil, nil, [:])
-        )
+        let captured = LockedBox<(name: String?, command: String?, theme: String?, env: [String: String])>((nil, nil, nil, [:]))
         let handler = AppSocketCommandHandler(
             privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
@@ -554,7 +552,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                 captured.withValue { value in
                     value = (name, command, theme, environment)
                 }
-                return (name: name, path: "/tmp/\(name).toml")
+                return (name: name, path: "/tmp/\(name).toml", warning: "layout omitted")
             }
         )
 
@@ -575,6 +573,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(snapshot.theme, "Nord")
         XCTAssertEqual(snapshot.env, ["API_URL": "http://127.0.0.1:8080"])
         XCTAssertEqual(response.data?["path"], "/tmp/api.toml")
+        XCTAssertEqual(response.data?["warning"], "layout omitted")
     }
 
     func test_tabConfigSave_rejectsStartupCommandBeforeProviderDispatch() {
@@ -585,7 +584,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             hookEventReceiver: nil,
             tabConfigSaveProvider: { name, _, _, _ in
                 providerWasCalled.withValue { $0 = true }
-                return (name: name, path: "/tmp/\(name).toml")
+                return (name: name, path: "/tmp/\(name).toml", warning: nil)
             }
         )
 
@@ -608,7 +607,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             hookEventReceiver: nil,
             tabConfigOpenProvider: { name in
                 captured.withValue { $0 = name }
-                return (id: "tab-1", title: "api", path: "/tmp/api.toml")
+                return (id: "tab-1", title: "api", path: "/tmp/api.toml", warning: "one pane replaced")
             }
         )
 
@@ -622,6 +621,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(captured.withValue { $0 }, "api")
         XCTAssertEqual(response.data?["id"], "tab-1")
         XCTAssertEqual(response.data?["path"], "/tmp/api.toml")
+        XCTAssertEqual(response.data?["warning"], "one pane replaced")
     }
 
     func test_tabConfigExport_routesNameLeafAndForceToProvider() {
@@ -1261,6 +1261,22 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["value"], ClipboardWriteAccess.prompt.rawValue)
     }
 
+    func test_configGet_cursorClickToMove_returnsDefault() {
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "cg-cursor-click",
+            command: "config-get",
+            params: ["key": "terminal.cursor-click-to-move"]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["key"], "terminal.cursor-click-to-move")
+        XCTAssertEqual(
+            response.data?["value"],
+            "\(TerminalConfig.defaults.cursorClickToMove)"
+        )
+    }
+
     func test_configGet_withMissingKey_returnsError() {
         let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "cg-2", command: "config-get", params: nil)
@@ -1412,6 +1428,20 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["value"], "\(CommandCorrectionsConfig.defaults.enabled)")
     }
 
+    func test_configGet_commandBlocksKey_returnsDefault() {
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
+        let request = SocketRequest(
+            id: "cg-command-blocks",
+            command: "config-get",
+            params: ["key": "command-blocks.show-only-on-hover"]
+        )
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["key"], "command-blocks.show-only-on-hover")
+        XCTAssertEqual(response.data?["value"], "\(CommandBlocksConfig.defaults.showOnlyOnHover)")
+    }
+
     func test_configList_includesNewNotesAndRateLimitKeys() {
         let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(id: "cl-new-keys", command: "config-list", params: nil))
@@ -1419,6 +1449,10 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertTrue(response.success)
         XCTAssertEqual(response.data?["notes.enabled"], "\(NotesConfig.defaults.enabled)")
         XCTAssertEqual(response.data?["notes.shortcut"], NotesConfig.defaults.shortcut)
+        XCTAssertEqual(
+            response.data?["terminal.cursor-click-to-move"],
+            "\(TerminalConfig.defaults.cursorClickToMove)"
+        )
         XCTAssertEqual(response.data?["appearance.aurora-enabled"], "\(AppearanceConfig.defaults.auroraEnabled)")
         XCTAssertEqual(
             response.data?["appearance.rate-limit-indicator-enabled"],
@@ -1473,6 +1507,11 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(
             response.data?["command-corrections.edit-distance-threshold"],
             "\(CommandCorrectionsConfig.defaults.editDistanceThreshold)"
+        )
+        XCTAssertEqual(response.data?["command-blocks.enabled"], "\(CommandBlocksConfig.defaults.enabled)")
+        XCTAssertEqual(
+            response.data?["command-blocks.show-only-on-hover"],
+            "\(CommandBlocksConfig.defaults.showOnlyOnHover)"
         )
     }
 
@@ -1543,6 +1582,24 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             "\(CommandCorrectionsConfig.defaults.foundationModelsEnabled)"
         )
         XCTAssertNil(response.data?["completions.inline-ai"])
+    }
+
+    func test_configList_withCommandBlocksFilterOnlyReturnsCommandBlockKeys() {
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "cl-command-blocks",
+            command: "config-list",
+            params: ["filter": "command-blocks."]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["count"], "2")
+        XCTAssertEqual(response.data?["command-blocks.enabled"], "\(CommandBlocksConfig.defaults.enabled)")
+        XCTAssertEqual(
+            response.data?["command-blocks.show-only-on-hover"],
+            "\(CommandBlocksConfig.defaults.showOnlyOnHover)"
+        )
+        XCTAssertNil(response.data?["command-corrections.enabled"])
     }
 
     // MARK: config-set
@@ -1635,9 +1692,12 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                 ("appearance.aurora-enabled", "FALSE"),
                 ("terminal.clipboard-read-access", " DENY "),
                 ("terminal.clipboard-write-access", "ALLOW"),
+                ("terminal.cursor-click-to-move", "FALSE"),
                 ("command-corrections.enabled", "FALSE"),
                 ("command-corrections.edit-distance-threshold", "1"),
                 ("command-corrections.max-suggestions-shown", "5"),
+                ("command-blocks.enabled", "FALSE"),
+                ("command-blocks.show-only-on-hover", "FALSE"),
                 ("completions.provider", "foundation-models-on-device"),
                 ("completions.enabled-languages", "[\"swift\", python, \"markdown\"]"),
                 ("rate-limit.enabled-providers", "[\"cursor\", copilot, \"cursor\"]"),
@@ -1662,6 +1722,28 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             XCTAssertTrue(written.contains("[experimental.remote-browser]\nenabled = true"))
             XCTAssertTrue(written.contains("clipboard-read-access = \"deny\""))
             XCTAssertTrue(written.contains("clipboard-write-access = \"allow\""))
+            XCTAssertTrue(written.contains("cursor-click-to-move = false"))
+            XCTAssertTrue(written.contains("[command-blocks]\nenabled = false\nshow-only-on-hover = false"))
+        }
+    }
+
+    func test_configSet_rejectsInvalidCursorClickToMoveValue() {
+        preservingUserConfig {
+            let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
+            let response = handler.handleCommand(SocketRequest(
+                id: "cs-invalid-cursor-click",
+                command: "config-set",
+                params: [
+                    "key": "terminal.cursor-click-to-move",
+                    "value": "sometimes",
+                ]
+            ))
+
+            XCTAssertFalse(response.success)
+            XCTAssertEqual(
+                response.error,
+                "Invalid value for config key: terminal.cursor-click-to-move"
+            )
         }
     }
 
@@ -3439,243 +3521,6 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: outputURL, encoding: .utf8), "existing")
     }
 
-    func test_notebookRun_executesLocalBashCellAndWritesOutputs() throws {
-        let directory = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let inputURL = directory.appendingPathComponent("source.cocxynb")
-        let outputURL = directory.appendingPathComponent("result.cocxynb")
-
-        try """
-        ---
-        cocxy-notebook: "1"
-        title: "Executable"
-        ---
-
-        ```bash
-        echo notebook-ok
-        ```
-        """.write(to: inputURL, atomically: true, encoding: .utf8)
-
-        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
-        let response = handler.handleCommand(SocketRequest(
-            id: "notebook-run-1",
-            command: "notebook-run",
-            params: [
-                "input": inputURL.path,
-                "output": outputURL.path,
-                "cwd": directory.path,
-                "timeout": "15",
-                "continue-on-failure": "false",
-            ]
-        ))
-
-        XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "completed")
-        XCTAssertEqual(response.data?["executed-cells"], "1")
-        XCTAssertEqual(response.data?["input"], inputURL.standardizedFileURL.path)
-        XCTAssertEqual(response.data?["output"], outputURL.standardizedFileURL.path)
-        let rendered = try String(contentsOf: outputURL, encoding: .utf8)
-        XCTAssertTrue(rendered.contains("```cocxy-output stdout\nnotebook-ok\n```"))
-    }
-
-    func test_notebookRunWorkspaceSandboxBlocksWritesOutsideWorkingDirectory() throws {
-        try requireExecutableOnPath("sandbox-exec")
-
-        let root = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let workspace = root.appendingPathComponent("workspace", isDirectory: true)
-        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
-        let inputURL = workspace.appendingPathComponent("sandbox.cocxynb")
-        let outputURL = workspace.appendingPathComponent("sandbox-result.cocxynb")
-        let outsideURL = root.appendingPathComponent("outside.txt")
-
-        try """
-        ---
-        cocxy-notebook: "1"
-        title: "Sandbox"
-        ---
-
-        ```bash
-        echo allowed > allowed.txt
-        echo denied > ../outside.txt
-        ```
-        """.write(to: inputURL, atomically: true, encoding: .utf8)
-
-        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
-        let response = handler.handleCommand(SocketRequest(
-            id: "notebook-run-sandbox",
-            command: "notebook-run",
-            params: [
-                "input": inputURL.path,
-                "output": outputURL.path,
-                "cwd": workspace.path,
-                "timeout": "15",
-                "sandbox": "workspace",
-            ]
-        ))
-
-        XCTAssertTrue(response.success, response.error ?? "")
-        XCTAssertEqual(response.data?["status"], "failed")
-        XCTAssertEqual(response.data?["failed-cell-index"], "0")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: workspace.appendingPathComponent("allowed.txt").path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: outsideURL.path))
-        let rendered = try String(contentsOf: outputURL, encoding: .utf8)
-        XCTAssertTrue(rendered.contains("Operation not permitted"))
-    }
-
-    func test_notebookRun_executesLocalBashPythonAndSwiftCellsThenExportsJupyter() throws {
-        try requireExecutableOnPath("python3")
-        try requireExecutableOnPath("swift")
-
-        let directory = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let inputURL = directory.appendingPathComponent("multi-language.cocxynb")
-        let outputURL = directory.appendingPathComponent("multi-language-result.cocxynb")
-        let jupyterURL = directory.appendingPathComponent("multi-language-result.ipynb")
-
-        try """
-        ---
-        cocxy-notebook: "1"
-        title: "Multi Language"
-        ---
-
-        # Smoke
-
-        ```bash
-        printf 'bash-ok\\n'
-        ```
-
-        ```python
-        print("python-ok")
-        ```
-
-        ```swift
-        print("swift-ok")
-        ```
-        """.write(to: inputURL, atomically: true, encoding: .utf8)
-
-        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
-        let runResponse = handler.handleCommand(SocketRequest(
-            id: "notebook-run-multi-language",
-            command: "notebook-run",
-            params: [
-                "input": inputURL.path,
-                "output": outputURL.path,
-                "cwd": directory.path,
-                "timeout": "45",
-                "continue-on-failure": "false",
-            ]
-        ))
-
-        XCTAssertTrue(runResponse.success, runResponse.error ?? "")
-        XCTAssertEqual(runResponse.data?["status"], "completed")
-        XCTAssertEqual(runResponse.data?["executed-cells"], "3")
-        let rendered = try String(contentsOf: outputURL, encoding: .utf8)
-        XCTAssertTrue(rendered.contains("```cocxy-output stdout\nbash-ok\n```"))
-        XCTAssertTrue(rendered.contains("```cocxy-output stdout\npython-ok\n```"))
-        XCTAssertTrue(rendered.contains("```cocxy-output stdout\nswift-ok\n```"))
-
-        let exportResponse = handler.handleCommand(SocketRequest(
-            id: "notebook-export-multi-language",
-            command: "notebook-export",
-            params: [
-                "input": outputURL.path,
-                "output": jupyterURL.path,
-                "force": "false",
-            ]
-        ))
-
-        XCTAssertTrue(exportResponse.success, exportResponse.error ?? "")
-        let data = try Data(contentsOf: jupyterURL)
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let cells = try XCTUnwrap(json["cells"] as? [[String: Any]])
-        XCTAssertEqual(cells.map { $0["cell_type"] as? String }, ["markdown", "code", "code", "code"])
-        let codeOutputs = cells.dropFirst().compactMap { $0["outputs"] as? [[String: Any]] }
-        XCTAssertEqual(codeOutputs.count, 3)
-        XCTAssertTrue(codeOutputs[0].contains { (($0["text"] as? [String])?.joined() ?? "") == "bash-ok\n" })
-        XCTAssertTrue(codeOutputs[1].contains { (($0["text"] as? [String])?.joined() ?? "") == "python-ok\n" })
-        XCTAssertTrue(codeOutputs[2].contains { (($0["text"] as? [String])?.joined() ?? "") == "swift-ok\n" })
-    }
-
-    func test_workflowRun_executesLocalWorkflowToml() throws {
-        let directory = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let inputURL = directory.appendingPathComponent("workflow.toml")
-
-        try """
-        [workflow]
-        id = "ci"
-        steps = ["verify"]
-
-        [step.verify]
-        command = "echo workflow-ok"
-        """.write(to: inputURL, atomically: true, encoding: .utf8)
-
-        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
-        let response = handler.handleCommand(SocketRequest(
-            id: "workflow-run-1",
-            command: "workflow-run",
-            params: [
-                "input": inputURL.path,
-                "cwd": directory.path,
-            ]
-        ))
-
-        XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "completed")
-        XCTAssertEqual(response.data?["workflow"], "ci")
-        XCTAssertEqual(response.data?["steps"], "1")
-        XCTAssertEqual(response.data?["stdout"], "workflow-ok\n")
-    }
-
-    func test_workflowRun_executesFiveLocalStepsInOrder() throws {
-        let directory = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let inputURL = directory.appendingPathComponent("workflow.toml")
-        let traceURL = directory.appendingPathComponent("workflow-order.txt")
-
-        try """
-        [workflow]
-        id = "five-step"
-        steps = ["prepare", "build", "test", "package", "report"]
-
-        [step.prepare]
-        command = "printf 'prepare\\n' >> workflow-order.txt && printf 'prepare\\n'"
-
-        [step.build]
-        command = "printf 'build\\n' >> workflow-order.txt && printf 'build\\n'"
-
-        [step.test]
-        command = "printf 'test\\n' >> workflow-order.txt && printf 'test\\n'"
-
-        [step.package]
-        command = "printf 'package\\n' >> workflow-order.txt && printf 'package\\n'"
-
-        [step.report]
-        command = "printf 'report\\n' >> workflow-order.txt && printf 'report\\n'"
-        """.write(to: inputURL, atomically: true, encoding: .utf8)
-
-        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
-        let response = handler.handleCommand(SocketRequest(
-            id: "workflow-run-five-step",
-            command: "workflow-run",
-            params: [
-                "input": inputURL.path,
-                "cwd": directory.path,
-            ]
-        ))
-
-        XCTAssertTrue(response.success, response.error ?? "")
-        XCTAssertEqual(response.data?["status"], "completed")
-        XCTAssertEqual(response.data?["workflow"], "five-step")
-        XCTAssertEqual(response.data?["steps"], "5")
-        XCTAssertEqual(response.data?["stdout"], "prepare\nbuild\ntest\npackage\nreport\n")
-        XCTAssertEqual(
-            try String(contentsOf: traceURL, encoding: .utf8),
-            "prepare\nbuild\ntest\npackage\nreport\n"
-        )
-    }
-
     func test_workflowRun_rejectsInputChangedAfterApproval() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -4102,23 +3947,6 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             withIntermediateDirectories: true
         )
         return url
-    }
-
-    private func requireExecutableOnPath(_ executable: String) throws {
-        guard Self.executableOnPath(executable) != nil else {
-            throw XCTSkip("\(executable) is not available on PATH for local execution smoke.")
-        }
-    }
-
-    private static func executableOnPath(_ executable: String) -> String? {
-        let path = ProcessInfo.processInfo.environment["PATH"] ?? ""
-        for directory in path.split(separator: ":").map(String.init) {
-            let candidate = URL(fileURLWithPath: directory).appendingPathComponent(executable).path
-            if FileManager.default.isExecutableFile(atPath: candidate) {
-                return candidate
-            }
-        }
-        return nil
     }
 
     private func writeSkill(id: String, name: String, summary: String, in root: URL) throws {

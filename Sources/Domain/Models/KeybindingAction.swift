@@ -389,6 +389,78 @@ enum KeybindingActionCatalog {
         defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresOption: true, baseKey: "down")
     )
 
+    static let terminalScrollPageUp = KeybindingAction(
+        id: "terminal.scrollPageUp",
+        displayName: "Scroll Terminal Page Up",
+        summary: "Move the local terminal viewport one page into history.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresShift: true, baseKey: "pageup")
+    )
+
+    static let terminalScrollPageDown = KeybindingAction(
+        id: "terminal.scrollPageDown",
+        displayName: "Scroll Terminal Page Down",
+        summary: "Move the local terminal viewport one page toward live output.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresShift: true, baseKey: "pagedown")
+    )
+
+    static let terminalScrollToTop = KeybindingAction(
+        id: "terminal.scrollToTop",
+        displayName: "Scroll Terminal to Top",
+        summary: "Jump to the oldest available terminal history.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "home")
+    )
+
+    static let terminalScrollToBottom = KeybindingAction(
+        id: "terminal.scrollToBottom",
+        displayName: "Scroll Terminal to Bottom",
+        summary: "Return to the terminal's live output.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "end")
+    )
+
+    static let terminalPreviousPrompt = KeybindingAction(
+        id: "terminal.previousPrompt",
+        displayName: "Previous Prompt",
+        summary: "Jump to the previous shell prompt in terminal history.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "up")
+    )
+
+    static let terminalNextPrompt = KeybindingAction(
+        id: "terminal.nextPrompt",
+        displayName: "Next Prompt",
+        summary: "Jump to the next shell prompt in terminal history.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "down")
+    )
+
+    static let terminalSelectCommandOutput = KeybindingAction(
+        id: "terminal.selectCommandOutput",
+        displayName: "Select Command Output",
+        summary: "Select the command output associated with the current prompt.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "a")
+    )
+
+    static let terminalHideCommandBlocks = KeybindingAction(
+        id: "terminal.hideCommandBlocks",
+        displayName: "Hide Command Blocks",
+        summary: "Hide command block controls currently visible in the terminal.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "b")
+    )
+
+    static let terminalShowDetectedContentHints = KeybindingAction(
+        id: "terminal.showDetectedContentHints",
+        displayName: "Show Content Hints",
+        summary: "Activate detected terminal content from the keyboard.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "l")
+    )
+
     // MARK: - Editor (view actions: find, zoom)
 
     static let editorFind = KeybindingAction(
@@ -493,7 +565,7 @@ enum KeybindingActionCatalog {
         displayName: "Toggle Browser",
         summary: "Show or hide the inline browser panel.",
         category: .markdown,
-        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "b")
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresOption: true, baseKey: "b")
     )
 
     // MARK: - Remote
@@ -541,6 +613,15 @@ enum KeybindingActionCatalog {
         navigateSplitRight,
         navigateSplitUp,
         navigateSplitDown,
+        terminalScrollPageUp,
+        terminalScrollPageDown,
+        terminalScrollToTop,
+        terminalScrollToBottom,
+        terminalPreviousPrompt,
+        terminalNextPrompt,
+        terminalSelectCommandOutput,
+        terminalHideCommandBlocks,
+        terminalShowDetectedContentHints,
         // Editor
         editorFind,
         voiceInput,

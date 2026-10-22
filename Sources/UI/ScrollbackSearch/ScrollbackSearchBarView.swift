@@ -99,7 +99,9 @@ struct ScrollbackSearchBarView: View {
     private var resultCountLabel: some View {
         Text(localizedResultCountDisplay)
             .font(.system(size: 11))
-            .foregroundColor(.secondary)
+            .foregroundColor(viewModel.hasInvalidRegularExpression
+                ? Color(nsColor: CocxyColors.red)
+                : .secondary)
             .frame(minWidth: 80)
             .accessibilityLabel(String(
                 format: localized(
@@ -118,7 +120,7 @@ struct ScrollbackSearchBarView: View {
                 viewModel.navigatePrev()
                 notifyNavigationChanged()
             }) {
-                Image(systemName: "chevron.left")
+                Image(systemName: "chevron.backward")
                     .font(.system(size: 11, weight: .medium))
             }
             .buttonStyle(.plain)
@@ -129,7 +131,7 @@ struct ScrollbackSearchBarView: View {
                 viewModel.navigateNext()
                 notifyNavigationChanged()
             }) {
-                Image(systemName: "chevron.right")
+                Image(systemName: "chevron.forward")
                     .font(.system(size: 11, weight: .medium))
             }
             .buttonStyle(.plain)
@@ -178,7 +180,13 @@ struct ScrollbackSearchBarView: View {
     // MARK: - Private Helpers
 
     private var localizedResultCountDisplay: String {
-        viewModel.localizedResultCountDisplay(using: localizer)
+        if viewModel.hasInvalidRegularExpression {
+            return localized(
+                "scrollbackSearch.invalidRegex",
+                fallback: "Invalid regular expression"
+            )
+        }
+        return viewModel.localizedResultCountDisplay(using: localizer)
     }
 
     private func localized(_ key: String, fallback: String) -> String {

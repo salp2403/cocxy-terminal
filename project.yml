@@ -2,7 +2,7 @@ name: CocxyExtensions
 options:
   minimumXcodeGenVersion: 2.45.0
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "15.0"
 packages:
   CocxyTerminalPackage:
     path: .
@@ -10,7 +10,7 @@ targets:
   CocxyQuickLook:
     type: app-extension
     platform: macOS
-    deploymentTarget: "14.0"
+    deploymentTarget: "15.0"
     sources:
       - path: QuickLook
       - path: Sources/UI/Markdown/MarkdownPreviewTemplate.swift
@@ -39,7 +39,7 @@ targets:
         PRODUCT_NAME: CocxyQuickLook
         PRODUCT_BUNDLE_IDENTIFIER: dev.cocxy.terminal.quicklook
         SWIFT_VERSION: 5.10
-        MACOSX_DEPLOYMENT_TARGET: 14.0
+        MACOSX_DEPLOYMENT_TARGET: 15.0
         CODE_SIGN_ENTITLEMENTS: QuickLook/CocxyQuickLook.entitlements
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: NO

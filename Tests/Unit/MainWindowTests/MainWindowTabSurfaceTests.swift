@@ -4,6 +4,7 @@
 import XCTest
 import AppKit
 import SwiftUI
+import CocxyShared
 @testable import CocxyTerminal
 
 @MainActor
@@ -16,6 +17,14 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
     private(set) var redrawCallCount = 0
     private(set) var updateMetricsCallCount = 0
     private(set) var refreshDisplayLinkAnchorCallCount = 0
+    private(set) var dismissCommandBlocksCallCount = 0
+    private(set) var showDetectedContentHintsCallCount = 0
+    private(set) var semanticNavigationActions: [TerminalSemanticNavigationAction] = []
+    private(set) var commandBlockConfigurations: [CommandBlocksConfig] = []
+    private(set) var cursorClickToMoveValues: [Bool] = []
+    private(set) var shellPromptPositions: [TerminalGridPosition] = []
+    private(set) var commandInputPositions: [TerminalGridPosition] = []
+    private(set) var commandExecutedCallCount = 0
 
     func syncSizeWithTerminal() {
         syncSizeCallCount += 1
@@ -24,6 +33,15 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
     func showNotificationRing(color: NSColor) {}
     func hideNotificationRing() {}
     func handleShellPrompt(row: Int, column: Int) {}
+    func handleShellPrompt(position: TerminalGridPosition) {
+        shellPromptPositions.append(position)
+    }
+    func handleCommandInputStarted(at position: TerminalGridPosition) {
+        commandInputPositions.append(position)
+    }
+    func handleCommandExecuted() {
+        commandExecutedCallCount += 1
+    }
 
     func updateInteractionMetrics() {
         updateMetricsCallCount += 1
@@ -36,6 +54,32 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
 
     func requestImmediateRedraw() {
         redrawCallCount += 1
+    }
+
+    func updateCommandBlockOverlayConfiguration(_ configuration: CommandBlocksConfig) {
+        commandBlockConfigurations.append(configuration)
+    }
+
+    func updateCursorClickToMoveEnabled(_ enabled: Bool) {
+        cursorClickToMoveValues.append(enabled)
+    }
+
+    @discardableResult
+    func dismissVisibleCommandBlocks() -> Int {
+        dismissCommandBlocksCallCount += 1
+        return 1
+    }
+
+    @discardableResult
+    func showDetectedContentHints() -> Int {
+        showDetectedContentHintsCallCount += 1
+        return 1
+    }
+
+    @discardableResult
+    func performSemanticNavigation(_ action: TerminalSemanticNavigationAction) -> Bool {
+        semanticNavigationActions.append(action)
+        return true
     }
 
     func refreshDisplayLinkAnchor() {
@@ -267,6 +311,41 @@ final class TabSurfaceMappingTests: XCTestCase {
         )
     }
 
+    func testHideCommandBlocksActionRoutesToActiveTerminalSurface() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let surfaceView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = surfaceView
+
+        controller.hideCommandBlocksAction(nil)
+
+        XCTAssertEqual(surfaceView.dismissCommandBlocksCallCount, 1)
+    }
+
+    func testShowDetectedContentHintsActionRoutesToActiveTerminalSurface() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let surfaceView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = surfaceView
+
+        controller.showDetectedContentHintsAction(nil)
+
+        XCTAssertEqual(surfaceView.showDetectedContentHintsCallCount, 1)
+    }
+
+    func testSemanticNavigationActionsRouteToActiveTerminalSurface() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let surfaceView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = surfaceView
+
+        controller.previousTerminalPromptAction(nil)
+        controller.nextTerminalPromptAction(nil)
+        controller.selectTerminalCommandOutputAction(nil)
+
+        XCTAssertEqual(
+            surfaceView.semanticNavigationActions,
+            [.previousPrompt, .nextPrompt, .selectCommandOutput]
+        )
+    }
+
     func testCodeReviewSubmitRoutesToOriginatingTabSurface() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
@@ -419,7 +498,7 @@ final class TabSurfaceMappingTests: XCTestCase {
                 hostingView.frame.maxX,
                 overlayContainer.bounds.width,
                 accuracy: 0.5,
-                "Resizing the review panel must keep it docked to the right edge"
+                "Resizing the review panel must keep it docked to the trailing edge"
             )
         }
     }
@@ -543,7 +622,7 @@ final class TabSurfaceMappingTests: XCTestCase {
         }
     }
 
-    func testRightDockedAgentReviewAndGitHubPanelsStayInsideOverlay() {
+    func testTrailingAgentReviewAndGitHubPanelsStayInsideOverlay() {
         withIsolatedCodeReviewPanelWidthPreference {
             withIsolatedGitHubPanePanelWidthPreference {
                 let controller = MainWindowController(bridge: MockTerminalEngine())
@@ -564,13 +643,13 @@ final class TabSurfaceMappingTests: XCTestCase {
                 controller.showAgentModePanel()
                 controller.showCodeReviewPanel()
                 controller.showGitHubPanePanel()
-                controller.layoutRightDockedAgentPanels()
+                controller.layoutTrailingDockedPanels()
 
                 guard let overlayContainer = controller.overlayContainerView,
                       let agentPanel = controller.agentModeHostingView,
                       let codeReviewPanel = controller.codeReviewHostingView,
                       let gitHubPanel = controller.gitHubPaneHostingView else {
-                    XCTFail("Expected all right-docked panels to be visible")
+                    XCTFail("Expected all trailing-edge panels to be visible")
                     return
                 }
 
@@ -607,7 +686,7 @@ final class TabSurfaceMappingTests: XCTestCase {
             controller.windowDidResize(Notification(name: NSWindow.didResizeNotification))
 
             controller.showGitHubPanePanel()
-            controller.layoutRightDockedAgentPanels()
+            controller.layoutTrailingDockedPanels()
 
             guard let panel = controller.gitHubPaneHostingView else {
                 XCTFail("Expected the GitHub pane to be visible")
@@ -628,7 +707,7 @@ final class TabSurfaceMappingTests: XCTestCase {
         }
     }
 
-    func testRightDockedAgentPanelReservesTerminalWidth() {
+    func testTrailingAgentPanelReservesTerminalWidth() {
         let controller = MainWindowController(bridge: MockTerminalEngine())
         controller.injectedAgentPromptRunner = LayoutTestAgentPromptRunner()
         controller.showWindow(nil)
@@ -641,25 +720,25 @@ final class TabSurfaceMappingTests: XCTestCase {
         }
 
         controller.showAgentModePanel()
-        controller.layoutRightDockedAgentPanels()
+        controller.layoutTrailingDockedPanels()
 
         XCTAssertEqual(
             controller.terminalSurfaceView?.frame.width ?? -1,
             container.bounds.width - AgentPanelView.panelWidth,
             accuracy: 0.5,
-            "Right-docked agent panels must reserve width so terminal columns do not render underneath them"
+            "Trailing-edge agent panels must reserve width so terminal columns do not render underneath them"
         )
 
         controller.agentModeHostingView?.removeFromSuperview()
         controller.agentModeHostingView = nil
         controller.isAgentModeVisible = false
-        controller.layoutRightDockedAgentPanels()
+        controller.layoutTrailingDockedPanels()
 
         XCTAssertEqual(
             controller.terminalSurfaceView?.frame.width ?? -1,
             container.bounds.width,
             accuracy: 0.5,
-            "Terminal width should restore when no right-docked panel is visible"
+            "Terminal width should restore when no trailing-edge panel is visible"
         )
     }
 
@@ -791,6 +870,28 @@ final class TabSurfaceMappingTests: XCTestCase {
             controller.terminalSurfaceView === firstSurfaceView,
             "After closing the active tab, the remaining tab's surface must become active"
         )
+    }
+
+    func testCloseTabPrunesDashboardRowsOnlyAfterRemoval() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let dashboard = AgentDashboardViewModel()
+        controller.injectedDashboardViewModel = dashboard
+        controller.newTabAction(nil)
+        guard let closingTabID = controller.tabManager.activeTabID else {
+            return XCTFail("A second tab must become active")
+        }
+        dashboard.tabIdResolver = { _, _ in closingTabID.rawValue }
+        dashboard.processHookEvent(HookEvent(
+            type: .sessionStart,
+            sessionId: "closing-tab-session",
+            data: .sessionStart(SessionStartData())
+        ))
+        XCTAssertEqual(dashboard.sessions.count, 1)
+
+        controller.performCloseTab(closingTabID)
+
+        XCTAssertNil(controller.tabManager.tab(for: closingTabID))
+        XCTAssertTrue(dashboard.sessions.isEmpty)
     }
 
     // MARK: - Tab Count Consistency
@@ -1360,11 +1461,12 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
-    func testAgentTeamPaneHandoffUsesProviderLaunchSpec() {
+    func testAgentTeamLaunchCreatesTerminalSurfaceAndRunsProviderCommand() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
         controller.injectedDashboardViewModel = AgentDashboardViewModel()
+        let initialTabCount = controller.tabManager.tabs.count
 
         let spec = AgentTeamProviderLaunchSpec(
             provider: .codex,
@@ -1373,33 +1475,157 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             teammateName: "Plan",
             executable: "/usr/local/bin/codex",
             arguments: ["--profile", "agent-team"],
-            environment: ["COCXY_AGENT_TEAM_ID": "ship"],
-            workingDirectory: "/tmp/ship",
-            mutatesUserConfiguration: false,
-            requiresPreviewBeforeLaunch: true
+            environment: [
+                "COCXY_AGENT_TEAM_ID": "ship",
+                "COCXY_AGENT_TEAMMATE_ID": "ship-plan",
+            ],
+            workingDirectory: NSTemporaryDirectory()
         )
 
         XCTAssertTrue(controller.spawnAgentTeamPane(launchSpec: spec))
-        let matchingPanel = controller.panelContentViews.first { _, view in
-            guard let subagentView = view as? SubagentContentView else { return false }
-            return subagentView.subagentId == "ship-plan" && subagentView.sessionId == "ship"
-        }
+        XCTAssertEqual(controller.tabManager.tabs.count, initialTabCount + 1)
+        let teamTabID = try? XCTUnwrap(controller.agentTeamTabIDsByTeamID["ship"]?.first)
+        XCTAssertNotNil(teamTabID)
+        guard let teamTabID else { return }
+        XCTAssertNotNil(controller.tabSurfaceMap[teamTabID])
+        XCTAssertEqual(
+            controller.agentTeamTabContextByTabID[teamTabID],
+            AgentTeamTerminalContext(teamID: "ship", teammateID: "ship-plan")
+        )
+        XCTAssertFalse(controller.taskQueueLifecycleExcludedTabIDs.contains(teamTabID))
+        XCTAssertEqual(controller.tabManager.tab(for: teamTabID)?.displayTitle, "Plan - Codex CLI")
+        XCTAssertEqual(
+            bridge.createSurfaceRequests.last?.workingDirectory?.standardizedFileURL.path,
+            URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).standardizedFileURL.path
+        )
+        XCTAssertEqual(
+            bridge.sentTexts.last?.text,
+            "exec '/usr/bin/env' 'COCXY_AGENT_TEAMMATE_ID=ship-plan' " +
+                "'COCXY_AGENT_TEAM_ID=ship' '/usr/local/bin/codex' '--profile' 'agent-team'\r"
+        )
+        XCTAssertTrue(controller.panelContentViews.isEmpty)
+    }
 
-        let contentID = matchingPanel?.key
-        XCTAssertNotNil(contentID)
-        if let contentID {
-            XCTAssertEqual(
-                controller.activeSplitManager?.panelTitle(for: contentID),
-                "Plan - Codex CLI"
-            )
+    func testAgentTeamLaunchInjectsConfiguredPromptAfterProcessStart() async throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.agentTeamPromptMinimumDelay = .milliseconds(20)
+        let store = AgentStatePerSurfaceStore()
+        controller.injectedPerSurfaceStore = store
+        let spec = AgentTeamProviderLaunchSpec(
+            provider: .codex,
+            teamID: "ship",
+            teammateID: "ship-reviewer",
+            teammateName: "Reviewer",
+            executable: "/usr/local/bin/codex",
+            arguments: [],
+            environment: ["COCXY_AGENT_TEAM_ID": "ship"],
+            workingDirectory: NSTemporaryDirectory()
+        )
+
+        XCTAssertTrue(controller.spawnAgentTeamPane(
+            launchSpec: spec,
+            initialPrompt: "Review the implementation",
+            targetTabID: nil
+        ))
+        let teamTabID = try XCTUnwrap(controller.agentTeamTabIDsByTeamID["ship"]?.first)
+        let surfaceID = try XCTUnwrap(controller.tabSurfaceMap[teamTabID])
+        store.update(surfaceID: surfaceID) { $0.agentState = .waitingInput }
+        try await waitForAgentTeamPrompt(in: bridge)
+
+        XCTAssertEqual(bridge.sentTexts.last?.text, "Review the implementation\r")
+    }
+
+    func testAgentTeamPromptWaitsForReadinessSignal() async throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.agentTeamPromptMinimumDelay = .milliseconds(20)
+        var readinessChecks = 0
+        var isReady = false
+        controller.agentTeamPromptReadinessOverride = { _ in
+            readinessChecks += 1
+            return isReady
+        }
+        let spec = AgentTeamProviderLaunchSpec(
+            provider: .codex,
+            teamID: "ship",
+            teammateID: "ship-reviewer",
+            teammateName: "Reviewer",
+            executable: "/usr/local/bin/codex",
+            arguments: [],
+            environment: ["COCXY_AGENT_TEAM_ID": "ship"],
+            workingDirectory: NSTemporaryDirectory()
+        )
+
+        XCTAssertTrue(controller.spawnAgentTeamPane(
+            launchSpec: spec,
+            initialPrompt: "Review the implementation",
+            targetTabID: nil
+        ))
+        try await waitUntil(timeout: .seconds(15)) { readinessChecks > 0 }
+        XCTAssertEqual(bridge.sentTexts.count, 1)
+
+        isReady = true
+        try await waitForAgentTeamPrompt(in: bridge)
+        XCTAssertEqual(bridge.sentTexts.last?.text, "Review the implementation\r")
+    }
+
+    func testAgentTeamPromptHonorsMinimumReadinessDelay() async throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.agentTeamPromptMinimumDelay = .milliseconds(150)
+        controller.agentTeamPromptReadinessOverride = { _ in true }
+        let spec = AgentTeamProviderLaunchSpec(
+            provider: .codex,
+            teamID: "delayed",
+            teammateID: "delayed-reviewer",
+            teammateName: "Reviewer",
+            executable: "/usr/local/bin/codex",
+            arguments: [],
+            environment: ["COCXY_AGENT_TEAM_ID": "delayed"],
+            workingDirectory: NSTemporaryDirectory()
+        )
+
+        XCTAssertTrue(controller.spawnAgentTeamPane(
+            launchSpec: spec,
+            initialPrompt: "Review after startup",
+            targetTabID: nil
+        ))
+        try await Task.sleep(for: .milliseconds(60))
+        XCTAssertEqual(bridge.sentTexts.count, 1)
+
+        try await waitForAgentTeamPrompt(in: bridge)
+        XCTAssertEqual(bridge.sentTexts.last?.text, "Review after startup\r")
+    }
+
+    private func waitForAgentTeamPrompt(in bridge: MockTerminalEngine) async throws {
+        try await waitUntil(timeout: .seconds(15)) { bridge.sentTexts.count == 2 }
+    }
+
+    private func waitUntil(
+        timeout: Duration,
+        condition: () -> Bool
+    ) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while !condition() {
+            guard clock.now < deadline else {
+                XCTFail("Timed out waiting for the agent-team prompt signal")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(5))
         }
     }
 
-    func testAgentTeamPaneHandoffCreatesOnePanelPerTeammate() {
+    func testAgentTeamLaunchCreatesAndStopsOneTerminalPerTeammate() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
         controller.injectedDashboardViewModel = AgentDashboardViewModel()
+        let initialTabCount = controller.tabManager.tabs.count
 
         let specs = [
             AgentTeamProviderLaunchSpec(
@@ -1409,10 +1635,11 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
                 teammateName: "Planner",
                 executable: "/usr/local/bin/codex",
                 arguments: ["--profile", "agent-team"],
-                environment: ["COCXY_AGENT_TEAM_ID": "ship"],
-                workingDirectory: "/tmp/ship",
-                mutatesUserConfiguration: false,
-                requiresPreviewBeforeLaunch: true
+                environment: [
+                    "COCXY_AGENT_TEAM_ID": "ship",
+                    "COCXY_AGENT_TEAMMATE_ID": "ship-planner",
+                ],
+                workingDirectory: NSTemporaryDirectory()
             ),
             AgentTeamProviderLaunchSpec(
                 provider: .codex,
@@ -1421,10 +1648,11 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
                 teammateName: "Reviewer",
                 executable: "/usr/local/bin/codex",
                 arguments: ["--profile", "agent-team"],
-                environment: ["COCXY_AGENT_TEAM_ID": "ship"],
-                workingDirectory: "/tmp/ship",
-                mutatesUserConfiguration: false,
-                requiresPreviewBeforeLaunch: true
+                environment: [
+                    "COCXY_AGENT_TEAM_ID": "ship",
+                    "COCXY_AGENT_TEAMMATE_ID": "ship-reviewer",
+                ],
+                workingDirectory: NSTemporaryDirectory()
             ),
         ]
 
@@ -1432,10 +1660,24 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             XCTAssertTrue(controller.spawnAgentTeamPane(launchSpec: spec))
         }
 
-        let subagentPanels = controller.panelContentViews.values.compactMap { $0 as? SubagentContentView }
-        XCTAssertEqual(subagentPanels.count, 2)
-        XCTAssertTrue(subagentPanels.contains { $0.subagentId == "ship-planner" && $0.sessionId == "ship" })
-        XCTAssertTrue(subagentPanels.contains { $0.subagentId == "ship-reviewer" && $0.sessionId == "ship" })
+        let teamTabIDs = controller.agentTeamTabIDsByTeamID["ship"] ?? []
+        XCTAssertEqual(teamTabIDs.count, 2)
+        XCTAssertEqual(controller.tabManager.tabs.count, initialTabCount + 2)
+        XCTAssertTrue(teamTabIDs.allSatisfy { controller.tabSurfaceMap[$0] != nil })
+        XCTAssertTrue(bridge.sentTexts.contains { $0.text.contains("ship-planner") })
+        XCTAssertTrue(bridge.sentTexts.contains { $0.text.contains("ship-reviewer") })
+
+        let teamSurfaceIDs = Set(teamTabIDs.compactMap { controller.tabSurfaceMap[$0] })
+        controller.closeAgentTeamPanes(teamID: "ship")
+
+        XCTAssertNil(controller.agentTeamTabIDsByTeamID["ship"])
+        XCTAssertTrue(teamTabIDs.allSatisfy {
+            controller.agentTeamTabContextByTabID[$0] == nil
+                && !controller.taskQueueLifecycleExcludedTabIDs.contains($0)
+        })
+        XCTAssertEqual(controller.tabManager.tabs.count, initialTabCount)
+        XCTAssertTrue(teamTabIDs.allSatisfy { controller.tabManager.tab(for: $0) == nil })
+        XCTAssertTrue(teamSurfaceIDs.isSubset(of: Set(bridge.destroyedSurfaces)))
     }
 
     func testSpawnSubagentPanelIgnoresGenericSubprocessAgentType() {
@@ -2135,6 +2377,66 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         XCTAssertFalse(localizedTabs.contains("Replay"))
     }
 
+    func testConfigChangePropagatesCommandBlockSettingsToEveryManagedSurfaceOnce() throws {
+        let provider = InMemoryConfigFileProvider(content: """
+        [command-blocks]
+        enabled = false
+        show-only-on-hover = false
+        """)
+        let configService = ConfigService(fileProvider: provider)
+        try configService.reload()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService
+        )
+
+        let sharedView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = sharedView
+        controller.tabSurfaceViews[TabID()] = sharedView
+
+        let splitView = TrackingTerminalHostView()
+        controller.splitSurfaceViews[SurfaceID()] = splitView
+
+        let savedView = TrackingTerminalHostView()
+        controller.savedTabSplitSurfaceViews[TabID()] = [SurfaceID(): savedView]
+
+        controller.applyConfig(configService.current)
+
+        let expected = CommandBlocksConfig(enabled: false, showOnlyOnHover: false)
+        XCTAssertEqual(sharedView.commandBlockConfigurations, [expected])
+        XCTAssertEqual(splitView.commandBlockConfigurations, [expected])
+        XCTAssertEqual(savedView.commandBlockConfigurations, [expected])
+    }
+
+    func testConfigChangePropagatesCursorClickSettingToEveryManagedSurfaceOnce() throws {
+        let provider = InMemoryConfigFileProvider(content: """
+        [terminal]
+        cursor-click-to-move = false
+        """)
+        let configService = ConfigService(fileProvider: provider)
+        try configService.reload()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService
+        )
+
+        let sharedView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = sharedView
+        controller.tabSurfaceViews[TabID()] = sharedView
+
+        let splitView = TrackingTerminalHostView()
+        controller.splitSurfaceViews[SurfaceID()] = splitView
+
+        let savedView = TrackingTerminalHostView()
+        controller.savedTabSplitSurfaceViews[TabID()] = [SurfaceID(): savedView]
+
+        controller.applyConfig(configService.current)
+
+        XCTAssertEqual(sharedView.cursorClickToMoveValues, [false])
+        XCTAssertEqual(splitView.cursorClickToMoveValues, [false])
+        XCTAssertEqual(savedView.cursorClickToMoveValues, [false])
+    }
+
     func testAppendedWorkspacePanelsKeepTerminalLeafReachableAndClosable() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
@@ -2480,6 +2782,57 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             originalFirstTitle,
             "Background tab title updates must not leak into the bootstrap tab's view model"
         )
+    }
+
+    func testOSCInputLifecycleTargetsTheOriginatingSurface() async throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        guard let sourceTabID = controller.tabManager.activeTabID,
+              let sourceSurfaceID = controller.tabSurfaceMap[sourceTabID] else {
+            XCTFail("Expected bootstrap tab and surface")
+            return
+        }
+
+        controller.newTabAction(nil)
+        guard let activeTabID = controller.tabManager.activeTabID,
+              activeTabID != sourceTabID,
+              controller.tabSurfaceMap[activeTabID] != nil else {
+            XCTFail("Expected a different active tab and surface")
+            return
+        }
+
+        let sourceView = TrackingTerminalHostView()
+        let activeView = TrackingTerminalHostView()
+        controller.tabSurfaceViews[sourceTabID] = sourceView
+        controller.tabSurfaceViews[activeTabID] = activeView
+        controller.terminalSurfaceView = activeView
+        let prompt = TerminalGridPosition(screenRow: 4, absoluteRow: 24, column: 2)
+        let input = TerminalGridPosition(screenRow: 4, absoluteRow: 24, column: 7)
+
+        bridge.emitOSC(.shellPrompt(position: prompt), for: sourceSurfaceID)
+        bridge.emitOSC(.commandStarted(inputPosition: input), for: sourceSurfaceID)
+        bridge.emitOutput(Data("\u{1B}]133;C\u{07}".utf8), for: sourceSurfaceID)
+
+        for _ in 0..<100 {
+            if sourceView.shellPromptPositions == [prompt],
+               sourceView.commandInputPositions == [input],
+               sourceView.commandExecutedCallCount == 1 {
+                break
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(sourceView.shellPromptPositions, [prompt])
+        XCTAssertEqual(sourceView.commandInputPositions, [input])
+        XCTAssertEqual(sourceView.commandExecutedCallCount, 1)
+        XCTAssertTrue(activeView.shellPromptPositions.isEmpty)
+        XCTAssertTrue(activeView.commandInputPositions.isEmpty)
+        XCTAssertEqual(activeView.commandExecutedCallCount, 0)
     }
 
     // MARK: - windowDidChangeScreen safety net

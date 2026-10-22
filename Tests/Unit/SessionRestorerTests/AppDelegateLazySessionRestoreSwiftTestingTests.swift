@@ -604,7 +604,7 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
     /// when the effect never happens — a fixed sleep would instead fail
     /// whenever a loaded machine simply scheduled the work late.
     private func waitForMainActorCondition(
-        timeoutNanoseconds: UInt64 = 5_000_000_000,
+        timeoutNanoseconds: UInt64 = 15_000_000_000,
         pollNanoseconds: UInt64 = 10_000_000,
         _ condition: @MainActor () -> Bool
     ) async -> Bool {
@@ -618,7 +618,7 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
 
     private func waitForShieldRemoval(
         on controller: MainWindowController,
-        timeoutNanoseconds: UInt64 = 2_000_000_000,
+        timeoutNanoseconds: UInt64 = 15_000_000_000,
         pollNanoseconds: UInt64 = 20_000_000
     ) async throws {
         let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds

@@ -198,36 +198,6 @@ protocol ManagedProcess: AnyObject, Sendable {
     func terminate()
 }
 
-// MARK: - Process Result
-
-enum SSHPostExecutionConnectionState: Sendable, Equatable {
-    case verified
-    case unavailable
-}
-
-/// The result of executing a system process.
-struct ProcessResult: Sendable {
-    let exitCode: Int32
-    let stdout: String
-    let stderr: String
-    let timedOut: Bool
-    let postExecutionConnectionState: SSHPostExecutionConnectionState
-
-    init(
-        exitCode: Int32,
-        stdout: String,
-        stderr: String,
-        timedOut: Bool = false,
-        postExecutionConnectionState: SSHPostExecutionConnectionState = .verified
-    ) {
-        self.exitCode = exitCode
-        self.stdout = stdout
-        self.stderr = stderr
-        self.timedOut = timedOut
-        self.postExecutionConnectionState = postExecutionConnectionState
-    }
-}
-
 struct SSHControlMasterIdentity: Equatable, Sendable {
     let processID: Int32
     let controlPath: String
@@ -1873,8 +1843,16 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         switch forward {
         case let .local(localPort, remotePort, remoteHost):
             return ["-L", "\(localPort):\(remoteHost):\(remotePort)"]
-        case let .remote(remotePort, localPort, localHost):
-            return ["-R", "\(remotePort):\(localHost):\(localPort)"]
+        case let .remote(remotePort, localPort, localHost, remoteBindHost):
+            guard remoteBindHost == RemoteConnectionProfile.PortForward.remoteLoopbackBindHost else {
+                throw SSHMultiplexerError.forwardFailed(
+                    "Remote forwards must bind the exact IPv4 loopback address"
+                )
+            }
+            return [
+                "-R",
+                "\(remoteBindHost):\(remotePort):\(localHost):\(localPort)",
+            ]
         case .dynamic:
             throw SSHMultiplexerError.forwardFailed(
                 "Dynamic forwarding requires the authenticated proxy"

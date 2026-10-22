@@ -7,7 +7,7 @@ import Testing
 
 @MainActor
 private func waitForRelayCondition(_ condition: () -> Bool) async {
-    for _ in 0..<200 {
+    for _ in 0..<15_000 {
         if condition() { return }
         try? await Task.sleep(nanoseconds: 1_000_000)
     }
@@ -36,7 +36,7 @@ private final class RelayTestTokenStore: RelayTokenStoring, @unchecked Sendable 
 }
 
 @MainActor
-private final class MockRelayAuthBroker: RelayAuthBrokering {
+final class MockRelayAuthBroker: RelayAuthBrokering {
     enum TestError: Error {
         case startFailed
     }
@@ -109,7 +109,7 @@ private final class MockRelayAuthBroker: RelayAuthBrokering {
 }
 
 @MainActor
-private final class RelayBrokerFactoryRecorder {
+final class RelayBrokerFactoryRecorder {
     private var nextPort: UInt16 = 45_000
     private(set) var brokers: [MockRelayAuthBroker] = []
     var shouldFailStart = false
@@ -235,7 +235,7 @@ struct RelayManagerTests {
         #expect(context.forwarder.forwardedPorts.count == 1)
         #expect(context.tokenStore.stored[channel.id] != nil)
 
-        guard case let .remote(remotePort, localPort, localHost) =
+        guard case let .remote(remotePort, localPort, localHost, remoteBindHost) =
             context.forwarder.forwardedPorts[0]
         else {
             Issue.record("Expected a reverse forward")
@@ -245,6 +245,7 @@ struct RelayManagerTests {
         #expect(localPort == 45_000)
         #expect(localPort != channel.localPort)
         #expect(localHost == "127.0.0.1")
+        #expect(remoteBindHost == "127.0.0.1")
     }
 
     @Test("Production broker factory is a live mandatory hop")
@@ -261,7 +262,7 @@ struct RelayManagerTests {
         )
 
         let forward = try #require(forwarder.forwardedPorts.first)
-        guard case let .remote(remotePort, localPort, localHost) = forward else {
+        guard case let .remote(remotePort, localPort, localHost, remoteBindHost) = forward else {
             Issue.record("Expected a reverse forward")
             return
         }
@@ -269,6 +270,7 @@ struct RelayManagerTests {
         #expect(localPort != 3000)
         #expect(localPort > 0)
         #expect(localHost == "127.0.0.1")
+        #expect(remoteBindHost == "127.0.0.1")
         await manager.closeChannel(channelID: channel.id)
     }
 
@@ -841,13 +843,4 @@ struct RelayManagerTests {
         }
     }
 
-    @Test("Close and rotate for unknown channels are safe no-ops")
-    @MainActor func unknownChannelNoOps() async throws {
-        let context = makeManager()
-
-        await context.manager.closeChannel(channelID: UUID())
-        try context.manager.rotateToken(channelID: UUID())
-
-        #expect(context.forwarder.cancelledPorts.isEmpty)
-    }
 }

@@ -19,7 +19,7 @@
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>14.0</string>
+	<string>15.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
@@ -33,5 +33,7 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Cocxy uses your private local network only when you pair a mobile device or connect to a local workspace.</string>
 </dict>
 </plist>

@@ -10,6 +10,8 @@ public enum PTYDaemonProtocol {
     public static let terminalSurfaceCapability = "terminal-surface-v1"
     public static let terminalEngineCapability = "terminal-engine-v1"
     public static let terminalHostRendererCapability = "terminal-host-renderer-v1"
+    public static let terminalContentDetectionCapability = "terminal-content-detection-v1"
+    public static let terminalSemanticNavigationCapability = "terminal-semantic-navigation-v1"
 }
 
 public struct PTYDaemonHello: Codable, Equatable, Sendable {
@@ -43,6 +45,14 @@ public struct PTYDaemonHello: Codable, Equatable, Sendable {
             capabilities.contains(PTYDaemonProtocol.terminalEngineCapability) &&
             supportsTerminalHostRenderer
     }
+
+    public var supportsTerminalContentDetection: Bool {
+        capabilities.contains(PTYDaemonProtocol.terminalContentDetectionCapability)
+    }
+
+    public var supportsTerminalSemanticNavigation: Bool {
+        capabilities.contains(PTYDaemonProtocol.terminalSemanticNavigationCapability)
+    }
 }
 
 public struct PTYDaemonRequest: Codable, Equatable, Sendable {
@@ -59,8 +69,10 @@ public struct PTYDaemonRequest: Codable, Equatable, Sendable {
         case surfaceKey = "surface_key"
         case surfacePreedit = "surface_preedit"
         case surfaceFocus = "surface_focus"
+        case surfaceFont = "surface_font"
         case surfaceSearch = "surface_search"
         case surfaceScroll = "surface_scroll"
+        case surfaceSemanticNavigation = "surface_semantic_navigation"
         case surfaceProcess = "surface_process"
     }
 
@@ -82,6 +94,7 @@ public struct PTYDaemonResponse: Codable, Equatable, Sendable {
     public let surfaceID: String?
     public let frame: PTYDaemonSurfaceFrame?
     public let searchResults: [PTYDaemonSearchResult]?
+    public let semanticNavigation: TerminalSemanticNavigationResult?
     public let process: PTYDaemonProcessRegistration?
     public let error: String?
 
@@ -92,6 +105,7 @@ public struct PTYDaemonResponse: Codable, Equatable, Sendable {
         surfaceID: String? = nil,
         frame: PTYDaemonSurfaceFrame? = nil,
         searchResults: [PTYDaemonSearchResult]? = nil,
+        semanticNavigation: TerminalSemanticNavigationResult? = nil,
         process: PTYDaemonProcessRegistration? = nil,
         error: String? = nil
     ) {
@@ -101,6 +115,7 @@ public struct PTYDaemonResponse: Codable, Equatable, Sendable {
         self.surfaceID = surfaceID
         self.frame = frame
         self.searchResults = searchResults
+        self.semanticNavigation = semanticNavigation
         self.process = process
         self.error = error
     }
@@ -183,8 +198,16 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
     public let cells: [PTYDaemonGridCell]
     public let cursor: PTYDaemonCursor
     public let scrollbackTop: Int
+    public let historyMaxVisibleStart: Int
     public let images: [PTYDaemonImageReference]
+    public let wrappedRows: [UInt16]
     public let mouseTrackingMode: UInt8?
+    public let mouseEncodingMode: UInt8?
+    public let isAltScreen: Bool
+    public let bracketedPasteMode: Bool
+    public let alternateScrollMode: Bool
+    public let synchronizedOutput: Bool
+    public let detectedContents: [PTYDaemonDetectedContent]
 
     public init(
         surfaceID: String,
@@ -195,8 +218,16 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         cells: [PTYDaemonGridCell],
         cursor: PTYDaemonCursor,
         scrollbackTop: Int = 0,
+        historyMaxVisibleStart: Int = 0,
         images: [PTYDaemonImageReference] = [],
-        mouseTrackingMode: UInt8? = nil
+        wrappedRows: [UInt16] = [],
+        mouseTrackingMode: UInt8? = nil,
+        mouseEncodingMode: UInt8? = nil,
+        isAltScreen: Bool = false,
+        bracketedPasteMode: Bool = false,
+        alternateScrollMode: Bool = true,
+        synchronizedOutput: Bool = false,
+        detectedContents: [PTYDaemonDetectedContent] = []
     ) {
         self.surfaceID = surfaceID
         self.revision = revision
@@ -206,8 +237,142 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         self.cells = cells
         self.cursor = cursor
         self.scrollbackTop = scrollbackTop
+        self.historyMaxVisibleStart = historyMaxVisibleStart
         self.images = images
+        self.wrappedRows = wrappedRows
         self.mouseTrackingMode = mouseTrackingMode
+        self.mouseEncodingMode = mouseEncodingMode
+        self.isAltScreen = isAltScreen
+        self.bracketedPasteMode = bracketedPasteMode
+        self.alternateScrollMode = alternateScrollMode
+        self.synchronizedOutput = synchronizedOutput
+        self.detectedContents = detectedContents
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case surfaceID
+        case revision
+        case timestamp
+        case columns
+        case rows
+        case cells
+        case cursor
+        case scrollbackTop
+        case historyMaxVisibleStart
+        case images
+        case wrappedRows
+        case mouseTrackingMode
+        case mouseEncodingMode
+        case isAltScreen
+        case bracketedPasteMode
+        case alternateScrollMode
+        case synchronizedOutput
+        case detectedContents
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        surfaceID = try container.decode(String.self, forKey: .surfaceID)
+        revision = try container.decode(UInt64.self, forKey: .revision)
+        timestamp = try container.decode(Double.self, forKey: .timestamp)
+        columns = try container.decode(UInt16.self, forKey: .columns)
+        rows = try container.decode(UInt16.self, forKey: .rows)
+        cells = try container.decode([PTYDaemonGridCell].self, forKey: .cells)
+        cursor = try container.decode(PTYDaemonCursor.self, forKey: .cursor)
+        scrollbackTop = try container.decodeIfPresent(Int.self, forKey: .scrollbackTop) ?? 0
+        historyMaxVisibleStart = try container.decodeIfPresent(
+            Int.self,
+            forKey: .historyMaxVisibleStart
+        ) ?? 0
+        images = try container.decodeIfPresent([PTYDaemonImageReference].self, forKey: .images) ?? []
+        wrappedRows = try container.decodeIfPresent([UInt16].self, forKey: .wrappedRows) ?? []
+        mouseTrackingMode = try container.decodeIfPresent(UInt8.self, forKey: .mouseTrackingMode)
+        mouseEncodingMode = try container.decodeIfPresent(UInt8.self, forKey: .mouseEncodingMode)
+        isAltScreen = try container.decodeIfPresent(Bool.self, forKey: .isAltScreen) ?? false
+        bracketedPasteMode = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .bracketedPasteMode
+        ) ?? false
+        alternateScrollMode = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .alternateScrollMode
+        ) ?? true
+        synchronizedOutput = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .synchronizedOutput
+        ) ?? false
+        detectedContents = try container.decodeIfPresent(
+            [PTYDaemonDetectedContent].self,
+            forKey: .detectedContents
+        ) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(surfaceID, forKey: .surfaceID)
+        try container.encode(revision, forKey: .revision)
+        try container.encode(timestamp, forKey: .timestamp)
+        try container.encode(columns, forKey: .columns)
+        try container.encode(rows, forKey: .rows)
+        try container.encode(cells, forKey: .cells)
+        try container.encode(cursor, forKey: .cursor)
+        try container.encode(scrollbackTop, forKey: .scrollbackTop)
+        try container.encode(historyMaxVisibleStart, forKey: .historyMaxVisibleStart)
+        try container.encode(images, forKey: .images)
+        try container.encode(wrappedRows, forKey: .wrappedRows)
+        try container.encodeIfPresent(mouseTrackingMode, forKey: .mouseTrackingMode)
+        try container.encodeIfPresent(mouseEncodingMode, forKey: .mouseEncodingMode)
+        try container.encode(isAltScreen, forKey: .isAltScreen)
+        try container.encode(bracketedPasteMode, forKey: .bracketedPasteMode)
+        try container.encode(alternateScrollMode, forKey: .alternateScrollMode)
+        try container.encode(synchronizedOutput, forKey: .synchronizedOutput)
+        try container.encode(detectedContents, forKey: .detectedContents)
+    }
+}
+
+public struct PTYDaemonDetectedContent: Codable, Equatable, Sendable {
+    public enum Kind: UInt8, Codable, Sendable {
+        case hyperlink = 0
+        case url = 1
+        case filePath = 2
+        case ipAddress = 3
+        case gitHash = 4
+        case email = 5
+    }
+
+    public let kind: Kind
+    public let text: String
+    public let target: String
+    public let startRow: UInt32
+    public let startColumn: UInt16
+    public let endRow: UInt32
+    public let endColumn: UInt16
+    public let line: UInt32?
+    public let column: UInt32?
+    public let isExplicitHyperlink: Bool
+
+    public init(
+        kind: Kind,
+        text: String,
+        target: String,
+        startRow: UInt32,
+        startColumn: UInt16,
+        endRow: UInt32,
+        endColumn: UInt16,
+        line: UInt32? = nil,
+        column: UInt32? = nil,
+        isExplicitHyperlink: Bool = false
+    ) {
+        self.kind = kind
+        self.text = text
+        self.target = target
+        self.startRow = startRow
+        self.startColumn = startColumn
+        self.endRow = endRow
+        self.endColumn = endColumn
+        self.line = line
+        self.column = column
+        self.isExplicitHyperlink = isExplicitHyperlink
     }
 }
 

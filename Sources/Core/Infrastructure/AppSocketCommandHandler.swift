@@ -194,15 +194,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     private let tabMoveProvider: @Sendable (String, Int) -> Bool
 
     /// Saves the focused tab as a reusable local TOML config.
-    private let tabConfigSaveProvider: (@Sendable (
-        _ name: String,
-        _ command: String?,
-        _ theme: String?,
-        _ environment: [String: String]
-    ) -> (name: String, path: String)?)?
+    private let tabConfigSaveProvider: TabConfigSaveSocketProvider?
 
     /// Opens a new tab from a reusable local TOML config.
-    private let tabConfigOpenProvider: (@Sendable (_ name: String) -> (id: String, title: String, path: String)?)?
+    private let tabConfigOpenProvider: TabConfigOpenSocketProvider?
 
     /// Lists saved reusable tab config names.
     private let tabConfigListProvider: (@Sendable () -> [String]?)?
@@ -386,33 +381,28 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Opens an SSH session in a new tab. Params: (destination, port?, identityFile?).
     let sshProvider: (@Sendable (String, Int?, String?) -> (id: String, title: String)?)?
 
-    /// Handles every `cocxy worktree-*` CLI verb. The closure receives
-    /// the verb kind ("add" / "list" / "remove" / "prune") plus a flat
-    /// params dictionary the handler extracted from the socket
-    /// request, and returns a boolean success flag along with a data
-    /// dictionary. When `success == false`, the `data["error"]` value
-    /// is surfaced as the socket-level error message.
-    ///
-    /// Synchronous by contract so the handler method can remain
-    /// synchronous; the AppDelegate-side implementation bridges the
-    /// async `WorktreeService` via a `DispatchSemaphore`, which is
-    /// acceptable because the handler already runs on a background
-    /// socket queue.
     let worktreeCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+    let projectCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
-    /// Routes `cocxy github-*` verbs through the AppDelegate-side
-    /// bridge. Same sync `kind` + `params` shape as the worktree
-    /// provider so both CLI surfaces share one mental model.
     let githubCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
-
-    /// Routes `cocxy git-assistant-*` verbs through the AppDelegate-side
-    /// bridge so generation can use app config, Keychain-backed provider
-    /// secrets, and the active tab's repository.
     let gitAssistantCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
     /// Routes local agent-team CLI verbs through AppDelegate so the handler
     /// can create panes on the focused window without owning UI state.
     let agentTeamCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+
+    /// Routes parallel task launch/list/promotion through AppDelegate so Git
+    /// worktree state and native terminal surfaces stay one transaction.
+    let taskRunCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+
+    /// Routes persistent task queue enqueue/list/cancel operations through AppDelegate.
+    let taskQueueCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+
+    /// Exports bounded tab context and imports it into a destination agent tab.
+    let taskHandoffCLIProvider: (@Sendable (
+        String,
+        [String: String]
+    ) -> (success: Bool, data: [String: String]))?
 
     /// Routes `cocxy cell-*` verbs through the app-owned Cells coordinator.
     let cellCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
@@ -625,13 +615,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         tabCreateWithEngineProviderOverride: (@Sendable (String?, String?) -> (id: String, title: String)?)? = nil,
         tabRenameProviderOverride: (@Sendable (String, String) -> Bool)? = nil,
         tabMoveProviderOverride: (@Sendable (String, Int) -> Bool)? = nil,
-        tabConfigSaveProvider: (@Sendable (
-            _ name: String,
-            _ command: String?,
-            _ theme: String?,
-            _ environment: [String: String]
-        ) -> (name: String, path: String)?)? = nil,
-        tabConfigOpenProvider: (@Sendable (_ name: String) -> (id: String, title: String, path: String)?)? = nil,
+        tabConfigSaveProvider: TabConfigSaveSocketProvider? = nil,
+        tabConfigOpenProvider: TabConfigOpenSocketProvider? = nil,
         tabConfigListProvider: (@Sendable () -> [String]?)? = nil,
         tabConfigPathProvider: (@Sendable (_ name: String) -> String?)? = nil,
         tabConfigExportProvider: (@Sendable (
@@ -714,9 +699,13 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         imageDeleteProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
         imageClearProvider: (@Sendable () -> [String: String]?)? = nil,
         worktreeCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        projectCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         githubCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         gitAssistantCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         agentTeamCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        taskRunCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        taskQueueCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        taskHandoffCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         cellCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
     ) {
         self.privilegedCommandAuthorizationProvider =
@@ -800,6 +789,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.imageDeleteProvider = Self.approvalGated(imageDeleteProvider, denied: nil)
         self.imageClearProvider = Self.approvalGated(imageClearProvider, denied: nil)
         self.worktreeCLIProvider = worktreeCLIProvider
+        if let projectCLIProvider {
+            self.projectCLIProvider = { kind, params in
+                if kind == "open" || kind == "clone" {
+                    guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                        return (false, ["error": "Authorization denied"])
+                    }
+                }
+                return projectCLIProvider(kind, params)
+            }
+        } else {
+            self.projectCLIProvider = nil
+        }
         self.githubCLIProvider = githubCLIProvider
         self.gitAssistantCLIProvider = Self.approvalGated(
             gitAssistantCLIProvider,
@@ -818,6 +819,36 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         } else {
             self.agentTeamCLIProvider = nil
         }
+        if let taskRunCLIProvider {
+            self.taskRunCLIProvider = { kind, params in
+                if kind == "list" {
+                    return taskRunCLIProvider(kind, params)
+                }
+                guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                    return (false, ["error": "Authorization denied"])
+                }
+                return taskRunCLIProvider(kind, params)
+            }
+        } else {
+            self.taskRunCLIProvider = nil
+        }
+        if let taskQueueCLIProvider {
+            self.taskQueueCLIProvider = { kind, params in
+                if kind == "list" {
+                    return taskQueueCLIProvider(kind, params)
+                }
+                guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                    return (false, ["error": "Authorization denied"])
+                }
+                return taskQueueCLIProvider(kind, params)
+            }
+        } else {
+            self.taskQueueCLIProvider = nil
+        }
+        self.taskHandoffCLIProvider = Self.approvalGated(
+            taskHandoffCLIProvider,
+            denied: (false, ["error": "Authorization denied"])
+        )
         self.cellCLIProvider = Self.approvalGated(
             cellCLIProvider,
             denied: (false, ["error": "Authorization denied"])
@@ -1311,6 +1342,29 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleAgentTeam(kind: "list", request: request)
         case .agentTeamStop:
             return handleAgentTeam(kind: "stop", request: request)
+        case .taskRun:
+            return handleTaskRun(kind: "launch", request: request)
+        case .taskRunList:
+            return handleTaskRun(kind: "list", request: request)
+        case .taskRunPromote:
+            return handleTaskRun(kind: "promote", request: request)
+        case .taskEnqueue:
+            return handleTaskQueue(kind: "enqueue", request: request)
+        case .taskList:
+            return handleTaskQueue(kind: "list", request: request)
+        case .taskCancel:
+            return handleTaskQueue(kind: "cancel", request: request)
+        case .taskRerun:
+            return handleTaskQueue(kind: "rerun", request: request)
+        case .taskRemove:
+            return handleTaskQueue(kind: "remove", request: request)
+        case .projectOpen, .projectList, .projectPin, .projectUnpin,
+             .projectAlias, .projectForget, .projectClone, .projectTasks:
+            return handleProject(kind: Self.projectKind(commandName), request: request)
+        case .handoffExport:
+            return handleTaskHandoff(kind: "export", request: request)
+        case .handoffImport:
+            return handleTaskHandoff(kind: "import", request: request)
 
         // Remote workspace commands
         case .remoteList:
@@ -1812,11 +1866,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Unable to save tab config")
         }
 
-        return .ok(id: request.id, data: [
+        var data = [
             "status": "saved",
             "name": result.name,
             "path": result.path,
-        ])
+        ]
+        if let warning = result.warning {
+            data["warning"] = warning
+        }
+        return .ok(id: request.id, data: data)
     }
 
     /// Opens a new tab from a saved TOML config. The provider reloads the
@@ -1831,13 +1889,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let result = provider(name) else {
             return .failure(id: request.id, error: "Unable to open tab config")
         }
-        return .ok(id: request.id, data: [
+        var data = [
             "status": "opened",
             "name": name,
             "id": result.id,
             "title": result.title,
             "path": result.path,
-        ])
+        ]
+        if let warning = result.warning {
+            data["warning"] = warning
+        }
+        return .ok(id: request.id, data: data)
     }
 
     private func handleTabConfigList(_ request: SocketRequest) -> SocketResponse {
@@ -2241,6 +2303,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case "command-corrections.max-suggestions-shown":
             return "\(config.commandCorrections.maxSuggestionsShown)"
 
+        // Command blocks
+        case "command-blocks.enabled":
+            return "\(config.commandBlocks.enabled)"
+        case "command-blocks.show-only-on-hover":
+            return "\(config.commandBlocks.showOnlyOnHover)"
+
         // Terminal
         case "terminal.scrollback-lines":
             return "\(config.terminal.scrollbackLines)"
@@ -2254,6 +2322,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.terminal.mouseHideWhileTyping)"
         case "terminal.copy-on-select":
             return "\(config.terminal.copyOnSelect)"
+        case "terminal.cursor-click-to-move":
+            return "\(config.terminal.cursorClickToMove)"
         case "terminal.clipboard-paste-protection":
             return "\(config.terminal.clipboardPasteProtection)"
         case "terminal.clipboard-read-access":
@@ -2431,7 +2501,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             guard ClipboardWriteAccess(rawValue: normalized) != nil else { return nil }
             return AppSocketConfigTOMLUpdater.renderedScalarValue(normalized)
-        case "ux-polish.always-show-shortcut-hints",
+        case "terminal.cursor-click-to-move",
+             "ux-polish.always-show-shortcut-hints",
              "ux-polish.shortcut-hint-debug-overlay":
             guard let value = normalizedConfigBool(rawValue) else { return nil }
             return value
@@ -2440,6 +2511,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
              "command-corrections.agent-fallback",
              "command-corrections.auto-show-on-failure",
              "command-corrections.show-confidence-badge":
+            guard let value = normalizedConfigBool(rawValue) else { return nil }
+            return value
+        case "command-blocks.enabled",
+             "command-blocks.show-only-on-hover":
             guard let value = normalizedConfigBool(rawValue) else { return nil }
             return value
         case "command-corrections.edit-distance-threshold":
@@ -6059,9 +6134,11 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "command-corrections.foundation-models-enabled", "command-corrections.agent-fallback",
             "command-corrections.auto-show-on-failure", "command-corrections.show-confidence-badge",
             "command-corrections.max-suggestions-shown",
+            "command-blocks.enabled", "command-blocks.show-only-on-hover",
             "terminal.scrollback-lines", "terminal.cursor-style",
             "terminal.cursor-blink", "terminal.cursor-opacity",
             "terminal.mouse-hide-while-typing", "terminal.copy-on-select",
+            "terminal.cursor-click-to-move",
             "terminal.clipboard-paste-protection", "terminal.clipboard-read-access",
             "terminal.clipboard-write-access",
             "terminal.image-memory-limit-mb", "terminal.image-file-transfer",

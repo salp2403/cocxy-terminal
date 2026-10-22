@@ -2,6 +2,7 @@
 // TerminalEngine.swift - Contract for the terminal rendering engine bridge.
 
 import Foundation
+import CocxyShared
 
 // MARK: - Terminal Engine Protocol
 
@@ -69,7 +70,7 @@ protocol TerminalEngine: AnyObject {
     /// - Parameters:
     ///   - text: The UTF-8 text to send.
     ///   - surface: Target surface.
-    func sendText(_ text: String, to surface: SurfaceID)
+    @discardableResult func sendText(_ text: String, to surface: SurfaceID) -> Bool
 
     /// Sends IME preedit (composing) text to the terminal surface.
     ///
@@ -78,8 +79,14 @@ protocol TerminalEngine: AnyObject {
     ///
     /// - Parameters:
     ///   - text: The composing text to display, or empty to clear.
+    ///   - cursorByteOffset: Optional cursor offset in the UTF-8 preedit bytes.
+    ///     Engines place the cursor at the end when this is `nil`.
     ///   - surface: Target surface.
-    func sendPreeditText(_ text: String, to surface: SurfaceID)
+    func sendPreeditText(
+        _ text: String,
+        cursorByteOffset: Int?,
+        to surface: SurfaceID
+    )
 
     /// Notifies the engine that a surface has been resized.
     ///
@@ -89,6 +96,22 @@ protocol TerminalEngine: AnyObject {
     ///   - surface: The surface that was resized.
     ///   - size: The new size in columns, rows and pixels.
     func resize(_ surface: SurfaceID, to size: TerminalSize)
+
+    /// Applies a font configuration to one live terminal surface.
+    ///
+    /// Engines use their surface's backing scale and current ligature policy
+    /// when rebuilding renderer metrics. Implementations that do not own a
+    /// renderer may ignore the request.
+    /// - Parameters:
+    ///   - family: Font family name.
+    ///   - size: Font size in points.
+    ///   - surface: Target surface.
+    func applyFont(family: String, size: Double, to surface: SurfaceID)
+
+    /// Updates the font defaults used by surfaces created after this call.
+    /// Per-surface overrides must continue to use `applyFont` so a project
+    /// font does not leak into unrelated future tabs.
+    func updateFontDefaults(family: String, size: Double)
 
     /// Performs one tick of the engine's main loop.
     ///
@@ -157,6 +180,32 @@ protocol TerminalEngine: AnyObject {
     ///   - options: Search configuration.
     /// - Returns: Search results, or `nil` if no native search path exists.
     func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]?
+
+    /// Returns actionable terminal content at one absolute history cell.
+    ///
+    /// Implementations must copy any engine-owned text before returning. The
+    /// query is used by pointer hover and click handling, so daemon-backed
+    /// engines must answer from their latest frame instead of synchronous IPC.
+    func detectedContent(
+        atAbsoluteRow row: UInt32,
+        column: UInt16,
+        for surface: SurfaceID
+    ) -> TerminalDetectedContent?
+
+    /// Returns actionable spans intersecting the surface's visible viewport.
+    /// The result is ordered from top-left to bottom-right and is used for
+    /// keyboard hint presentation.
+    func visibleDetectedContents(for surface: SurfaceID) -> [TerminalDetectedContent]
+
+    /// Performs a semantic grid action using shell-integration block metadata.
+    ///
+    /// Prompt navigation updates the local viewport without emitting PTY input.
+    /// Output selection returns an absolute retained-history range and its full
+    /// copied text so renderer-backed hosts can preserve off-screen selection.
+    func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction,
+        for surface: SurfaceID
+    ) -> TerminalSemanticNavigationResult?
 
     /// Returns process-monitor metadata for a surface when the engine can
     /// expose a real PTY-backed shell process.
@@ -239,6 +288,10 @@ struct KeyEvent: Sendable {
     /// The Unicode codepoint of the key without Shift applied.
     /// Used by the terminal engine for layout-aware key translation.
     let unshiftedCodepoint: UInt32
+    /// The codepoint produced by the shifted form of this key, when known.
+    let shiftedCodepoint: UInt32
+    /// The unshifted US-layout codepoint for Kitty's base-layout alternate.
+    let baseLayoutCodepoint: UInt32
     /// Raw consumed modifiers value used for engine-side modifier tracking.
     /// Set by the view layer after querying the bridge for translation mods.
     let consumedModsRaw: UInt32
@@ -251,6 +304,8 @@ struct KeyEvent: Sendable {
         isRepeat: Bool = false,
         isComposing: Bool = false,
         unshiftedCodepoint: UInt32 = 0,
+        shiftedCodepoint: UInt32 = 0,
+        baseLayoutCodepoint: UInt32 = 0,
         consumedModsRaw: UInt32 = 0
     ) {
         self.characters = characters
@@ -260,6 +315,8 @@ struct KeyEvent: Sendable {
         self.isRepeat = isRepeat
         self.isComposing = isComposing
         self.unshiftedCodepoint = unshiftedCodepoint
+        self.shiftedCodepoint = shiftedCodepoint
+        self.baseLayoutCodepoint = baseLayoutCodepoint
         self.consumedModsRaw = consumedModsRaw
     }
 }
@@ -272,20 +329,98 @@ struct KeyModifiers: OptionSet, Sendable {
     static let control = KeyModifiers(rawValue: 1 << 1)
     static let option  = KeyModifiers(rawValue: 1 << 2)
     static let command = KeyModifiers(rawValue: 1 << 3)
+    static let hyper   = KeyModifiers(rawValue: 1 << 4)
+    static let meta    = KeyModifiers(rawValue: 1 << 5)
+    static let capsLock = KeyModifiers(rawValue: 1 << 6)
+    static let numLock = KeyModifiers(rawValue: 1 << 7)
 }
 
 extension TerminalEngine {
+    func sendPreeditText(_ text: String, to surface: SurfaceID) {
+        sendPreeditText(text, cursorByteOffset: nil, to: surface)
+    }
+
     func processMonitorRegistration(for surface: SurfaceID) -> TerminalProcessMonitorRegistration? {
         nil
     }
 
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {}
 
+    func applyFont(family: String, size: Double, to surface: SurfaceID) {}
+
+    func updateFontDefaults(family: String, size: Double) {}
+
     func scrollViewport(surfaceID: SurfaceID, deltaRows: Int) {}
 
     func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
         nil
     }
+
+    func detectedContent(
+        atAbsoluteRow row: UInt32,
+        column: UInt16,
+        for surface: SurfaceID
+    ) -> TerminalDetectedContent? {
+        nil
+    }
+
+    func visibleDetectedContents(for surface: SurfaceID) -> [TerminalDetectedContent] {
+        []
+    }
+
+    func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction,
+        for surface: SurfaceID
+    ) -> TerminalSemanticNavigationResult? {
+        nil
+    }
+}
+
+/// Classification shared by local and daemon-backed actionable content.
+enum TerminalDetectedContentKind: UInt8, Codable, Sendable {
+    case hyperlink = 0
+    case url = 1
+    case filePath = 2
+    case ipAddress = 3
+    case gitHash = 4
+    case email = 5
+}
+
+/// One actionable span in absolute combined-history coordinates.
+struct TerminalDetectedContent: Equatable, Sendable {
+    let kind: TerminalDetectedContentKind
+    let text: String
+    let target: String
+    let startRow: UInt32
+    let startColumn: UInt16
+    let endRow: UInt32
+    let endColumn: UInt16
+    let line: Int?
+    let column: Int?
+    let isExplicitHyperlink: Bool
+
+    func contains(absoluteRow row: UInt32, column: UInt16) -> Bool {
+        guard row >= startRow, row <= endRow else { return false }
+        if startRow == endRow {
+            return column >= startColumn && column <= endColumn
+        }
+        if row == startRow {
+            return column >= startColumn
+        }
+        if row == endRow {
+            return column <= endColumn
+        }
+        return true
+    }
+}
+
+/// Cursor coordinates captured synchronously while CocxyCore is processing a
+/// terminal event. `screenRow` is relative to the active screen, while
+/// `absoluteRow` includes the visible history origin at capture time.
+struct TerminalGridPosition: Equatable, Sendable {
+    let screenRow: UInt16
+    let absoluteRow: UInt32
+    let column: UInt16
 }
 
 /// Parsed OSC (Operating System Command) notification from the terminal.
@@ -299,10 +434,9 @@ enum OSCNotification: Sendable {
     case notification(title: String, body: String)
     /// Shell prompt was displayed (OSC 133 ;A). Indicates the previous command
     /// has finished and the shell is ready for new input.
-    case shellPrompt
-    /// A command started executing (OSC 133 ;B). The user pressed Enter
-    /// and the shell began running the command.
-    case commandStarted
+    case shellPrompt(position: TerminalGridPosition?)
+    /// Editable command input began (OSC 133 ;B).
+    case commandStarted(inputPosition: TerminalGridPosition?)
     /// A command finished executing (OSC 133 ;D). Contains the exit code
     /// when the shell reports it (nil if not provided).
     case commandFinished(exitCode: Int?)
@@ -311,9 +445,10 @@ enum OSCNotification: Sendable {
     /// Inline image data from an OSC 1337 sequence (iTerm2 protocol).
     /// Contains the raw payload after "1337;" for parsing by the UI layer.
     case inlineImage(String)
-    /// The shell process exited.
+    /// The shell process exited. The status is nil when the backend cannot
+    /// report one.
     /// Used to transition the agent detection engine to idle state.
-    case processExited
+    case processExited(exitCode: Int32?)
 }
 
 /// Configuration passed to `TerminalEngine.initialize(config:)`.

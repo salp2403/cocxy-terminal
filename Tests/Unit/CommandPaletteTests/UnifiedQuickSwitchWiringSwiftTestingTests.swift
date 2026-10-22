@@ -83,7 +83,7 @@ struct UnifiedQuickSwitchWiringSwiftTestingTests {
 
         #expect(MainWindowController.localizedUnifiedQuickSwitchTabTitle("main", using: spanish) == "Pestaña: main")
         #expect(MainWindowController.localizedUnifiedQuickSwitchBrowserTitle("Docs", using: spanish) == "Navegador: Docs")
-        #expect(MainWindowController.localizedUnifiedQuickSwitchWorktreeTitle("feat/a", using: spanish) == "Worktree: feat/a")
+        #expect(MainWindowController.localizedUnifiedQuickSwitchWorktreeTitle("feat/a", using: spanish) == "Árbol de trabajo: feat/a")
         #expect(MainWindowController.localizedUnifiedQuickSwitchNoteTitle("Ideas", using: spanish) == "Nota: Ideas")
         #expect(MainWindowController.localizedUnifiedQuickSwitchNotesSubtitle(using: spanish) == "Notas del espacio")
     }
@@ -147,6 +147,48 @@ struct UnifiedQuickSwitchWiringSwiftTestingTests {
         )
 
         #expect(controller.tabManager.activeTabID == worktreeTab.id)
+    }
+
+    @Test("project items include dormant registry entries and activate globally")
+    func projectItemsUseRegistryAndGlobalActivation() throws {
+        let sandbox = FileManager.default.temporaryDirectory
+            .appendingPathComponent("QuickSwitchProjects-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let project = sandbox.appendingPathComponent("product", isDirectory: true)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        let registry = ProjectRegistry(
+            store: ProjectRegistryStore(fileURL: sandbox.appendingPathComponent("registry.json"))
+        )
+        let projectID = ProjectID(rootURL: project)
+        try registry.recordOpen(ProjectDescriptor(
+            id: projectID,
+            rootURL: project,
+            automaticName: "product",
+            displayName: "product",
+            parent: nil
+        ))
+        try registry.setPinned(true, projectID: projectID)
+        let suiteName = HermeticUserDefaults.suiteName()
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let titles = AuroraWorkspaceTitleStore(defaults: defaults, storageKey: "titles")
+        titles.setTitle("Product", for: projectID.rawValue)
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            auroraWorkspaceTitleStore: titles,
+            projectRegistry: registry
+        )
+        var activated: ProjectID?
+        controller.projectActivationHandler = { activated = $0 }
+
+        let item = try #require(controller.unifiedQuickSwitchItems().first {
+            $0.kind == .project && $0.id == projectID.rawValue
+        })
+        controller.activateUnifiedQuickSwitchItem(item)
+
+        #expect(item.title == "Project: Product")
+        #expect(item.priority == 25)
+        #expect(activated == projectID)
     }
 
     @Test("configured QuickSwitch defaults to the unified command palette")

@@ -95,27 +95,27 @@ struct AgentStatusTextFormatterSwiftTestingTests {
 
     @Test("working and launched collapse into the same counter bucket")
     func workingAndLaunchedSameBucket() {
-        #expect(AgentStatusTextFormatter.counterBucket(for: .working) == .working)
-        #expect(AgentStatusTextFormatter.counterBucket(for: .launched) == .working)
+        #expect(AgentStatusTextFormatter.counterBucket(for: AgentState.working) == .working)
+        #expect(AgentStatusTextFormatter.counterBucket(for: AgentState.launched) == .working)
     }
 
     @Test("waitingInput maps to the waiting bucket")
     func waitingMapsToWaitingBucket() {
-        #expect(AgentStatusTextFormatter.counterBucket(for: .waitingInput) == .waiting)
+        #expect(AgentStatusTextFormatter.counterBucket(for: AgentState.waitingInput) == .waiting)
     }
 
     @Test("error maps to the errors bucket")
     func errorMapsToErrorsBucket() {
-        #expect(AgentStatusTextFormatter.counterBucket(for: .error) == .errors)
+        #expect(AgentStatusTextFormatter.counterBucket(for: AgentState.error) == .errors)
     }
 
     @Test("finished maps to the finished bucket")
     func finishedMapsToFinishedBucket() {
-        #expect(AgentStatusTextFormatter.counterBucket(for: .finished) == .finished)
+        #expect(AgentStatusTextFormatter.counterBucket(for: AgentState.finished) == .finished)
     }
 
     @Test("idle produces no counter bucket")
     func idleHasNoBucket() {
-        #expect(AgentStatusTextFormatter.counterBucket(for: .idle) == nil)
+        #expect(AgentStatusTextFormatter.counterBucket(for: AgentState.idle) == nil)
     }
 }

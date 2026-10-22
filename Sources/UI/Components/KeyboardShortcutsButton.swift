@@ -78,11 +78,11 @@ private struct KeyboardShortcutsPopover: View {
 
                 ShortcutSection(title: localized("keyboardShortcuts.section.panels", fallback: "Panels"), shortcuts: [
                     Shortcut(keys: "Cmd+Shift+P", description: localized("keyboardShortcuts.panels.commandPalette", fallback: "Command palette")),
-                    Shortcut(keys: "Cmd+Opt+D", description: localized("keyboardShortcuts.panels.agentDashboard", fallback: "Agent dashboard")),
+                    Shortcut(keys: KeybindingActionCatalog.reviewDashboard.defaultShortcut.prettyLabel, description: localized("keyboardShortcuts.panels.agentDashboard", fallback: "Agent dashboard")),
                     Shortcut(keys: "Cmd+Shift+T", description: localized("keyboardShortcuts.panels.agentTimeline", fallback: "Agent timeline")),
                     Shortcut(keys: "Cmd+Shift+I", description: localized("keyboardShortcuts.panels.richInput", fallback: "Rich Input")),
                     Shortcut(keys: "Cmd+Opt+Shift+I", description: localized("keyboardShortcuts.panels.notifications", fallback: "Notifications")),
-                    Shortcut(keys: "Cmd+Shift+B", description: localized("keyboardShortcuts.panels.browser", fallback: "Browser panel")),
+                    Shortcut(keys: KeybindingActionCatalog.markdownBrowser.defaultShortcut.prettyLabel, description: localized("keyboardShortcuts.panels.browser", fallback: "Browser panel")),
                     Shortcut(keys: "Cmd+F", description: localized("keyboardShortcuts.panels.find", fallback: "Find in terminal")),
                 ])
 

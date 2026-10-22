@@ -8,14 +8,7 @@ import CocxyCommandSignatures
 import CocxyCommandCorrections
 import CocxyVault
 
-// MARK: - Command Runner
-
 /// Orchestrates the full CLI lifecycle: parse arguments, send to server, format output.
-///
-/// This is the top-level coordination layer. It delegates:
-/// - Argument parsing to `CLIArgumentParser`.
-/// - Socket communication to `SocketClient`.
-/// - Output formatting to `OutputFormatter`.
 public struct CommandRunner {
     static let extendedGitHubReadSocketTimeoutSeconds: TimeInterval = 25
     // Worst-case approved merge path is 265s: repo/branch/PR resolution,
@@ -33,7 +26,6 @@ public struct CommandRunner {
     static let maximumBrowserWaitTimeoutMilliseconds = 30_000
     static let browserActionSocketGraceSeconds: TimeInterval = 3
 
-    /// The socket client to use for communication.
     public let socketClient: SocketClient
     public let signatureKeyStore: SignatureKeychainStore
     public let trustedAuthorRegistryURL: URL
@@ -41,10 +33,6 @@ public struct CommandRunner {
     public let vaultUserStateStore: VaultUserStateStore
     public let vaultSearchIndexFactory: () throws -> VaultSearchIndex
 
-    /// Creates a command runner with a socket client.
-    ///
-    /// - Parameter socketClient: The socket client. Defaults to a new instance
-    ///   with the default socket path.
     public init(
         socketClient: SocketClient = SocketClient(),
         signatureKeyStore: SignatureKeychainStore = SignatureKeychainStore(),
@@ -192,11 +180,7 @@ public struct CommandRunner {
 
         // Format the response.
         if response.success {
-            let output = OutputFormatter.formatSuccess(
-                command: parsedCommand,
-                response: response
-            )
-            return CLIResult(exitCode: 0, stdout: output, stderr: "")
+            return Self.makeSuccessResult(command: parsedCommand, response: response)
         } else {
             let errorMessage = response.error ?? "Unknown error"
             var formattedError = CLIError.serverError(errorMessage).userMessage
@@ -1101,18 +1085,48 @@ public struct CommandRunner {
 
         // MARK: System (v2)
 
-        case .send(let text):
+        case .send(let text, let tabID, let orchestrationSession):
+            var params = ["text": text]
+            if let tabID { params["tabId"] = tabID }
+            if let orchestrationSession {
+                params["orchestration-session"] = orchestrationSession
+            }
             return CLISocketRequest(
                 id: requestID,
                 command: "send",
-                params: ["text": text]
+                params: params
             )
 
-        case .sendKey(let key):
+        case .sendKey(let key, let tabID, let orchestrationSession):
+            var params = ["key": key]
+            if let tabID { params["tabId"] = tabID }
+            if let orchestrationSession {
+                params["orchestration-session"] = orchestrationSession
+            }
             return CLISocketRequest(
                 id: requestID,
                 command: "send-key",
-                params: ["key": key]
+                params: params
+            )
+
+        case .handoffExport(let tabID, let blockLimit):
+            return CLISocketRequest(
+                id: requestID,
+                command: "handoff-export",
+                params: [
+                    "tabId": tabID,
+                    "limit": "\(blockLimit)",
+                ]
+            )
+
+        case .handoffImport(let agent, let artifact):
+            return CLISocketRequest(
+                id: requestID,
+                command: "handoff-import",
+                params: [
+                    "agent": agent,
+                    "artifact": artifact,
+                ]
             )
 
         // MARK: Window Management (v3)
@@ -1765,6 +1779,60 @@ public struct CommandRunner {
                 params: ["team-id": teamID]
             )
 
+        case .taskRun(let options):
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-run",
+                params: options.socketParams
+            )
+
+        case .taskRunList(let project):
+            return taskRunListRequest(id: requestID, project: project)
+
+        case .taskRunPromote(let runID, let candidateID):
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-run-promote",
+                params: [
+                    "run-id": runID,
+                    "candidate-id": candidateID,
+                ]
+            )
+
+        case .taskEnqueue(let options):
+            return taskEnqueueRequest(id: requestID, options: options)
+
+        case .taskList(let options):
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-list",
+                params: [
+                    "limit": String(options.limit),
+                    "offset": String(options.offset),
+                ]
+            )
+
+        case .taskCancel(let taskID):
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-cancel",
+                params: ["task-id": taskID]
+            )
+
+        case .taskRerun(let taskID):
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-rerun",
+                params: ["task-id": taskID]
+            )
+
+        case .taskRemove(let taskID):
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-remove",
+                params: ["task-id": taskID]
+            )
+
         // MARK: SSH (v4)
 
         case .ssh(let destination, let port, let identityFile):
@@ -1968,6 +2036,14 @@ public struct CommandRunner {
         case .skillUninstall(let id):
             return CLISocketRequest(id: requestID, command: "skill-uninstall", params: ["id": id])
 
+        case .projectOpen, .projectList, .projectPin, .projectUnpin,
+             .projectAlias, .projectForget, .projectClone, .projectTasks:
+            return ProjectCLIRequestBuilder.request(
+                for: command,
+                id: requestID,
+                currentDirectory: FileManager.default.currentDirectoryPath
+            )
+
         case .worktreeAdd(let agent, let branch, let baseRef):
             var params: [String: String] = [:]
             if let agent { params["agent"] = agent }
@@ -2083,6 +2159,21 @@ public struct CommandRunner {
         }
     }
 
+    static func absoluteCLIPath(
+        _ rawPath: String,
+        relativeTo currentDirectory: String
+    ) -> String {
+        let expanded = (rawPath as NSString).expandingTildeInPath
+        let url: URL
+        if NSString(string: expanded).isAbsolutePath {
+            url = URL(fileURLWithPath: expanded)
+        } else {
+            url = URL(fileURLWithPath: currentDirectory, isDirectory: true)
+                .appendingPathComponent(expanded)
+        }
+        return url.standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
     func socketClient(for command: ParsedCommand) -> SocketClient {
         let requestCommand = buildRequest(from: command).command
         let approvalGrace = Self.requiresPrivilegedSocketApproval(requestCommand)
@@ -2115,6 +2206,8 @@ public struct CommandRunner {
              .gitAssistantPRDraft,
              .gitAssistantReleaseNotes:
             return extendedGitAssistantSocketTimeoutSeconds
+        case .projectClone:
+            return extendedCellSocketTimeoutSeconds
         case .cellCreate,
              .cellList,
              .cellExec,

@@ -3,17 +3,13 @@
 
 import Foundation
 
-// MARK: - Output Formatter
-
 /// Formats `CLISocketResponse` data for human-readable terminal output.
-///
 /// Different commands produce different output formats:
 /// - `list-tabs`, `split-list`: Pretty-printed JSON array.
 /// - `status`, `dashboard-status`: Human-readable summary.
 /// - `notify`, `new-tab`, etc.: Simple confirmation message.
 /// - `config-path`, `config-get`: Data-driven output.
 public enum OutputFormatter {
-
     public static func formatDiagnosticData(_ data: [String: String]) -> String {
         formatDataAsJSON(data)
     }
@@ -71,15 +67,11 @@ public enum OutputFormatter {
         case .tabMove:
             return "Tab moved."
         case .tabConfigSave:
-            if let path = response.data?["path"] {
-                return "Tab config saved: \(path)"
-            }
-            return "Tab config saved."
+            return appendingWarning(response, to: response.data?["path"]
+                .map { "Tab config saved: \($0)" } ?? "Tab config saved.")
         case .tabConfigOpen:
-            if let name = response.data?["name"] {
-                return "Tab opened from config: \(name)"
-            }
-            return "Tab opened from config."
+            return appendingWarning(response, to: response.data?["name"]
+                .map { "Tab opened from config: \($0)" } ?? "Tab opened from config.")
         case .tabConfigList:
             return formatDataOrJSON(response: response)
         case .tabConfigPath:
@@ -148,6 +140,14 @@ public enum OutputFormatter {
             return "Text sent."
         case .sendKey:
             return "Key sent."
+        case .handoffExport:
+            return response.data?["artifact"] ?? ""
+        case .handoffImport:
+            let provider = response.data?["provider"] ?? "agent"
+            if let tabID = response.data?["tab-id"] {
+                return "Task passed to \(provider) in tab \(tabID)."
+            }
+            return "Task passed to \(provider)."
         case .classify:
             return formatDataOrJSON(response: response)
         case .correct:
@@ -425,6 +425,43 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .agentTeamStop:
             return formatDataOrJSON(response: response)
+        case .taskRun:
+            let runID = response.data?["run-id"] ?? "unknown"
+            let count = response.data?["candidates"] ?? "0"
+            var lines = ["Task run \(runID) launched with \(count) candidates."]
+            if let token = response.data?["orchestration-session"], !token.isEmpty {
+                lines.append("Orchestration session (shown once): \(token)")
+            }
+            if let expiresAt = response.data?["orchestration-expires-at"], !expiresAt.isEmpty {
+                lines.append("Orchestration session expires: \(expiresAt)")
+            }
+            return lines.joined(separator: "\n")
+        case .taskRunList:
+            return formatDataOrJSON(response: response)
+        case .taskRunPromote:
+            let candidateID = response.data?["candidate-id"] ?? "selected candidate"
+            let cleanupFailures = response.data?["cleanup-failures"] ?? ""
+            if cleanupFailures.isEmpty {
+                return "Task candidate \(candidateID) promoted."
+            }
+            return "Task candidate \(candidateID) promoted; cleanup needs attention:\n\(cleanupFailures)"
+        case .taskEnqueue:
+            let taskID = response.data?["task-id"] ?? "unknown"
+            let status = response.data?["task-status"] ?? "queued"
+            let trigger = response.data?["trigger"] ?? "manual"
+            let steps = response.data?["steps"] ?? "0"
+            return "Task \(taskID) enqueued (\(status), \(trigger), \(steps) steps)."
+        case .taskList:
+            return formatTaskQueueList(response: response)
+        case .taskCancel:
+            let taskID = response.data?["task-id"] ?? "unknown"
+            return "Task \(taskID) cancelled."
+        case .taskRerun:
+            let taskID = response.data?["task-id"] ?? "unknown"
+            return "Task \(taskID) re-enqueued."
+        case .taskRemove:
+            let taskID = response.data?["task-id"] ?? "unknown"
+            return "Task \(taskID) removed."
 
         // SSH (v4)
         case .ssh:
@@ -491,6 +528,9 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .skillUninstall:
             return "Skill uninstalled."
+        case .projectOpen, .projectList, .projectPin, .projectUnpin,
+             .projectAlias, .projectForget, .projectClone, .projectTasks:
+            return ProjectCLIOutputFormatter.format(command: command, response: response)
         case .worktreeAdd:
             guard let data = response.data,
                   let id = data["id"],
@@ -812,6 +852,39 @@ public enum OutputFormatter {
         bindAddress.contains(":") ? "[\(bindAddress)]" : bindAddress
     }
 
+    private static func formatTaskQueueList(response: CLISocketResponse) -> String {
+        guard let data = response.data else {
+            return "No scheduled tasks."
+        }
+
+        let returned = Int(data["returned"] ?? "0") ?? 0
+        let total = data["total"] ?? String(returned)
+        let active = data["active"] ?? "0"
+        let terminal = data["terminal"] ?? "0"
+        let offset = data["offset"] ?? "0"
+        guard returned > 0 else {
+            return total == "0"
+                ? "No scheduled tasks."
+                : "Tasks: none on this page, \(total) total, \(active) active, \(terminal) terminal (offset \(offset))."
+        }
+        var lines = [
+            "Tasks: \(returned) shown, \(total) total, \(active) active, \(terminal) terminal (offset \(offset))",
+        ]
+        for index in 0..<returned {
+            let prefix = "task_\(index)_"
+            let taskID = data[prefix + "id"] ?? "unknown"
+            let status = data[prefix + "status"] ?? "unknown"
+            let trigger = data[prefix + "trigger"] ?? "manual"
+            let steps = data[prefix + "steps"] ?? "0"
+            let runs = data[prefix + "runs"] ?? "0"
+            lines.append("\(taskID)  \(status)  \(trigger)  steps \(steps)  runs \(runs)")
+            if let nextRun = data[prefix + "next-run-at"], !nextRun.isEmpty {
+                lines.append("  next: \(nextRun)")
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
     private static func boolText(_ value: String) -> String {
         value == "true" ? "on" : "off"
     }
@@ -872,5 +945,10 @@ public enum OutputFormatter {
             return "{}"
         }
         return jsonString
+    }
+
+    private static func appendingWarning(_ response: CLISocketResponse, to output: String) -> String {
+        guard let warning = response.data?["warning"], !warning.isEmpty else { return output }
+        return "\(output)\n\(warning)"
     }
 }

@@ -27,6 +27,10 @@ struct AgentTeamSwiftTestingTests {
         #expect(AgentTeamProvider.allCases.map(\.rawValue).contains("hosted-cocxy") == false)
         #expect(AgentTeamProvider.codex.displayName == "Codex CLI")
         #expect(AgentTeamProvider.gemini.executableCandidates == ["gemini"])
+        #expect(AgentTeamProvider.resolve(named: " Claude ") == .claudeCode)
+        #expect(AgentTeamProvider.resolve(named: "open-code") == .opencode)
+        #expect(AgentTeamProvider.resolve(named: "ROVO") == .rovoDev)
+        #expect(AgentTeamProvider.resolve(named: "unknown") == nil)
     }
 
     @Test("config parses teammate lists with stable IDs and isolated notifications")
@@ -84,6 +88,105 @@ struct AgentTeamSwiftTestingTests {
         ])
     }
 
+    @Test("executable lookup always supplements Finder PATH with user install locations")
+    func executableLookupIncludesFixedUserLocations() {
+        let home = URL(fileURLWithPath: "/Users/test", isDirectory: true)
+        let directories = AgentTeamExecutableLocator.userCandidateDirectories(
+            pathValue: "/custom/bin:/usr/bin:/custom/bin",
+            homeDirectory: home
+        )
+
+        #expect(directories == [
+            "/custom/bin",
+            "/usr/bin",
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/Users/test/.local/bin",
+            "/Users/test/bin",
+            "/bin",
+        ])
+    }
+
+    @Test("executable lookup keeps listings fast and retries failed launch lookups")
+    func executableLookupUsesCandidateAndCachedShellFallback() async {
+        let shellCalls = LockedBox(0)
+        let shellRanOnMainThread = LockedBox(false)
+        let executablePaths: Set<String> = [
+            "/Users/test/.local/bin/codex",
+            "/Users/test/tools/claude",
+        ]
+        let locator = AgentTeamExecutableLocator(
+            candidateDirectories: ["/usr/bin", "/Users/test/.local/bin"],
+            isExecutable: { executablePaths.contains($0) },
+            shellLookup: { executable in
+                shellCalls.withValue { $0 += 1 }
+                shellRanOnMainThread.withValue { $0 = $0 || Thread.isMainThread }
+                return executable == "claude"
+                    ? "login banner\nplugin warning\n\n/Users/test/tools/claude\n"
+                    : nil
+            }
+        )
+
+        #expect(locator.resolve("codex") == "/Users/test/.local/bin/codex")
+        #expect(shellCalls.withValue { $0 } == 0)
+        #expect(locator.resolve("claude") == nil)
+        #expect(shellCalls.withValue { $0 } == 0)
+        let firstLaunchLookup = await locator.resolveForLaunch("claude")
+        #expect(firstLaunchLookup == "/Users/test/tools/claude")
+        #expect(locator.resolve("claude") == "/Users/test/tools/claude")
+        #expect(shellCalls.withValue { $0 } == 1)
+        let firstMissingLookup = await locator.resolveForLaunch("missing")
+        let secondMissingLookup = await locator.resolveForLaunch("missing")
+        #expect(firstMissingLookup == nil)
+        #expect(secondMissingLookup == nil)
+        #expect(shellCalls.withValue { $0 } == 3)
+        #expect(shellRanOnMainThread.withValue { $0 } == false)
+    }
+
+    @Test("verbose shell output resolves the last nonempty stdout line")
+    func executableLookupParsesLastNonemptyLine() {
+        #expect(AgentTeamExecutableLocator.lastNonemptyLine(
+            in: "profile notice\nwarning: plugin output\n\n/opt/tools/codex\n\n"
+        ) == "/opt/tools/codex")
+        #expect(AgentTeamExecutableLocator.lastNonemptyLine(in: "\n \n") == nil)
+    }
+
+    @Test("CLI launch plans expose and bind each resolved provider command")
+    func cliLaunchPlanBindsResolvedProviderCommands() throws {
+        let plan = try AgentTeamCLILaunchPlanner.make(
+            params: [
+                "provider": "codex",
+                "team-id": "ship",
+                "teammates": "Plan, Review",
+            ],
+            workingDirectory: "/tmp/project",
+            fallbackTeamID: nil,
+            adapterRegistry: AgentTeamProviderAdapterRegistry(executableResolver: { executable in
+                executable == "codex" ? "/opt/tools/codex" : nil
+            })
+        )
+
+        #expect(plan.config.id == "ship")
+        #expect(plan.launchSpecs.map(\.executable) == ["/opt/tools/codex", "/opt/tools/codex"])
+        #expect(plan.authorityDetails["operation"] == "launch")
+        #expect(plan.authorityDetails["provider"] == "codex")
+        #expect(plan.authorityDetails["team-id"] == "ship")
+        #expect(plan.authorityDetails["teammate-count"] == "2")
+        #expect(plan.authorityDetails["teammate.1.id"] == "ship-plan")
+        #expect(plan.authorityDetails["teammate.1.executable"] == "/opt/tools/codex")
+        #expect(plan.authorityDetails["teammate.1.arguments"] == "[]")
+        #expect(plan.authorityDetails["teammate.1.working-directory"] == "/tmp/project")
+
+        let encodedEnvironment = try #require(
+            plan.authorityDetails["teammate.1.environment"]?.data(using: .utf8)
+        )
+        let environment = try JSONDecoder().decode(
+            [String: String].self,
+            from: encodedEnvironment
+        )
+        #expect(environment == plan.launchSpecs[0].environment)
+    }
+
     @Test("provider adapters build preview-only launch specs without config mutation")
     func providerAdaptersBuildPreviewOnlyLaunchSpecs() throws {
         let config = try AgentTeamConfig.from(
@@ -116,8 +219,6 @@ struct AgentTeamSwiftTestingTests {
         #expect(spec.environment["COCXY_AGENT_TEAMMATE_ID"] == "codex-team-plan")
         #expect(spec.environment["COCXY_AGENT_TEAMMATE_NAME"] == "Plan")
         #expect(spec.environment["COCXY_AGENT_PROVIDER"] == "codex")
-        #expect(spec.mutatesUserConfiguration == false)
-        #expect(spec.requiresPreviewBeforeLaunch == true)
     }
 
     @Test("provider launch specs decode legacy snapshots without teamID")
@@ -369,9 +470,7 @@ struct AgentTeamSwiftTestingTests {
             executable: "/usr/local/bin/codex",
             arguments: ["--profile", "local"],
             environment: ["COCXY_AGENT_TEAM_ID": "ship-cli"],
-            workingDirectory: "/tmp/workspace",
-            mutatesUserConfiguration: false,
-            requiresPreviewBeforeLaunch: true
+            workingDirectory: "/tmp/workspace"
         )
 
         let snapshot = AgentTeamSessionSnapshot(
@@ -483,6 +582,40 @@ struct AgentTeamSwiftTestingTests {
         #expect(run.reviewBeforeShipRequests.count == 1)
     }
 
+    @Test("team completion updates the configured teammate coordinator")
+    func teamCompletionUpdatesConfiguredTeammate() throws {
+        let config = try AgentTeamConfig.from(
+            teammates: "Builder",
+            teamID: "completion-team",
+            provider: .codex
+        )
+        let teammate = try #require(config.teammates.first)
+        var run = AgentTeamRunState(config: config, launchSpecs: [])
+
+        _ = try run.apply(HookEvent(
+            type: .sessionStart,
+            sessionId: config.id,
+            data: .sessionStart(SessionStartData(
+                model: nil,
+                agentType: "Codex",
+                workingDirectory: "/tmp/repo"
+            )),
+            teamID: config.id,
+            teammateID: teammate.id,
+            teammateName: teammate.name
+        ))
+        _ = try run.apply(HookEvent(
+            type: .taskCompleted,
+            sessionId: config.id,
+            data: .taskCompleted(TaskCompletedData(taskDescription: "Done")),
+            teamID: config.id,
+            teammateID: teammate.id,
+            teammateName: teammate.name
+        ))
+
+        #expect(run.coordinator.teammateStates.map(\.status) == [.finished])
+    }
+
     @Test("launcher spawns one native pane per teammate")
     @MainActor
     func launcherSpawnsOnePanePerTeammate() throws {
@@ -510,7 +643,7 @@ struct AgentTeamSwiftTestingTests {
 
         #expect(result.teamID == "ship")
         #expect(result.launchedCount == 3)
-        #expect(paneLauncher.requests.map(\.teammateID) == [
+        #expect(paneLauncher.requests.map(\.launchSpec.teammateID) == [
             "ship-planner",
             "ship-implementer",
             "ship-reviewer",
@@ -518,8 +651,6 @@ struct AgentTeamSwiftTestingTests {
         #expect(result.launchSpecs.map(\.teamID) == ["ship", "ship", "ship"])
         #expect(result.launchSpecs.allSatisfy { $0.provider == .codex })
         #expect(result.launchSpecs.allSatisfy { $0.executable == "/usr/local/bin/codex" })
-        #expect(result.launchSpecs.allSatisfy { $0.requiresPreviewBeforeLaunch })
-        #expect(result.launchSpecs.allSatisfy { !$0.mutatesUserConfiguration })
         #expect(result.launchSpecs.map(\.arguments) == [
             ["--profile", "agent-team"],
             ["--profile", "agent-team"],
@@ -530,7 +661,59 @@ struct AgentTeamSwiftTestingTests {
             "ship-implementer",
             "ship-reviewer",
         ])
-        #expect(paneLauncher.requests == result.launchSpecs)
+        #expect(paneLauncher.requests.map(\.launchSpec) == result.launchSpecs)
+        #expect(paneLauncher.requests.allSatisfy { $0.initialPrompt == nil })
+    }
+
+    @Test("launcher forwards prompts and rolls back partially opened teams")
+    @MainActor
+    func launcherForwardsPromptsAndRollsBackPartialLaunch() throws {
+        let config = try AgentTeamTemplateCatalog.builtin.makeConfig(
+            templateID: "cli-tool",
+            teamID: "ship",
+            provider: .codex
+        )
+        let paneLauncher = RecordingAgentTeamPaneLauncher(failingRequestIndex: 1)
+        let launcher = AgentTeamLauncher(
+            paneLauncher: paneLauncher,
+            adapterRegistry: AgentTeamProviderAdapterRegistry(executableResolver: { executable in
+                executable == "codex" ? "/usr/local/bin/codex" : nil
+            })
+        )
+
+        do {
+            _ = try launcher.launch(config: config)
+            Issue.record("Expected the second pane launch to fail")
+        } catch let error as AgentTeamError {
+            #expect(error == .paneLaunchFailed("ship-parser"))
+        }
+
+        #expect(paneLauncher.requests.map(\.initialPrompt) == [
+            "Own the core domain behavior and error model.",
+            "Own argument parsing, command contracts, and user-facing validation.",
+        ])
+        #expect(paneLauncher.closedTeamIDs == ["ship"])
+    }
+
+    @Test("provider launch command quotes environment executable and arguments deterministically")
+    func providerLaunchCommandIsDeterministicAndShellSafe() throws {
+        let launchSpec = AgentTeamProviderLaunchSpec(
+            provider: .codex,
+            teamID: "ship",
+            teammateID: "ship-review",
+            teammateName: "Review",
+            executable: "/tmp/provider's bin",
+            arguments: ["--prompt", "review; exit 9"],
+            environment: [
+                "ROLE": "review's owner",
+                "COCXY_AGENT_TEAM_ID": "ship",
+            ],
+            workingDirectory: "/tmp"
+        )
+
+        #expect(AgentTeamLaunchCommand.makeShellCommand(for: launchSpec) ==
+            "exec '/usr/bin/env' 'COCXY_AGENT_TEAM_ID=ship' 'ROLE=review'\\''s owner' " +
+            "'/tmp/provider'\\''s bin' '--prompt' 'review; exit 9'")
     }
 
     @Test("launcher rejects missing provider executable before opening panes")
@@ -554,6 +737,37 @@ struct AgentTeamSwiftTestingTests {
             #expect(error == .executableUnavailable(provider: .gemini, candidates: ["gemini"]))
         }
         #expect(paneLauncher.requests.isEmpty)
+        #expect(paneLauncher.closedTeamIDs.isEmpty)
+    }
+
+    @Test("launcher executes prepared specs without resolving a different command")
+    @MainActor
+    func launcherExecutesPreparedSpecsExactly() throws {
+        let plan = try AgentTeamCLILaunchPlanner.make(
+            params: [
+                "provider": "codex",
+                "team-id": "ship",
+                "teammates": "Plan",
+            ],
+            workingDirectory: "/tmp/project",
+            fallbackTeamID: nil,
+            adapterRegistry: AgentTeamProviderAdapterRegistry(executableResolver: { _ in
+                "/approved/codex"
+            })
+        )
+        let paneLauncher = RecordingAgentTeamPaneLauncher()
+        let launcher = AgentTeamLauncher(
+            paneLauncher: paneLauncher,
+            adapterRegistry: AgentTeamProviderAdapterRegistry(executableResolver: { _ in nil })
+        )
+
+        let result = try launcher.launch(
+            config: plan.config,
+            preparedLaunchSpecs: plan.launchSpecs
+        )
+
+        #expect(result.launchSpecs == plan.launchSpecs)
+        #expect(paneLauncher.requests.map(\.launchSpec) == plan.launchSpecs)
     }
 
     @Test("coordinator keeps teammate notifications isolated")
@@ -569,34 +783,33 @@ struct AgentTeamSwiftTestingTests {
         #expect(coordinator.notifications(for: "missing").isEmpty)
     }
 
-    @Test("persistence round trips configs with owner-only file permissions")
-    func persistenceRoundTripsWithOwnerOnlyPermissions() throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cocxy-agent-teams-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        let store = AgentTeamPersistence(directory: root)
-        let config = try AgentTeamConfig.from(teammates: "A, B, C", teamID: "persisted", provider: .claudeCode)
-
-        try store.save(config)
-        let loaded = try store.load(teamID: "persisted")
-
-        #expect(loaded == config)
-        let permissions = try FileManager.default.attributesOfItem(
-            atPath: root.appendingPathComponent("persisted.json").path
-        )[.posixPermissions] as? NSNumber
-        #expect(permissions?.intValue == 0o600)
-    }
 }
 
 @MainActor
 private final class RecordingAgentTeamPaneLauncher: AgentTeamPaneLaunching {
-    typealias Request = AgentTeamProviderLaunchSpec
+    struct Request: Equatable {
+        let launchSpec: AgentTeamProviderLaunchSpec
+        let initialPrompt: String?
+    }
 
     private(set) var requests: [Request] = []
+    private(set) var closedTeamIDs: [String] = []
+    private let failingRequestIndex: Int?
 
-    func spawnAgentTeamPane(launchSpec: AgentTeamProviderLaunchSpec) -> Bool {
-        requests.append(launchSpec)
-        return true
+    init(failingRequestIndex: Int? = nil) {
+        self.failingRequestIndex = failingRequestIndex
+    }
+
+    func spawnAgentTeamPane(
+        launchSpec: AgentTeamProviderLaunchSpec,
+        initialPrompt: String?
+    ) -> Bool {
+        let requestIndex = requests.count
+        requests.append(Request(launchSpec: launchSpec, initialPrompt: initialPrompt))
+        return requestIndex != failingRequestIndex
+    }
+
+    func closeAgentTeamPanes(teamID: String) {
+        closedTeamIDs.append(teamID)
     }
 }

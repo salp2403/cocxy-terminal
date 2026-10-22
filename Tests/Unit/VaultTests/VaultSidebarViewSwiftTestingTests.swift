@@ -27,7 +27,7 @@ struct VaultSidebarViewSwiftTestingTests {
     func spanishCopyCoversCoreControlsAndStates() throws {
         let localizer = AppLocalizer(languagePreference: .spanish, bundle: try #require(localizationBundle()))
 
-        #expect(localizer.string("vault.sidebar.title", fallback: "Vault") == "Vault")
+        #expect(localizer.string("vault.sidebar.title", fallback: "Vault") == "Bóveda")
         #expect(localizer.string("vault.search.placeholder", fallback: "Search sessions...") == "Buscar sesiones...")
         #expect(localizer.string("vault.filter.allAgents", fallback: "All") == "Todos")
         #expect(localizer.string("vault.empty.title", fallback: "No sessions yet") == "Sin sesiones todavía")

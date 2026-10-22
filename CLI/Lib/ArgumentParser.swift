@@ -5,6 +5,10 @@ import Foundation
 import CocxyShared
 import CocxyVault
 
+#if canImport(Darwin)
+import Darwin
+#endif
+
 // MARK: - Parsed Command
 
 public struct BrowserImportCLIOptions: Equatable {
@@ -106,6 +110,110 @@ public struct AgentTeamCLIOptions: Equatable {
         if let configPath { params["config"] = configPath }
         if let templateID { params["template"] = templateID }
         return params
+    }
+}
+
+public struct TaskRunCLIOptions: Equatable {
+    public let prompt: String
+    public let agents: String
+    public let count: Int?
+    public let baseRef: String?
+
+    public init(
+        prompt: String,
+        agents: String,
+        count: Int? = nil,
+        baseRef: String? = nil
+    ) {
+        self.prompt = prompt
+        self.agents = agents
+        self.count = count
+        self.baseRef = baseRef
+    }
+
+    var socketParams: [String: String] {
+        var params = [
+            "prompt": prompt,
+            "agents": agents,
+        ]
+        if let count { params["count"] = "\(count)" }
+        if let baseRef { params["base-ref"] = baseRef }
+        return params
+    }
+}
+
+public enum TaskQueueCLITrigger: Equatable {
+    case manual
+    case cron(expression: String, timeZoneIdentifier: String?)
+    case event(String)
+}
+
+public struct TaskEnqueueCLIOptions: Equatable {
+    public let taskID: String
+    public let pipelinePath: String?
+    public let provider: String?
+    public let prompt: String?
+    public let worktree: String?
+    public let project: String?
+    public let trigger: TaskQueueCLITrigger
+    public let maximumRetries: Int
+    public let maximumParallelSteps: Int
+
+    public init(
+        taskID: String,
+        pipelinePath: String? = nil,
+        provider: String? = nil,
+        prompt: String? = nil,
+        worktree: String? = nil,
+        project: String? = nil,
+        trigger: TaskQueueCLITrigger = .manual,
+        maximumRetries: Int = 0,
+        maximumParallelSteps: Int = 2
+    ) {
+        self.taskID = taskID
+        self.pipelinePath = pipelinePath
+        self.provider = provider
+        self.prompt = prompt
+        self.worktree = worktree
+        self.project = project
+        self.trigger = trigger
+        self.maximumRetries = maximumRetries
+        self.maximumParallelSteps = maximumParallelSteps
+    }
+
+    var socketParams: [String: String] {
+        var params: [String: String] = [
+            "task-id": taskID,
+            "retries": String(maximumRetries),
+            "concurrency": String(maximumParallelSteps),
+        ]
+        if let pipelinePath { params["input"] = pipelinePath }
+        if let provider { params["provider"] = provider }
+        if let prompt { params["prompt"] = prompt }
+        if let worktree { params["cwd"] = worktree }
+        if let project { params["project"] = project }
+        switch trigger {
+        case .manual:
+            params["trigger"] = "manual"
+        case .cron(let expression, let timeZoneIdentifier):
+            params["trigger"] = "cron"
+            params["cron"] = expression
+            if let timeZoneIdentifier { params["timezone"] = timeZoneIdentifier }
+        case .event(let event):
+            params["trigger"] = "on-event"
+            params["event"] = event
+        }
+        return params
+    }
+}
+
+public struct TaskListCLIOptions: Equatable {
+    public let limit: Int
+    public let offset: Int
+
+    public init(limit: Int = 50, offset: Int = 0) {
+        self.limit = limit
+        self.offset = offset
     }
 }
 
@@ -466,11 +574,17 @@ public enum ParsedCommand: Equatable {
 
     // MARK: - System (v2)
 
-    /// `cocxy send <text>`
-    case send(text: String)
+    /// `cocxy send <text> [--tab <id>] [--orchestration-session <token>]`
+    case send(text: String, tabID: String?, orchestrationSession: String?)
 
-    /// `cocxy send-key <key>`
-    case sendKey(key: String)
+    /// `cocxy send-key <key> [--tab <id>] [--orchestration-session <token>]`
+    case sendKey(key: String, tabID: String?, orchestrationSession: String?)
+
+    /// `cocxy handoff-export --tab <id> [--blocks <1...16>]`
+    case handoffExport(tabID: String, blockLimit: Int)
+
+    /// `cocxy handoff-import --agent <provider> [--stdin|--file <path>]`
+    case handoffImport(agent: String, artifact: String)
 
     /// `cocxy classify <input>`
     case classify(input: String)
@@ -904,6 +1018,38 @@ public enum ParsedCommand: Equatable {
     /// `cocxy agent-teams stop <team-id>`
     case agentTeamStop(teamID: String)
 
+    /// `cocxy task-run --prompt <text> --agents <provider,...> [--count N]`
+    case taskRun(TaskRunCLIOptions)
+
+    /// `cocxy task-run list`
+    case taskRunList(project: String?)
+
+    /// `cocxy task-run promote <run-id> --candidate <candidate-id>`
+    case taskRunPromote(runID: String, candidateID: String)
+
+    /// `cocxy task-enqueue --id <id> (--pipeline <path> | --prompt <text>)`
+    case taskEnqueue(TaskEnqueueCLIOptions)
+
+    /// `cocxy task-list [--limit <1...100>] [--offset <n>]`
+    case taskList(TaskListCLIOptions)
+
+    /// `cocxy task-cancel <task-id>`
+    case taskCancel(taskID: String)
+
+    /// `cocxy task-rerun <task-id>`
+    case taskRerun(taskID: String)
+
+    /// `cocxy task-remove <task-id>`
+    case taskRemove(taskID: String)
+    case projectOpen(path: String)
+    case projectList(json: Bool)
+    case projectPin(reference: String)
+    case projectUnpin(reference: String)
+    case projectAlias(reference: String, alias: String)
+    case projectForget(reference: String)
+    case projectClone(remote: String, parentDirectory: String)
+    case projectTasks(project: String?, json: Bool)
+
     // MARK: - SSH (v4)
 
     /// `cocxy ssh user@host [-p port] [-i identity]`
@@ -1034,22 +1180,11 @@ public enum ParsedCommand: Equatable {
     /// `cocxy skill uninstall <id>`
     case skillUninstall(id: String)
 
-    /// `cocxy worktree add [--agent <name>] [--branch <template>] [--base-ref <ref>]`
     case worktreeAdd(agent: String?, branch: String?, baseRef: String?)
-
-    /// `cocxy worktree list`
     case worktreeList
-
-    /// `cocxy worktree remove <id>`
     case worktreeRemove(id: String, force: Bool)
-
-    /// `cocxy worktree focus <id>`
     case worktreeFocus(id: String)
-
-    /// `cocxy worktree prune`
     case worktreePrune
-
-    /// `cocxy worktree cleanup-merged --dry-run [--base-ref <ref>]`
     case worktreeCleanupMerged(baseRef: String?, force: Bool, dryRun: Bool)
 
     /// `cocxy github status` — auth + repository summary JSON.
@@ -1118,6 +1253,13 @@ public enum SplitDirection: String, Equatable {
 /// Zero external dependencies. Handles all known subcommands,
 /// flags, and error cases manually.
 public enum CLIArgumentParser {
+    private static let supportedTaskQueueEvents: Set<String> = [
+        "session-start",
+        "session-end",
+        "rich-input-submit",
+        "tab-created",
+        "tab-closed",
+    ]
 
     /// The current CLI version string.
     ///
@@ -1138,7 +1280,7 @@ public enum CLIArgumentParser {
     /// Last-resort fallback. It mirrors `Resources/Info.plist` and is only
     /// used when neither the enclosing `.app` nor a SwiftPM checkout can be
     /// resolved.
-    internal static let fallbackVersion = "1.19.0"
+    internal static let fallbackVersion = "1.20.0"
     internal static let fallbackBundleIdentifier = "dev.cocxy.terminal"
 
     /// Resolves the CLI version by preferring the enclosing app bundle's
@@ -1320,6 +1462,12 @@ public enum CLIArgumentParser {
         case "send-key":
             return try parseSendKey(arguments: Array(arguments.dropFirst()))
 
+        case "handoff-export":
+            return try parseHandoffExport(arguments: Array(arguments.dropFirst()))
+
+        case "handoff-import":
+            return try parseHandoffImport(arguments: Array(arguments.dropFirst()))
+
         case "classify":
             return try parseClassify(arguments: Array(arguments.dropFirst()))
 
@@ -1404,6 +1552,42 @@ public enum CLIArgumentParser {
 
         case "claude-teams", "agent-teams":
             return try parseAgentTeams(arguments: Array(arguments.dropFirst()))
+
+        case "task-run":
+            return try parseTaskRun(arguments: Array(arguments.dropFirst()))
+        case "task-run-list":
+            return try parseTaskRun(arguments: ["list"] + Array(arguments.dropFirst()))
+
+        case "task-enqueue":
+            return try parseTaskEnqueue(arguments: Array(arguments.dropFirst()))
+
+        case "task-list":
+            return try parseTaskList(arguments: Array(arguments.dropFirst()))
+
+        case "task-cancel":
+            return try parseTaskIDCommand(
+                command: "task-cancel",
+                arguments: Array(arguments.dropFirst()),
+                makeCommand: ParsedCommand.taskCancel
+            )
+
+        case "task-rerun":
+            return try parseTaskIDCommand(
+                command: "task-rerun",
+                arguments: Array(arguments.dropFirst()),
+                makeCommand: ParsedCommand.taskRerun
+            )
+
+        case "task-remove":
+            return try parseTaskIDCommand(
+                command: "task-remove",
+                arguments: Array(arguments.dropFirst()),
+                makeCommand: ParsedCommand.taskRemove
+            )
+
+        case "project-open", "project-list", "project-pin", "project-unpin",
+             "project-alias", "project-forget", "project-clone", "project-tasks":
+            return try parseProjectCommand(firstArg, arguments: Array(arguments.dropFirst()))
 
         case "web":
             return try parseWeb(arguments: Array(arguments.dropFirst()))
@@ -2356,12 +2540,83 @@ public enum CLIArgumentParser {
         }
     }
 
-    /// Parses `cocxy send <text>`.
+    /// Parses `cocxy send <text>|--stdin [--tab <id>] [--orchestration-session <token>]`.
     private static func parseSend(arguments: [String]) throws -> ParsedCommand {
         guard !arguments.isEmpty else {
             throw CLIError.missingArgument(command: "send", argument: "text")
         }
-        if arguments == ["--stdin"] || arguments == ["-"] {
+
+        var tabID: String?
+        var orchestrationSession: String?
+        var readsStandardInput = false
+        var textArguments: [String] = []
+        var index = 0
+        while index < arguments.count {
+            switch arguments[index] {
+            case "--tab":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "send", argument: "tab id")
+                }
+                guard tabID == nil else {
+                    throw CLIError.invalidArgument(
+                        command: "send",
+                        argument: "--tab",
+                        reason: "The target tab may only be specified once."
+                    )
+                }
+                let value = arguments[index + 1]
+                guard !value.isEmpty else {
+                    throw CLIError.missingArgument(command: "send", argument: "tab id")
+                }
+                tabID = value
+                index += 2
+            case "--orchestration-session":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(
+                        command: "send",
+                        argument: "orchestration session token"
+                    )
+                }
+                guard orchestrationSession == nil else {
+                    throw CLIError.invalidArgument(
+                        command: "send",
+                        argument: "--orchestration-session",
+                        reason: "The orchestration session may only be specified once."
+                    )
+                }
+                let value = arguments[index + 1]
+                guard !value.isEmpty else {
+                    throw CLIError.missingArgument(
+                        command: "send",
+                        argument: "orchestration session token"
+                    )
+                }
+                orchestrationSession = value
+                index += 2
+            case "--stdin", "-":
+                readsStandardInput = true
+                index += 1
+            default:
+                textArguments.append(arguments[index])
+                index += 1
+            }
+        }
+
+        if orchestrationSession != nil, tabID == nil {
+            throw CLIError.missingArgument(
+                command: "send --orchestration-session",
+                argument: "--tab <id>"
+            )
+        }
+
+        if readsStandardInput {
+            guard textArguments.isEmpty else {
+                throw CLIError.invalidArgument(
+                    command: "send",
+                    argument: textArguments.joined(separator: " "),
+                    reason: "Text cannot be combined with --stdin."
+                )
+            }
             let text = String(
                 decoding: FileHandle.standardInput.readDataToEndOfFile(),
                 as: UTF8.self
@@ -2369,18 +2624,358 @@ public enum CLIArgumentParser {
             guard !text.isEmpty else {
                 throw CLIError.missingArgument(command: "send --stdin", argument: "stdin")
             }
-            return .send(text: text)
+            return .send(
+                text: text,
+                tabID: tabID,
+                orchestrationSession: orchestrationSession
+            )
         }
-        let text = arguments.joined(separator: " ")
-        return .send(text: text)
+
+        guard !textArguments.isEmpty else {
+            throw CLIError.missingArgument(command: "send", argument: "text")
+        }
+        return .send(
+            text: textArguments.joined(separator: " "),
+            tabID: tabID,
+            orchestrationSession: orchestrationSession
+        )
     }
 
-    /// Parses `cocxy send-key <key>`.
+    /// Parses `cocxy send-key <key> [--tab <id>] [--orchestration-session <token>]`.
     private static func parseSendKey(arguments: [String]) throws -> ParsedCommand {
-        guard let key = arguments.first, !key.isEmpty else {
+        var tabID: String?
+        var orchestrationSession: String?
+        var key: String?
+        var index = 0
+        while index < arguments.count {
+            if arguments[index] == "--tab" {
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "send-key", argument: "tab id")
+                }
+                guard tabID == nil else {
+                    throw CLIError.invalidArgument(
+                        command: "send-key",
+                        argument: "--tab",
+                        reason: "The target tab may only be specified once."
+                    )
+                }
+                let value = arguments[index + 1]
+                guard !value.isEmpty else {
+                    throw CLIError.missingArgument(command: "send-key", argument: "tab id")
+                }
+                tabID = value
+                index += 2
+                continue
+            }
+            if arguments[index] == "--orchestration-session" {
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(
+                        command: "send-key",
+                        argument: "orchestration session token"
+                    )
+                }
+                guard orchestrationSession == nil else {
+                    throw CLIError.invalidArgument(
+                        command: "send-key",
+                        argument: "--orchestration-session",
+                        reason: "The orchestration session may only be specified once."
+                    )
+                }
+                let value = arguments[index + 1]
+                guard !value.isEmpty else {
+                    throw CLIError.missingArgument(
+                        command: "send-key",
+                        argument: "orchestration session token"
+                    )
+                }
+                orchestrationSession = value
+                index += 2
+                continue
+            }
+            guard key == nil else {
+                throw CLIError.invalidArgument(
+                    command: "send-key",
+                    argument: arguments[index],
+                    reason: "Only one key may be sent at a time."
+                )
+            }
+            key = arguments[index]
+            index += 1
+        }
+
+        if orchestrationSession != nil, tabID == nil {
+            throw CLIError.missingArgument(
+                command: "send-key --orchestration-session",
+                argument: "--tab <id>"
+            )
+        }
+
+        guard let key, !key.isEmpty else {
             throw CLIError.missingArgument(command: "send-key", argument: "key")
         }
-        return .sendKey(key: key)
+        return .sendKey(
+            key: key,
+            tabID: tabID,
+            orchestrationSession: orchestrationSession
+        )
+    }
+
+    private static func parseHandoffExport(arguments: [String]) throws -> ParsedCommand {
+        var tabID: String?
+        var blockLimit = CocxyTaskHandoffWireContract.defaultBlockLimit
+        var blockLimitWasSpecified = false
+        var index = 0
+        while index < arguments.count {
+            switch arguments[index] {
+            case "--tab":
+                tabID = try uniqueOptionValue(
+                    current: tabID,
+                    option: "--tab",
+                    arguments: arguments,
+                    index: &index,
+                    command: "handoff-export",
+                    argumentName: "tab id"
+                )
+                index += 1
+            case "--blocks":
+                guard !blockLimitWasSpecified else {
+                    throw CLIError.invalidArgument(
+                        command: "handoff-export",
+                        argument: "--blocks",
+                        reason: "The option may only be specified once."
+                    )
+                }
+                let rawValue = try value(
+                    after: "--blocks",
+                    in: arguments,
+                    at: &index,
+                    command: "handoff-export"
+                )
+                guard let parsedLimit = Int(rawValue),
+                      (1...CocxyTaskHandoffWireContract.maximumBlockLimit)
+                        .contains(parsedLimit) else {
+                    throw CLIError.invalidArgument(
+                        command: "handoff-export",
+                        argument: rawValue,
+                        reason: "--blocks must be between 1 and "
+                            + "\(CocxyTaskHandoffWireContract.maximumBlockLimit)"
+                    )
+                }
+                blockLimit = parsedLimit
+                blockLimitWasSpecified = true
+                index += 1
+            default:
+                throw CLIError.invalidArgument(
+                    command: "handoff-export",
+                    argument: arguments[index],
+                    reason: "Use --tab <id> with optional --blocks <1...16>."
+                )
+            }
+        }
+
+        guard let tabID, !tabID.isEmpty else {
+            throw CLIError.missingArgument(
+                command: "handoff-export",
+                argument: "--tab <id>"
+            )
+        }
+        guard UUID(uuidString: tabID) != nil else {
+            throw CLIError.invalidArgument(
+                command: "handoff-export",
+                argument: tabID,
+                reason: "The tab id must be a UUID."
+            )
+        }
+        return .handoffExport(tabID: tabID, blockLimit: blockLimit)
+    }
+
+    private static func parseHandoffImport(arguments: [String]) throws -> ParsedCommand {
+        var agent: String?
+        var artifactFile: String?
+        var readsStandardInput = false
+        var index = 0
+        while index < arguments.count {
+            switch arguments[index] {
+            case "--agent":
+                agent = try uniqueOptionValue(
+                    current: agent,
+                    option: "--agent",
+                    arguments: arguments,
+                    index: &index,
+                    command: "handoff-import",
+                    argumentName: "agent provider"
+                )
+                index += 1
+            case "--file":
+                artifactFile = try uniqueOptionValue(
+                    current: artifactFile,
+                    option: "--file",
+                    arguments: arguments,
+                    index: &index,
+                    command: "handoff-import",
+                    argumentName: "artifact path"
+                )
+                index += 1
+            case "--stdin", "-":
+                guard !readsStandardInput else {
+                    throw CLIError.invalidArgument(
+                        command: "handoff-import",
+                        argument: arguments[index],
+                        reason: "Standard input may only be selected once."
+                    )
+                }
+                readsStandardInput = true
+                index += 1
+            default:
+                throw CLIError.invalidArgument(
+                    command: "handoff-import",
+                    argument: arguments[index],
+                    reason: "Use --agent <provider> with --stdin or --file <path>."
+                )
+            }
+        }
+
+        guard let agent = agent?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !agent.isEmpty else {
+            throw CLIError.missingArgument(
+                command: "handoff-import",
+                argument: "--agent <provider>"
+            )
+        }
+        guard artifactFile == nil || !readsStandardInput else {
+            throw CLIError.invalidArgument(
+                command: "handoff-import",
+                argument: "--stdin",
+                reason: "--stdin cannot be combined with --file."
+            )
+        }
+
+        let artifact: String
+        if let artifactFile {
+            artifact = try readHandoffArtifact(
+                from: URL(fileURLWithPath: artifactFile).standardizedFileURL
+            )
+        } else {
+            guard readsStandardInput || !standardInputIsTerminal else {
+                throw CLIError.missingArgument(
+                    command: "handoff-import",
+                    argument: "artifact via stdin or --file <path>"
+                )
+            }
+            artifact = try readHandoffArtifact(from: .standardInput)
+        }
+        return .handoffImport(agent: agent.lowercased(), artifact: artifact)
+    }
+
+    private static func uniqueOptionValue(
+        current: String?,
+        option: String,
+        arguments: [String],
+        index: inout Int,
+        command: String,
+        argumentName: String
+    ) throws -> String {
+        guard current == nil else {
+            throw CLIError.invalidArgument(
+                command: command,
+                argument: option,
+                reason: "The option may only be specified once."
+            )
+        }
+        let result = try value(
+            after: option,
+            in: arguments,
+            at: &index,
+            command: command
+        )
+        guard !result.isEmpty else {
+            throw CLIError.missingArgument(command: command, argument: argumentName)
+        }
+        return result
+    }
+
+    private static func readHandoffArtifact(from url: URL) throws -> String {
+        do {
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values.isRegularFile == true else {
+                throw CLIError.invalidArgument(
+                    command: "handoff-import",
+                    argument: url.path,
+                    reason: "The artifact path must refer to a regular file."
+                )
+            }
+            if let fileSize = values.fileSize,
+               fileSize > CocxyTaskHandoffWireContract.maximumArtifactBytes {
+                throw CLIError.payloadTooLarge(
+                    size: fileSize,
+                    maximum: CocxyTaskHandoffWireContract.maximumArtifactBytes
+                )
+            }
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            return try readHandoffArtifact(from: handle)
+        } catch let error as CLIError {
+            throw error
+        } catch {
+            throw CLIError.invalidArgument(
+                command: "handoff-import",
+                argument: url.path,
+                reason: "The artifact file could not be read: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private static func readHandoffArtifact(from handle: FileHandle) throws -> String {
+        let maximum = CocxyTaskHandoffWireContract.maximumArtifactBytes
+        var data = Data()
+        do {
+            while data.count <= maximum {
+                let remaining = maximum + 1 - data.count
+                guard let chunk = try handle.read(upToCount: min(8_192, remaining)),
+                      !chunk.isEmpty else {
+                    break
+                }
+                data.append(chunk)
+            }
+        } catch {
+            throw CLIError.invalidArgument(
+                command: "handoff-import",
+                argument: "artifact",
+                reason: "The artifact could not be read: \(error.localizedDescription)"
+            )
+        }
+        guard data.count <= maximum else {
+            throw CLIError.payloadTooLarge(size: data.count, maximum: maximum)
+        }
+        guard let artifact = String(data: data, encoding: .utf8) else {
+            throw CLIError.invalidArgument(
+                command: "handoff-import",
+                argument: "artifact",
+                reason: "The artifact must be valid UTF-8."
+            )
+        }
+        guard !artifact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw CLIError.missingArgument(
+                command: "handoff-import",
+                argument: "non-empty artifact"
+            )
+        }
+        guard !artifact.contains("\0") else {
+            throw CLIError.invalidArgument(
+                command: "handoff-import",
+                argument: "artifact",
+                reason: "The artifact cannot contain NUL bytes."
+            )
+        }
+        return artifact
+    }
+
+    private static var standardInputIsTerminal: Bool {
+        #if canImport(Darwin)
+        return isatty(STDIN_FILENO) == 1
+        #else
+        return false
+        #endif
     }
 
     /// Parses a small tmux-compatible command layer onto existing Cocxy CLI commands.
@@ -2489,7 +3084,7 @@ public enum CLIArgumentParser {
         guard !text.isEmpty else {
             throw CLIError.missingArgument(command: "tmux send-keys", argument: "keys")
         }
-        return .send(text: text)
+        return .send(text: text, tabID: nil, orchestrationSession: nil)
     }
 
     private static func appendTmuxKey(_ token: String, to text: inout String) {
@@ -4873,7 +5468,259 @@ public enum CLIArgumentParser {
         ))
     }
 
-    private static func value(
+    private static func parseTaskEnqueue(arguments: [String]) throws -> ParsedCommand {
+        var taskID: String?
+        var pipelinePath: String?
+        var provider: String?
+        var prompt: String?
+        var worktree: String?
+        var project: String?
+        var cronExpression: String?
+        var timeZoneIdentifier: String?
+        var event: String?
+        var maximumRetries = 0
+        var maximumParallelSteps = 2
+        var index = 0
+
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--id":
+                taskID = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--pipeline":
+                pipelinePath = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--provider":
+                provider = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--prompt":
+                prompt = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--worktree":
+                worktree = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--project":
+                project = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--cron":
+                cronExpression = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--timezone":
+                timeZoneIdentifier = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--event":
+                event = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--retries":
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+                guard let parsed = Int(rawValue), (0...5).contains(parsed) else {
+                    throw CLIError.invalidArgument(
+                        command: "task-enqueue",
+                        argument: rawValue,
+                        reason: "--retries must be an integer from 0 through 5."
+                    )
+                }
+                maximumRetries = parsed
+            case "--concurrency":
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+                guard let parsed = Int(rawValue), (1...8).contains(parsed) else {
+                    throw CLIError.invalidArgument(
+                        command: "task-enqueue",
+                        argument: rawValue,
+                        reason: "--concurrency must be an integer from 1 through 8."
+                    )
+                }
+                maximumParallelSteps = parsed
+            default:
+                throw CLIError.invalidArgument(
+                    command: "task-enqueue",
+                    argument: argument,
+                    reason: "Use --id, --pipeline, --provider, --prompt, --worktree, --project, --cron, --timezone, --event, --retries, or --concurrency."
+                )
+            }
+            index += 1
+        }
+
+        guard let taskID = taskID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !taskID.isEmpty else {
+            throw CLIError.missingArgument(command: "task-enqueue", argument: "--id <id>")
+        }
+        let normalizedPipelinePath = pipelinePath?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedPrompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedProvider = provider?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedWorktree = worktree?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedProject = project?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasPipeline = normalizedPipelinePath?.isEmpty == false
+        let hasPrompt = normalizedPrompt?.isEmpty == false
+        guard hasPipeline != hasPrompt else {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "pipeline source",
+                reason: "Use exactly one of --pipeline <path> or --prompt <text>."
+            )
+        }
+        if hasPipeline, provider != nil {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--provider",
+                reason: "Pipeline JSON defines the provider for each step."
+            )
+        }
+        if provider != nil, normalizedProvider?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--provider",
+                reason: "Provider cannot be empty."
+            )
+        }
+        if worktree != nil, normalizedWorktree?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--worktree",
+                reason: "Worktree cannot be empty."
+            )
+        }
+        if project != nil, normalizedProject?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--project",
+                reason: "Project cannot be empty."
+            )
+        }
+
+        let normalizedCron = cronExpression?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEvent = event?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedTimeZone = timeZoneIdentifier?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if cronExpression != nil, normalizedCron?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--cron",
+                reason: "Cron expression cannot be empty."
+            )
+        }
+        if event != nil, normalizedEvent?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--event",
+                reason: "Event cannot be empty."
+            )
+        }
+        if let normalizedEvent,
+           !normalizedEvent.isEmpty,
+           !supportedTaskQueueEvents.contains(normalizedEvent) {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: normalizedEvent,
+                reason: "Supported events: \(supportedTaskQueueEvents.sorted().joined(separator: ", "))."
+            )
+        }
+        if timeZoneIdentifier != nil, normalizedTimeZone?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--timezone",
+                reason: "Time zone cannot be empty."
+            )
+        }
+        guard !(normalizedCron?.isEmpty == false && normalizedEvent?.isEmpty == false) else {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--cron --event",
+                reason: "Use only one trigger."
+            )
+        }
+        if timeZoneIdentifier != nil, normalizedCron?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--timezone",
+                reason: "--timezone requires --cron."
+            )
+        }
+
+        let trigger: TaskQueueCLITrigger
+        if let normalizedCron, !normalizedCron.isEmpty {
+            trigger = .cron(
+                expression: normalizedCron,
+                timeZoneIdentifier: normalizedTimeZone
+            )
+        } else if let normalizedEvent, !normalizedEvent.isEmpty {
+            trigger = .event(normalizedEvent)
+        } else {
+            trigger = .manual
+        }
+
+        return .taskEnqueue(TaskEnqueueCLIOptions(
+            taskID: taskID,
+            pipelinePath: hasPipeline ? normalizedPipelinePath : nil,
+            provider: hasPrompt ? (normalizedProvider ?? "claude-code") : nil,
+            prompt: hasPrompt ? normalizedPrompt : nil,
+            worktree: normalizedWorktree,
+            project: normalizedProject,
+            trigger: trigger,
+            maximumRetries: maximumRetries,
+            maximumParallelSteps: maximumParallelSteps
+        ))
+    }
+
+    private static func parseTaskList(arguments: [String]) throws -> ParsedCommand {
+        var limit = 50
+        var offset = 0
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index]
+            guard argument == "--limit" || argument == "--offset" else {
+                throw CLIError.invalidArgument(
+                    command: "task-list",
+                    argument: argument,
+                    reason: "Use --limit <1...100> or --offset <n>."
+                )
+            }
+            let rawValue = try value(
+                after: argument,
+                in: arguments,
+                at: &index,
+                command: "task-list"
+            )
+            switch argument {
+            case "--limit":
+                guard let parsed = Int(rawValue), (1...100).contains(parsed) else {
+                    throw CLIError.invalidArgument(
+                        command: "task-list",
+                        argument: rawValue,
+                        reason: "--limit must be an integer from 1 through 100."
+                    )
+                }
+                limit = parsed
+            case "--offset":
+                guard let parsed = Int(rawValue), parsed >= 0 else {
+                    throw CLIError.invalidArgument(
+                        command: "task-list",
+                        argument: rawValue,
+                        reason: "--offset must be a non-negative integer."
+                    )
+                }
+                offset = parsed
+            default:
+                preconditionFailure("Validated task-list option drifted")
+            }
+            index += 1
+        }
+        return .taskList(TaskListCLIOptions(limit: limit, offset: offset))
+    }
+
+    private static func parseTaskIDCommand(
+        command: String,
+        arguments: [String],
+        makeCommand: (String) -> ParsedCommand
+    ) throws -> ParsedCommand {
+        guard let taskID = arguments.first?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !taskID.isEmpty,
+              !taskID.hasPrefix("-") else {
+            throw CLIError.missingArgument(command: command, argument: "task-id")
+        }
+        guard arguments.count == 1 else {
+            throw CLIError.invalidArgument(
+                command: command,
+                argument: Array(arguments.dropFirst()).joined(separator: " "),
+                reason: "Use exactly one task-id."
+            )
+        }
+        return makeCommand(taskID)
+    }
+
+    static func value(
         after flag: String,
         in arguments: [String],
         at index: inout Int,

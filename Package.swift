@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "CocxyTerminal",
     platforms: [
-        .macOS(.v14)
+        .macOS("15.0")
     ],
     products: [
         .library(
@@ -103,8 +103,10 @@ let package = Package(
                 .linkedFramework("IOSurface"),
                 .linkedFramework("UniformTypeIdentifiers"),
                 .linkedFramework("Carbon"),
+                .linkedFramework("CoreServices"),
                 .linkedFramework("NaturalLanguage"),
                 .linkedFramework("CoreSpotlight"),
+                .linkedFramework("ScreenCaptureKit"),
             ]
         ),
         .testTarget(

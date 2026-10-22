@@ -81,6 +81,8 @@ struct TimelineView: View {
 
     @State private var selectedScope: WindowScope = .all
 
+    @State private var selectedProjectIdentity: ProjectID?
+
     /// Resolved event source from the reactive ViewModel.
     private var events: [TimelineEvent] { viewModel.events }
 
@@ -111,6 +113,10 @@ struct TimelineView: View {
 
             if currentWindowID != nil {
                 scopePicker
+            }
+
+            if selectedProjectIdentity != nil || !availableProjectIdentities.isEmpty {
+                projectPicker
             }
 
             Menu {
@@ -159,6 +165,39 @@ struct TimelineView: View {
                 )
             }
         }
+    }
+
+    private var projectPicker: some View {
+        Menu {
+            Button(localized("timeline.project.all", fallback: "All Projects")) {
+                selectedProjectIdentity = nil
+            }
+            Divider()
+            ForEach(availableProjectIdentities, id: \.rawValue) { identity in
+                Button {
+                    selectedProjectIdentity = identity
+                } label: {
+                    if selectedProjectIdentity == identity {
+                        Label(projectLabel(identity), systemImage: "checkmark")
+                    } else {
+                        Text(projectLabel(identity))
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: selectedProjectIdentity == nil ? "folder" : "folder.fill")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .frame(width: 24)
+        .help(selectedProjectIdentity.map(projectLabel) ?? localized(
+            "timeline.project.filter.accessibility",
+            fallback: "Filter by project"
+        ))
+        .accessibilityLabel(
+            localized("timeline.project.filter.accessibility", fallback: "Filter by project")
+        )
     }
 
     // MARK: - Filter Bar
@@ -302,18 +341,24 @@ struct TimelineView: View {
     /// The "Agents" filter shows both subagentStart and subagentStop events
     /// to provide a complete view of subagent lifecycle.
     private var filteredEvents: [TimelineEvent] {
-        let scopedEvents: [TimelineEvent]
-        if selectedScope == .current, let currentWindowID {
-            scopedEvents = events.filter { $0.windowID == currentWindowID }
-        } else {
-            scopedEvents = events
-        }
+        TimelineEventFilter(
+            eventType: selectedFilter,
+            windowID: selectedScope == .current ? currentWindowID : nil,
+            projectIdentity: selectedProjectIdentity
+        ).apply(to: events)
+    }
 
-        guard let filter = selectedFilter else { return scopedEvents }
-        if filter == .subagentStart {
-            return scopedEvents.filter { $0.type == .subagentStart || $0.type == .subagentStop }
+    private var availableProjectIdentities: [ProjectID] {
+        Set(events.compactMap(\.projectIdentity)).sorted {
+            projectLabel($0).localizedStandardCompare(projectLabel($1)) == .orderedAscending
         }
-        return scopedEvents.filter { $0.type == filter }
+    }
+
+    private func projectLabel(_ identity: ProjectID) -> String {
+        let url = URL(fileURLWithPath: identity.rawValue, isDirectory: true)
+        let name = ProjectDescriptor.automaticName(for: url)
+        let parent = url.deletingLastPathComponent().lastPathComponent
+        return parent.isEmpty ? name : "\(name) (\(parent))"
     }
 
     private func localized(_ key: String, fallback: String) -> String {

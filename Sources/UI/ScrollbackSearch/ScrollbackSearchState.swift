@@ -48,6 +48,9 @@ final class ScrollbackSearchBarViewModel: ObservableObject {
     /// The current search results.
     @Published private(set) var results: [SearchResult] = []
 
+    /// True when regex mode contains a pattern that cannot be compiled.
+    @Published private(set) var hasInvalidRegularExpression = false
+
     // MARK: - Dependencies
 
     /// The search engine used to execute queries.
@@ -74,6 +77,7 @@ final class ScrollbackSearchBarViewModel: ObservableObject {
     ///
     /// - Parameter lines: The scrollback buffer content to search through.
     func performSearch(in lines: [String]) {
+        guard validateCurrentQuery() else { return }
         let options = SearchOptions(
             query: query,
             caseSensitive: caseSensitive,
@@ -89,9 +93,31 @@ final class ScrollbackSearchBarViewModel: ObservableObject {
     /// This lets the host swap in CocxyCore-native search without duplicating
     /// the result-count and navigation bookkeeping here.
     func applySearchResults(_ newResults: [SearchResult]) {
+        hasInvalidRegularExpression = false
         results = newResults
         totalMatches = newResults.count
         currentMatchIndex = 0
+    }
+
+    /// Validates regex syntax before native search or the local fallback runs.
+    @discardableResult
+    func validateCurrentQuery() -> Bool {
+        validate(query: query, useRegex: useRegex)
+    }
+
+    @discardableResult
+    func validate(query: String, useRegex: Bool) -> Bool {
+        let isInvalid = useRegex
+            && !query.isEmpty
+            && (try? NSRegularExpression(pattern: query)) == nil
+        hasInvalidRegularExpression = isInvalid
+        guard !isInvalid else {
+            results = []
+            totalMatches = 0
+            currentMatchIndex = 0
+            return false
+        }
+        return true
     }
 
     // MARK: - Navigation
@@ -147,6 +173,7 @@ final class ScrollbackSearchBarViewModel: ObservableObject {
         results = []
         totalMatches = 0
         currentMatchIndex = 0
+        hasInvalidRegularExpression = false
         searchEngine.cancel()
     }
 }

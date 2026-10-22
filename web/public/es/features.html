@@ -7,22 +7,21 @@
   <meta name="description" content="Mapa completo de capacidades de Cocxy Terminal para desarrollo con agentes.">
   <meta name="author" content="Said Arturo Lopez">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
-  <meta name="theme-color" content="#101018">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b0c10" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="/css/style.css?v=0.0.0">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cocxy Terminal">
   <meta property="og:title" content="Todas las funciones - Cocxy Terminal">
   <meta property="og:description" content="Mapa completo de capacidades de Cocxy Terminal para desarrollo con agentes.">
   <meta property="og:url" content="https://cocxy.dev/es/features.html">
-  <meta property="og:image" content="https://cocxy.dev/og/og-features.png">
+  <meta property="og:image" content="https://cocxy.dev/og/og-es-features.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Todas las funciones - Cocxy Terminal">
   <meta property="og:locale" content="es_HN">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Todas las funciones - Cocxy Terminal">
-  <meta name="twitter:description" content="Mapa completo de capacidades de Cocxy Terminal para desarrollo con agentes.">
-  <meta name="twitter:image" content="https://cocxy.dev/og/og-features.png">
   <link rel="canonical" href="https://cocxy.dev/es/features.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/features.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features.html">
@@ -30,164 +29,154 @@
   <link rel="icon" type="image/svg+xml" href="/images/icon.svg">
   <link rel="apple-touch-icon" href="/images/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
-  <script>
-  (() => {
-    try {
-      const saved = localStorage.getItem('cocxy-theme');
-      if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
-    } catch (_) {}
-  })();
-  </script>
+  <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
 <a class="skip-link" href="#main">Saltar al contenido</a>
 <header class="site-header">
   <nav class="nav container" aria-label="Navegación principal">
     <a class="nav-logo" href="/es/" aria-label="Cocxy Terminal">
-      <picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="32" height="32" alt=""></picture>
+      <img src="/images/icon-192.png" width="28" height="28" alt="">
       <span>Cocxy</span>
     </a>
-    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
-      <span></span><span></span><span></span>
-      <span class="sr-only">Abrir navegación</span>
-    </button>
     <div class="nav-links" id="site-menu">
       <a aria-current="page" href="/es/features.html">Funciones</a>
       <a  href="/es/features/agents.html">Agentes</a>
       <a  href="/es/privacy.html">Privacidad</a>
       <a  href="/es/security.html">Seguridad</a>
       <a  href="/es/docs/">Documentación</a>
-      <a class="nav-cta" href="#download">Descargar</a>
-      <button class="theme-toggle" type="button" aria-label="Cambiar tema" title="Cambiar tema">
-        <span class="theme-toggle__sun" aria-hidden="true">☀</span>
-        <span class="theme-toggle__moon" aria-hidden="true">◐</span>
-      </button>
       <a href="/features.html" hreflang="en" lang="en">English</a>
       <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a class="nav-cta" href="#download">Descargar</a>
+    </div>
+    <div class="nav-actions">
+      <button class="theme-toggle" type="button" aria-label="Cambiar tema" title="Cambiar tema">
+        <span class="theme-toggle__sun"></span>
+        <span class="theme-toggle__moon"></span>
+      </button>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
+        <span></span><span></span><span></span>
+        <span class="sr-only">Abrir navegación</span>
+      </button>
     </div>
   </nav>
 </header>
 <main id="main">
 <section class="page-hero"><div class="container">
-    <p class="eyebrow">Hub de funciones</p>
+    <p class="eyebrow">Funciones</p>
     <h1>Funciones de Cocxy</h1>
     <p>Mapa completo de capacidades de Cocxy Terminal para desarrollo con agentes.</p>
-  </div></section><section class="section"><div class="container docs-layout">
+  </div></section>
+<section class="section"><div class="container docs-layout">
   <nav class="toc" aria-label="Mapa de funciones"><strong>Mapa</strong><a href="#agent-detection">Detección de agentes</a><a href="#code-review">Revisión de código</a><a href="#github-pane">GitHub</a><a href="#markdown">Markdown</a><a href="#quicklook">Quick Look</a><a href="#gpu">Motor GPU</a><a href="#remote">Remoto</a><a href="#browser">Navegador</a><a href="#web-terminal">Terminal remota</a><a href="#plugins">Plugins</a><a href="#per-project">Config por proyecto</a><a href="#applescript">AppleScript</a><a href="#shell">Shell</a><a href="#privacy">Privacidad</a><a href="#cli">CLI</a></nav>
-    <div>
-      <div class="section-header" data-reveal="fade-up">
-        <h2>Capacidades principales</h2>
-        <p>Cada bloque conecta a una página dedicada o a una sección verificable.</p>
-      </div>
-      <div class="feature-grid" data-reveal="stagger"><article class="feature-card feature-icon--agents" id="agent-detection">
+  <div>
+    <div class="section-header" data-reveal="fade-up">
+      <h2>Capacidades principales</h2>
+      <p>Cada bloque enlaza con su página dedicada.</p>
+    </div>
+    <div class="feature-tiles feature-tiles--two" data-reveal="stagger"><article class="feature-tile feature-icon--agents" id="agent-detection">
   <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/><path d="M5 14l.9 2.6L8.5 17.5l-2.6.9L5 21l-.9-2.6-2.6-.9 2.6-.9L5 14z"/></svg>
-  <h3><a href="/es/features/agents.html">Detección multicapa de agentes</a></h3>
+  <h3><a class="tile-link" href="/es/features/agents.html">Detección multicapa de agentes</a></h3>
   <p>Cocxy detecta agentes locales mediante hooks, señales OSC, semántica de terminal, patrones y heurísticas de tiempo.</p>
-  <ul><li>11 perfiles integrados</li><li>agents.toml propio</li><li>Estado por superficie</li></ul>
+  <ul><li>11 perfiles integrados</li><li><code>agents.toml</code> propio</li><li>Estado por superficie</li></ul>
 </article>
-<article class="feature-card feature-icon--config" id="vault">
+<article class="feature-tile feature-icon--config" id="vault">
   <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v2"/></svg>
-  <h3><a href="/es/features/vault.html">Bóveda cifrada</a></h3>
+  <h3><a class="tile-link" href="/es/features/vault.html">Bóveda cifrada</a></h3>
   <p>Busca, reanuda, fija, previsualiza y exporta sesiones locales sin enviar historial de terminal a un servicio remoto.</p>
   <ul><li>Cifrado local</li><li>Búsqueda de texto</li><li>Reanudación inteligente</li></ul>
 </article>
-<article class="feature-card feature-icon--review" id="code-review">
+<article class="feature-tile feature-icon--review" id="code-review">
   <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v11H8l-4 4V4z"/><path d="M8 8h8M8 11h6"/></svg>
-  <h3><a href="/es/features/code-review.html">Revisión de código en línea</a></h3>
+  <h3><a class="tile-link" href="/es/features/code-review.html">Revisión de código en línea</a></h3>
   <p>Revisa cambios del agente junto a la terminal, comenta líneas, acepta o rechaza bloques y devuelve observaciones estructuradas.</p>
   <ul><li>Árbol de archivos y diff</li><li>Comentarios por línea</li><li>Flujo por teclado</li></ul>
 </article>
-<article class="feature-card feature-icon--markdown" id="markdown">
+<article class="feature-tile feature-icon--markdown" id="markdown">
   <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 16h4"/></svg>
-  <h3><a href="/es/features/markdown.html">Espacio Markdown</a></h3>
+  <h3><a class="tile-link" href="/es/features/markdown.html">Espacio Markdown</a></h3>
   <p>Un espacio nativo con vista previa, índice, bloques de código, diagramas, matemáticas, exportación y archivos locales.</p>
   <ul><li>Vista en vivo</li><li>Mermaid y KaTeX</li><li>Rutas de exportación</li></ul>
 </article>
-<article class="feature-card feature-icon--web" id="github-pane">
+<article class="feature-tile feature-icon--web" id="github-pane">
   <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-4 1.2-4-2-5-2.5"/><path d="M15 22v-3.4a3 3 0 0 0-.8-2.3c2.7-.3 5.6-1.3 5.6-6A4.7 4.7 0 0 0 18.5 7a4.4 4.4 0 0 0-.1-3.2s-1-.3-3.3 1.2a11.5 11.5 0 0 0-6 0C6.8 3.5 5.8 3.8 5.8 3.8A4.4 4.4 0 0 0 5.7 7a4.7 4.7 0 0 0-1.3 3.3c0 4.6 2.8 5.7 5.5 6A3 3 0 0 0 9 18.6V22"/></svg>
-  <h3><a href="/es/features/github.html">Panel de GitHub</a></h3>
+  <h3><a class="tile-link" href="/es/features/github.html">Panel de GitHub</a></h3>
   <p>Mantén pull requests, issues, checks, releases y contexto del repositorio junto a la terminal sin crear una cuenta de Cocxy.</p>
-  <ul><li>Usa gh auth</li><li>Checks y releases</li><li>Contexto local</li></ul>
+  <ul><li>Usa <code>gh auth</code></li><li>Checks y releases</li><li>Contexto local</li></ul>
 </article>
-<article class="feature-card feature-icon--browser" id="browser">
+<article class="feature-tile feature-icon--browser" id="browser">
   <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M7 7h.01M10 7h.01"/></svg>
-  <h3><a href="/es/features/browser.html">Navegador incorporado</a></h3>
+  <h3><a class="tile-link" href="/es/features/browser.html">Navegador incorporado</a></h3>
   <p>Previsualiza localhost, inspecciona páginas, mantiene perfiles aislados y coloca el navegador junto a la terminal.</p>
   <ul><li>Perfiles</li><li>Herramientas de inspección</li><li>Flujo dividido</li></ul>
 </article>
-<article class="feature-card feature-icon--ssh" id="remote">
+<article class="feature-tile feature-icon--ssh" id="remote">
   <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v9H4z"/><path d="M8 19h8M12 15v4"/><path d="M8 10h3M13 10h3"/></svg>
-  <h3><a href="/es/features/remote.html">Espacios remotos</a></h3>
+  <h3><a class="tile-link" href="/es/features/remote.html">Espacios remotos</a></h3>
   <p>SSH, proxy, relay, daemon y transferencia de archivos se tratan como acciones explícitas bajo control local.</p>
   <ul><li>Multiplexing SSH</li><li>SOCKS y CONNECT</li><li>Entrega SFTP</li></ul>
 </article>
-<article class="feature-card feature-icon--gpu" id="gpu">
+<article class="feature-tile feature-icon--gpu" id="gpu">
   <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 10h8v4H8zM2 10h2M2 14h2M20 10h2M20 14h2M8 2v4M12 2v4M16 2v4M8 18v4M12 18v4M16 18v4"/></svg>
-  <h3><a href="/es/features/gpu.html">Motor de terminal con GPU</a></h3>
+  <h3><a class="tile-link" href="/es/features/gpu.html">Motor de terminal con GPU</a></h3>
   <p>CocxyCore combina núcleo Zig, ABI C, atlas de glifos, manejo PTY y renderizado Metal para rendimiento nativo en macOS.</p>
   <ul><li>Núcleo Zig</li><li>Renderizador Metal</li><li>Semántica PTY</li></ul>
 </article>
-<article class="feature-card feature-icon--cli" id="cli">
+<article class="feature-tile feature-icon--cli" id="cli">
   <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v12H4z"/><path d="M8 10l2 2-2 2M12 14h4"/></svg>
-  <h3><a href="/es/features/cli.html">CLI complementaria</a></h3>
+  <h3><a class="tile-link" href="/es/features/cli.html">CLI complementaria</a></h3>
   <p>Automatiza ventanas, pestañas, agentes, hooks, Bóveda, navegador, Markdown, remotos, configuración, temas y diagnósticos.</p>
   <ul><li>Salida JSON</li><li>Socket local</li><li>Scripts de shell</li></ul>
 </article>
-<article class="feature-card feature-icon--shell" id="shell">
+<article class="feature-tile feature-icon--shell" id="shell">
   <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M5 12h14M5 17h9"/><path d="M4 4h16v16H4z"/></svg>
-  <h3><a href="/es/features/shell.html">Integración de shell</a></h3>
+  <h3><a class="tile-link" href="/es/features/shell.html">Integración de shell</a></h3>
   <p>Wrappers para zsh, bash y fish preservan dotfiles y añaden cwd, límites de comandos y apertura de navegador.</p>
-  <ul><li>zsh, bash, fish</li><li>cwd con OSC 7</li><li>bloques OSC 133</li></ul>
+  <ul><li>zsh, bash, fish</li><li>cwd con <code>OSC 7</code></li><li>bloques <code>OSC 133</code></li></ul>
 </article>
-<article class="feature-card feature-icon--plugin" id="plugins">
+<article class="feature-tile feature-icon--plugin" id="plugins">
   <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v6M16 3v6M7 9h10v4a5 5 0 0 1-10 0V9z"/><path d="M12 18v3"/></svg>
-  <h3><a href="/es/features/plugins.html">Sistema de plugins</a></h3>
+  <h3><a class="tile-link" href="/es/features/plugins.html">Sistema de plugins</a></h3>
   <p>Hooks locales extienden Cocxy de forma transparente, con permisos explícitos y pocas dependencias.</p>
   <ul><li>Eventos</li><li>Manifest TOML</li><li>Ejecución local</li></ul>
 </article>
-<article class="feature-card feature-icon--privacy" id="privacy">
+<article class="feature-tile feature-icon--privacy" id="privacy">
   <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-5"/></svg>
-  <h3><a href="/es/features/zero-telemetry.html">Cero telemetría</a></h3>
+  <h3><a class="tile-link" href="/es/features/zero-telemetry.html">Cero telemetría</a></h3>
   <p>Cocxy se distribuye sin SDK de analíticas, subida automática de fallos, cuentas obligatorias, rastreo o telemetría de sesiones.</p>
   <ul><li>Sin SDK de analíticas</li><li>Sin cuenta</li><li>Sin subida de sesiones</li></ul>
 </article></div>
-      <section class="section nested-section" aria-labelledby="capas-title">
-    <div class="section-header">
-      <h2 id="capas-title">Capas adicionales</h2>
-      <p>Estas capacidades completan el mapa público y enlazan con documentación o páginas dedicadas.</p>
+    <div class="section-header section-header--sub">
+      <h2>Capas adicionales</h2>
+      <p>Completan el mapa y se explican en la documentación.</p>
     </div>
-    <div class="cards-3">
-      <article class="card" id="quicklook"><h3>Quick Look</h3><p>Vista previa local y sanitizada para archivos y documentos.</p></article><article class="card" id="web-terminal"><h3>Terminal remota</h3><p>Sesiones remotas iniciadas por el usuario con adjuntar y reconectar.</p></article><article class="card" id="per-project"><h3>Configuración por proyecto</h3><p>.cocxy.toml separa ajustes del repo y perfil global.</p></article><article class="card" id="applescript"><h3>AppleScript</h3><p>Automatización de ventanas y pestañas mediante permisos del sistema.</p></article>
-    </div>
-    <div class="callout"><h2>Comandos locales</h2><pre class="code-block"><code>cocxy setup-hooks
-cocxy github status
-cocxy remote status</code><button class="copy-button" type="button">Copiar</button></pre><p>Todo queda local y explícito, con cero telemetr&iacute;a.</p></div>
-  </section>
-    </div>
-  </div></section><section class="section section-band" id="download" aria-labelledby="download-title">
+    <div class="cards-2"><article class="card" id="quicklook"><h3>Quick Look</h3><p>Vista previa local y sanitizada para archivos y documentos.</p></article><article class="card" id="web-terminal"><h3>Terminal remota</h3><p>Sesiones remotas iniciadas por el usuario con adjuntar y reconectar.</p></article><article class="card" id="per-project"><h3>Configuración por proyecto</h3><p><code>.cocxy.toml</code> separa ajustes del repo y perfil global.</p></article><article class="card" id="applescript"><h3>AppleScript</h3><p>Automatización de ventanas y pestañas mediante permisos del sistema.</p></article></div>
+    <div class="callout"><h2>Comandos locales</h2><div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>cocxy setup-hooks</span>
+<span>cocxy github status</span>
+<span>cocxy remote status</span></code></pre></div><p>Todo queda local y explícito, con cero telemetr&iacute;a.</p></div>
+  </div>
+</div></section>
+<section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
-    <div class="section-header" data-reveal="fade-up">
+    <div class="section-header section-header--center" data-reveal="fade-up">
       <p class="eyebrow">Descarga</p>
-      <h2 id="download-title">Instala Cocxy en macOS</h2>
-      <p>El sitio conserva placeholders de versión para que el release workflow los reescriba al publicar.</p>
+      <h2 id="download-title">Instala Cocxy en tu Mac</h2>
+      <p>Firmada con Developer ID y notarizada por Apple. Las actualizaciones llegan por el actualizador integrado.</p>
     </div>
     <div class="download-grid" data-reveal="stagger">
-      <article class="card">
-        <h3>DMG</h3>
-        <p>Descarga directa desde GitHub Releases.</p>
+      <article class="card download-card download-card--primary">
+        <h3>Descarga directa</h3>
+        <p>La imagen de disco firmada, desde GitHub Releases.</p>
         <a class="button button-primary" href="https://github.com/salp2403/cocxy-terminal/releases/download/v0.0.0/CocxyTerminal-0.0.0.dmg">Descargar v0.0.0</a>
       </article>
-      <article class="card">
+      <article class="card download-card">
         <h3>Homebrew</h3>
-        <p>Instalación reproducible desde el tap oficial.</p>
-        <pre class="code-block"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code><button class="copy-button" type="button">Copiar</button></pre>
+        <p>Instala y actualiza desde el tap oficial.</p>
+        <div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</span></code></pre></div>
       </article>
-      <article class="card">
+      <article class="card download-card">
         <h3>Canales</h3>
-        <p>Canal estable, validación y nocturno documentados con sus riesgos.</p>
+        <p>Estable para el día a día; validación y nocturno para probar antes.</p>
         <a class="button button-secondary" href="/es/channels.html">Ver canales</a>
       </article>
     </div>
@@ -195,118 +184,27 @@ cocxy remote status</code><button class="copy-button" type="button">Copiar</butt
 </section>
 </main>
 <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "BreadcrumbList",
-  "itemListElement": [
-    {
-      "@type": "ListItem",
-      "position": 1,
-      "name": "Inicio",
-      "item": "https://cocxy.dev/es/"
-    },
-    {
-      "@type": "ListItem",
-      "position": 2,
-      "name": "Funciones",
-      "item": "https://cocxy.dev/features.html"
-    }
-  ]
-}
+{"@context": "https://schema.org","@type": "BreadcrumbList","itemListElement": [{"@type": "ListItem","position": 1,"name": "Inicio","item": "https://cocxy.dev/es/"},{"@type": "ListItem","position": 2,"name": "Funciones","item": "https://cocxy.dev/features.html"}]}
 </script>
 <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "ItemList",
-  "name": "Funciones de Cocxy Terminal",
-  "numberOfItems": 12,
-  "itemListElement": [
-    {
-      "@type": "ListItem",
-      "position": 1,
-      "name": "Detección multicapa de agentes",
-      "url": "https://cocxy.dev/es/features/agents.html"
-    },
-    {
-      "@type": "ListItem",
-      "position": 2,
-      "name": "Bóveda cifrada",
-      "url": "https://cocxy.dev/es/features/vault.html"
-    },
-    {
-      "@type": "ListItem",
-      "position": 3,
-      "name": "Revisión de código en línea",
-      "url": "https://cocxy.dev/es/features/code-review.html"
-    },
-    {
-      "@type": "ListItem",
-      "position": 4,
-      "name": "Espacio Markdown",
-      "url": "https://cocxy.dev/es/features/markdown.html"
-    },
-    {
-      "@type": "ListItem",
-      "position": 5,
-      "name": "Panel de GitHub",
-      "url": "https://cocxy.dev/es/features/github.html"
-    },
-    {
-      "@type": "ListItem",
-      "position": 6,
-      "name": "Navegador incorporado",
-      "url": "https://cocxy.dev/es/features/browser.html"
-    },
-    {
-      "@type": "ListItem",
-      "position": 7,
-      "name": "Espacios remotos",
-      "url": "https://cocxy.dev/es/features/remote.html"
-    },
-    {
-      "@type": "ListItem",
-      "position": 8,
-      "name": "Motor de terminal con GPU",
-      "url": "https://cocxy.dev/es/features/gpu.html"
-    },
-    {
-      "@type": "ListItem",
-      "position": 9,
-      "name": "CLI complementaria",
-      "url": "https://cocxy.dev/es/features/cli.html"
-    },
-    {
-      "@type": "ListItem",
-      "position": 10,
-      "name": "Integración de shell",
-      "url": "https://cocxy.dev/es/features/shell.html"
-    },
-    {
-      "@type": "ListItem",
-      "position": 11,
-      "name": "Sistema de plugins",
-      "url": "https://cocxy.dev/es/features/plugins.html"
-    },
-    {
-      "@type": "ListItem",
-      "position": 12,
-      "name": "Cero telemetría",
-      "url": "https://cocxy.dev/es/features/zero-telemetry.html"
-    }
-  ]
-}
+{"@context": "https://schema.org","@type": "ItemList","name": "Funciones de Cocxy Terminal","numberOfItems": 12,"itemListElement": [{"@type": "ListItem","position": 1,"name": "Detección multicapa de agentes","url": "https://cocxy.dev/es/features/agents.html"},{"@type": "ListItem","position": 2,"name": "Bóveda cifrada","url": "https://cocxy.dev/es/features/vault.html"},{"@type": "ListItem","position": 3,"name": "Revisión de código en línea","url": "https://cocxy.dev/es/features/code-review.html"},{"@type": "ListItem","position": 4,"name": "Espacio Markdown","url": "https://cocxy.dev/es/features/markdown.html"},{"@type": "ListItem","position": 5,"name": "Panel de GitHub","url": "https://cocxy.dev/es/features/github.html"},{"@type": "ListItem","position": 6,"name": "Navegador incorporado","url": "https://cocxy.dev/es/features/browser.html"},{"@type": "ListItem","position": 7,"name": "Espacios remotos","url": "https://cocxy.dev/es/features/remote.html"},{"@type": "ListItem","position": 8,"name": "Motor de terminal con GPU","url": "https://cocxy.dev/es/features/gpu.html"},{"@type": "ListItem","position": 9,"name": "CLI complementaria","url": "https://cocxy.dev/es/features/cli.html"},{"@type": "ListItem","position": 10,"name": "Integración de shell","url": "https://cocxy.dev/es/features/shell.html"},{"@type": "ListItem","position": 11,"name": "Sistema de plugins","url": "https://cocxy.dev/es/features/plugins.html"},{"@type": "ListItem","position": 12,"name": "Cero telemetría","url": "https://cocxy.dev/es/features/zero-telemetry.html"}]}
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">
     <div>
-      <a class="footer-brand" href="/es/"><picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="28" height="28" alt=""></picture><span>Cocxy Terminal</span></a>
+      <a class="footer-brand" href="/es/"><img src="/images/icon-192.png" width="28" height="28" alt=""><span>Cocxy Terminal</span></a>
       <p>Terminal nativa para macOS, local primero, MIT y sin telemetría.</p>
     </div>
     <nav aria-label="Enlaces de pie">
+      <a href="/es/features.html">Funciones</a>
+      <a href="/es/features/agents.html">Agentes</a>
+      <a href="/es/docs/">Documentación</a>
       <a href="/es/privacy.html">Privacidad</a>
       <a href="/es/security.html">Seguridad</a>
-      <a href="/es/releases.html">Releases</a>
-      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT</a>
+      <a href="/es/releases.html">Versiones</a>
+      <a href="/es/channels.html">Canales</a>
+      <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">Licencia MIT</a>
     </nav>
     <p class="footer-note">Hecho por Said Arturo Lopez.</p>
   </div>

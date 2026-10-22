@@ -5,7 +5,7 @@
 ## Quick facts
 - Version: 0.0.0
 - License: MIT
-- Platform: macOS 14.0+
+- Platform: macOS 15.0+
 - Source: https://github.com/salp2403/cocxy-terminal
 - Telemetry: zero
 

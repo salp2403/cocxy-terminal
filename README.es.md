@@ -1,6 +1,6 @@
 # Cocxy Terminal
 
-<!-- cocxy-readme-source-sha256: dabc2f0c287fd983b8e2a77572d22a2ed60e08757408e6738585220ea11df4ce -->
+<!-- cocxy-readme-source-sha256: eb4d652667db96ad6c3a9e8665840389ea85864371f72b0b28d5d217e46d32cb -->
 <!-- cocxy-readme-locale: es -->
 
 [English](README.md) | [العربية](README.ar.md) | [Bosanski](README.bs.md) | [Dansk](README.da.md) | [Deutsch](README.de.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [日本語](README.ja.md) | [ភាសាខ្មែរ](README.km.md) | [한국어](README.ko.md) | [Norsk](README.no.md) | [Polski](README.pl.md) | [Português do Brasil](README.pt-BR.md) | [Русский](README.ru.md) | [ไทย](README.th.md) | [Türkçe](README.tr.md) | [Українська](README.uk.md) | [Tiếng Việt](README.vi.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md)
@@ -37,7 +37,7 @@ Cocxy no tiene analytics SDK, envío automático de diagnósticos ni backend par
 
 ## Build desde código fuente
 
-Requiere macOS 14+, Xcode 16+, Swift 5.10+ y Zig 0.15+. Ejecuta `swift build`, luego `swift test`, o genera la app local con `./scripts/build-app.sh release`.
+Requiere macOS 15+, Xcode 16+, Swift 5.10+ y Zig 0.15+. Ejecuta `swift build`, luego `swift test`, o genera la app local con `./scripts/build-app.sh release`.
 
 
 Technical terms intentionally preserved: terminal, agent, MCP, CocxyCore, Homebrew, Swift, Metal, AppKit, SwiftUI, Zig, macOS, GitHub, SSH, SFTP, tmux, screen, PTY, GPU, CLI, Markdown, Jupyter, WebKit, Foundation Models.

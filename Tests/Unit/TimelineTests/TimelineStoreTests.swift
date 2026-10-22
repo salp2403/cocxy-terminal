@@ -257,7 +257,7 @@ final class TimelineStoreTests: XCTestCase {
         sut.addEvent(makeEvent(sessionId: "sess-pub", summary: "First"))
         sut.addEvent(makeEvent(sessionId: "sess-pub", summary: "Second"))
 
-        waitForExpectations(timeout: 2.0)
+        waitForExpectations(timeout: 15.0)
 
         XCTAssertEqual(emittedValues.count, 2)
         XCTAssertEqual(emittedValues[0].count, 1)

@@ -41,6 +41,12 @@ final class MockDeployExecutor: DaemonDeployExecuting {
 @Suite("DaemonDeployer")
 struct DaemonDeployerTests {
 
+    @Test("Bundled daemon version matches the session transport protocol")
+    @MainActor
+    func bundledVersion() {
+        #expect(DaemonDeployer.bundledVersion == "1.2.0")
+    }
+
     // MARK: - Platform Detection
 
     @Test("Parse Linux x86_64 platform")

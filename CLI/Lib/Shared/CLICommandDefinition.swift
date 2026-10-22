@@ -3,13 +3,7 @@
 
 import Foundation
 
-// MARK: - CLI Command Definition
-
 /// The set of commands supported by the `cocxy` CLI companion.
-///
-/// Each command knows how to describe itself for --help output.
-/// Organized by category: tab, split, dashboard, timeline, search,
-/// config, theme, and system commands.
 public enum CLICommand: String, CaseIterable {
 
     // MARK: - Original commands (v1)
@@ -86,6 +80,8 @@ public enum CLICommand: String, CaseIterable {
 
     case send
     case sendKey = "send-key"
+    case handoffExport = "handoff-export"
+    case handoffImport = "handoff-import"
     case classify
     case correct
     case identify
@@ -220,6 +216,19 @@ public enum CLICommand: String, CaseIterable {
     case agentTeamList = "agent-team-list"
     case agentTeamStop = "agent-team-stop"
 
+    case taskRun = "task-run"
+    case taskRunList = "task-run-list"
+    case taskRunPromote = "task-run-promote"
+    case taskEnqueue = "task-enqueue"
+    case taskList = "task-list"
+    case taskCancel = "task-cancel"
+    case taskRerun = "task-rerun"
+    case taskRemove = "task-remove"
+    case projectOpen = "project-open", projectList = "project-list"
+    case projectPin = "project-pin", projectUnpin = "project-unpin"
+    case projectAlias = "project-alias", projectForget = "project-forget"
+    case projectClone = "project-clone", projectTasks = "project-tasks"
+
     // MARK: - Window Management (v3)
 
     case windowNew = "window-new"
@@ -313,20 +322,13 @@ public enum CLICommand: String, CaseIterable {
     case worktreePrune = "worktree-prune"
     case worktreeCleanupMerged = "worktree-cleanup-merged"
 
-    // MARK: - GitHub pane (v0.1.84)
-
     case githubStatus = "github-status"
     case githubPRs = "github-prs"
     case githubIssues = "github-issues"
     case githubOpen = "github-open"
     case githubRefresh = "github-refresh"
 
-    // MARK: - GitHub PR merge (v0.1.86)
-
     case githubPRMerge = "github-pr-merge"
-
-    // MARK: - Git Assistant
-
     case gitAssistantCommitMessage = "git-assistant-commit-message"
     case gitAssistantPRDraft = "git-assistant-pr-draft"
     case gitAssistantReleaseNotes = "git-assistant-release-notes"
@@ -404,8 +406,10 @@ public enum CLICommand: String, CaseIterable {
         case .themeSet: return "Set the active theme"
 
         // System
-        case .send: return "Send text to the active terminal (or read it from stdin)"
-        case .sendKey: return "Send a keystroke to the active terminal"
+        case .send: return "Send text to the active or specified terminal tab"
+        case .sendKey: return "Send a keystroke to the active or specified terminal tab"
+        case .handoffExport: return "Export bounded context from a terminal tab"
+        case .handoffImport: return "Open an agent tab with a task handoff artifact"
         case .classify: return "Classify terminal input locally as JSON"
         case .correct: return "Suggest local fixes for a failed shell command as JSON"
         case .identify: return "Describe this Cocxy CLI and owning app as JSON"
@@ -529,6 +533,22 @@ public enum CLICommand: String, CaseIterable {
         case .agentTeamLaunch: return "Launch a local agent team in native panes"
         case .agentTeamList: return "List active local agent teams"
         case .agentTeamStop: return "Stop a local agent team and close its panes"
+        case .taskRun: return "Fan out one prompt across isolated worktrees and local agent processes"
+        case .taskRunList: return "List parallel task runs and candidate states"
+        case .taskRunPromote: return "Promote one task candidate and discard the other worktree directories"
+        case .taskEnqueue: return "Schedule a persistent agent pipeline"
+        case .taskList: return "List persistent scheduled tasks"
+        case .taskCancel: return "Cancel a scheduled or running task"
+        case .taskRerun: return "Re-enqueue a completed or failed task"
+        case .taskRemove: return "Remove a terminal task from the queue"
+        case .projectOpen: return "Open or focus a local project"
+        case .projectList: return "List registered local projects"
+        case .projectPin: return "Pin a registered project"
+        case .projectUnpin: return "Unpin a registered project"
+        case .projectAlias: return "Set a project display alias"
+        case .projectForget: return "Forget project registry metadata"
+        case .projectClone: return "Clone and open a Git project"
+        case .projectTasks: return "List tasks associated with projects"
 
         // Window Management
         case .windowNew: return "Create a new window"
@@ -616,10 +636,7 @@ public enum CLICommand: String, CaseIterable {
         case .githubOpen: return "Toggle the inline GitHub pane overlay on the focused window"
         case .githubRefresh: return "Refresh the GitHub pane data on the focused window"
 
-        // GitHub PR merge v0.1.86
         case .githubPRMerge: return "Merge a pull request after one-time in-app approval; branch deletion is opt-in"
-
-        // Git Assistant
         case .gitAssistantCommitMessage: return "Generate a commit message from the active tab's staged diff"
         case .gitAssistantPRDraft: return "Generate a pull request title and body from the active tab's branch diff"
         case .gitAssistantReleaseNotes: return "Generate release notes from the active tab's commit range"
@@ -691,8 +708,10 @@ public enum CLICommand: String, CaseIterable {
         case .themeSet: return "cocxy theme set <name>"
 
         // System
-        case .send: return "cocxy send <text>|--stdin"
-        case .sendKey: return "cocxy send-key <key>"
+        case .send: return "cocxy send <text>|--stdin [--tab <id>] [--orchestration-session <token>]"
+        case .sendKey: return "cocxy send-key <key> [--tab <id>] [--orchestration-session <token>]"
+        case .handoffExport: return "cocxy handoff-export --tab <id> [--blocks <1...16>]"
+        case .handoffImport: return "cocxy handoff-import --agent <provider> [--stdin|--file <path>]"
         case .classify: return "cocxy classify <input>"
         case .correct: return "cocxy correct <command>"
         case .identify: return "cocxy identify"
@@ -816,6 +835,22 @@ public enum CLICommand: String, CaseIterable {
         case .agentTeamLaunch: return "cocxy agent-teams (--teammates <name,name> | --template <id>) [--provider <provider>]"
         case .agentTeamList: return "cocxy agent-teams list"
         case .agentTeamStop: return "cocxy agent-teams stop <team-id>"
+        case .taskRun: return "cocxy task-run --prompt <text> --agents <provider,...> [--count <2...8>] [--base-ref <ref>]"
+        case .taskRunList: return "cocxy task-run-list [--project <path>]"
+        case .taskRunPromote: return "cocxy task-run promote <run-id> --candidate <candidate-id>"
+        case .taskEnqueue: return "cocxy task-enqueue --id <id> (--pipeline <path> | --prompt <text>) [--provider <provider>] [--worktree <path>] [--project <path>] [--cron <expression> | --event <event>]"
+        case .taskList: return "cocxy task-list [--limit <1...100>] [--offset <n>]"
+        case .taskCancel: return "cocxy task-cancel <task-id>"
+        case .taskRerun: return "cocxy task-rerun <task-id>"
+        case .taskRemove: return "cocxy task-remove <task-id>"
+        case .projectOpen: return "cocxy project-open <path>"
+        case .projectList: return "cocxy project-list [--json]"
+        case .projectPin: return "cocxy project-pin <path>"
+        case .projectUnpin: return "cocxy project-unpin <path>"
+        case .projectAlias: return "cocxy project-alias <path> <name>"
+        case .projectForget: return "cocxy project-forget <path>"
+        case .projectClone: return "cocxy project-clone <url> --into <directory>"
+        case .projectTasks: return "cocxy project-tasks [--project <path>] [--json]"
 
         // Window Management
         case .windowNew: return "cocxy window new [--engine system|in-process|daemon]"
@@ -903,10 +938,7 @@ public enum CLICommand: String, CaseIterable {
         case .githubOpen: return "cocxy github open"
         case .githubRefresh: return "cocxy github refresh"
 
-        // GitHub PR merge v0.1.86
         case .githubPRMerge: return "cocxy github pr-merge --squash|--merge|--rebase [--pr <n>] [--delete-branch|--no-delete-branch] [--subject <text>] [--body <text>]"
-
-        // Git Assistant
         case .gitAssistantCommitMessage: return "cocxy git-assistant commit-message"
         case .gitAssistantPRDraft: return "cocxy git-assistant pr-draft [--base <branch>] [--head <branch>]"
         case .gitAssistantReleaseNotes: return "cocxy git-assistant release-notes [--base <ref>] [--head <ref>]"

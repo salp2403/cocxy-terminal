@@ -1,0 +1,392 @@
+{
+  "og/og-404.jpg": {
+    "title": "Page not found - Cocxy Terminal",
+    "description": "The page you are looking for does not exist on cocxy.dev.",
+    "sha256": "5c4f55a045a565752c1b25d0d052db93d305db0297c5c4e7763db7ae52381eb4"
+  },
+  "og/og-agents.jpg": {
+    "title": "Agents - Cocxy Terminal",
+    "description": "The supported agent profiles and detection layers.",
+    "sha256": "82fa9ef689d2a9f38af4351f35c6821f4d0c2c307ff5519cfeccaf42f55b41fa"
+  },
+  "og/og-architecture.jpg": {
+    "title": "Architecture - Cocxy Terminal",
+    "description": "Swift, AppKit, SwiftUI, Metal, and CocxyCore form a native macOS stack.",
+    "sha256": "16fee52bfca6bce7858444c96a85a132c2a336942c854f80308ae5114d8d8ee1"
+  },
+  "og/og-channels.jpg": {
+    "title": "Channels - Cocxy Terminal",
+    "description": "Stable, preview, and nightly channels with explicit risk tradeoffs.",
+    "sha256": "0fa474e1656684d9ef3b2666fe48d76c79a55c96f8563e37791a234ffb6135fd"
+  },
+  "og/og-docs-agents-setup.jpg": {
+    "title": "Agents Setup - Cocxy Terminal",
+    "description": "Install hooks, define custom profiles, and verify local detection.",
+    "sha256": "d5eeb02b74556b74619212d5006a6a3673e3becff5400efe350b7ae6303dff49"
+  },
+  "og/og-docs-cli-reference.jpg": {
+    "title": "CLI Reference - Cocxy Terminal",
+    "description": "Script Cocxy through the bundled command-line companion.",
+    "sha256": "fabe23c2e173b28b6583f5e6fa2187c30a174abaa10c03fa8cd230d561341802"
+  },
+  "og/og-docs-configuration.jpg": {
+    "title": "Configuration - Cocxy Terminal",
+    "description": "Use .cocxy.toml for projects, themes, shell behavior, and privacy controls.",
+    "sha256": "5502da1146aaaac20abf834a6c9f4fcf3f3aa147480c4a4ded7ba87f2ad92555"
+  },
+  "og/og-docs-first-run.jpg": {
+    "title": "First Run - Cocxy Terminal",
+    "description": "Open Cocxy, connect shell integration, and run the first local agent session.",
+    "sha256": "f4e6e9bf2de3ccb201b925d86b028cef637f26f6d8c5e5294127e164a12c7fbd"
+  },
+  "og/og-docs-install.jpg": {
+    "title": "Install Cocxy - Cocxy Terminal",
+    "description": "Download the signed DMG or install with Homebrew.",
+    "sha256": "e761e021ac34b81688eeaba9d05aa702a7d306142caa1b0799d567e5c2ef8700"
+  },
+  "og/og-docs-markdown-guide.jpg": {
+    "title": "Markdown Guide - Cocxy Terminal",
+    "description": "Write, preview, export, and keep documentation beside terminal work.",
+    "sha256": "aaace47509dc4ee0a7310b0be5ffadf35c1dad25660faa4c92e6220e89e552d1"
+  },
+  "og/og-docs-plugins-dev.jpg": {
+    "title": "Plugin Development - Cocxy Terminal",
+    "description": "Build local plugins with a manifest, event hooks, and explicit permissions.",
+    "sha256": "facf01c939a2baf646be362710c168c7a172d9632378611d912424583371cd77"
+  },
+  "og/og-docs-release-channels.jpg": {
+    "title": "Release Channels - Cocxy Terminal",
+    "description": "Understand stable, validation, and nightly update channels before switching.",
+    "sha256": "c64c1f692d9c500e956770a4373602ae9b2d7f645cb8890b3d43726cfb1e721c"
+  },
+  "og/og-docs-shortcuts.jpg": {
+    "title": "Shortcuts - Cocxy Terminal",
+    "description": "Keyboard paths for panes, review, Vault, command palette, browser, and markdown.",
+    "sha256": "bab01c9a7bddd4abca7c4d613bd89d194d1d0fc12a323fd0a872ff580625cda0"
+  },
+  "og/og-docs-ssh-remote.jpg": {
+    "title": "SSH and Remote - Cocxy Terminal",
+    "description": "Use SSH workspaces, proxy paths, daemon sessions, and SFTP handoff deliberately.",
+    "sha256": "bf16016210b5fab4914343f117638c17942ae537c48934e416546dc5d99a8fd5"
+  },
+  "og/og-docs-troubleshooting.jpg": {
+    "title": "Troubleshooting - Cocxy Terminal",
+    "description": "Diagnose shell setup, agent detection, updates, signing, remotes, and browser panels.",
+    "sha256": "c9d6b478769d953a859443fc295928353be1942f64dfaab9060ad938d2ec5be9"
+  },
+  "og/og-docs.jpg": {
+    "title": "Documentation - Cocxy Terminal",
+    "description": "Documentation for installing, configuring, and extending Cocxy Terminal.",
+    "sha256": "a4230ba1e10237612c5712101490c1957fb357f3e20ec12a32173a4081e6a520"
+  },
+  "og/og-es-404.jpg": {
+    "title": "Página no encontrada - Cocxy Terminal",
+    "description": "La página que buscas no existe en cocxy.dev.",
+    "sha256": "aff52795d40360d0a38790468a644545d34962e7e242db224d374460206a05fc"
+  },
+  "og/og-es-agents.jpg": {
+    "title": "Agentes - Cocxy Terminal",
+    "description": "Perfiles de agentes soportados y capas de detección.",
+    "sha256": "7ac066ba7e7daecd11c7796b31cec0b06c7c24a9651f5473de21af71d66b30a8"
+  },
+  "og/og-es-architecture.jpg": {
+    "title": "Arquitectura - Cocxy Terminal",
+    "description": "Swift, AppKit, SwiftUI, Metal y CocxyCore forman una pila nativa para macOS.",
+    "sha256": "da4c454fe7f73748aec32d125061c8aa6c19bce63d70fba4f0ea5b2f72668c25"
+  },
+  "og/og-es-channels.jpg": {
+    "title": "Canales - Cocxy Terminal",
+    "description": "Canales estable, validación y nocturno con riesgos claros.",
+    "sha256": "5584362c1bcee458f2add1acea41f509c48af1433ecfa665ebbeffdd08530f35"
+  },
+  "og/og-es-docs-agents-setup.jpg": {
+    "title": "Configurar agentes - Cocxy Terminal",
+    "description": "Instala hooks, define perfiles propios y verifica la detección local.",
+    "sha256": "d6c353a39d4de88e54260e2fe95223f587edccac609b6df4808cbd849a886f5c"
+  },
+  "og/og-es-docs-cli-reference.jpg": {
+    "title": "Referencia CLI - Cocxy Terminal",
+    "description": "Automatiza Cocxy con la CLI incluida.",
+    "sha256": "400734edabba5361ab7ff31584699efa7ca442f1ac6802b67ec037a097d2193e"
+  },
+  "og/og-es-docs-configuration.jpg": {
+    "title": "Configuración - Cocxy Terminal",
+    "description": "Usa .cocxy.toml para proyectos, temas, shell y controles de privacidad.",
+    "sha256": "7cf5874e25dfc44709f0b5c9a3a05979a4e09b72c85797109acbeb650e95b78f"
+  },
+  "og/og-es-docs-first-run.jpg": {
+    "title": "Primer arranque - Cocxy Terminal",
+    "description": "Abre Cocxy, conecta la integración de shell y ejecuta la primera sesión local.",
+    "sha256": "04aadabf86f042a03544fd8cfe08439d3397713f6a24674d6ce035d5608e7f75"
+  },
+  "og/og-es-docs-install.jpg": {
+    "title": "Instalar Cocxy - Cocxy Terminal",
+    "description": "Descarga el DMG firmado o instala con Homebrew.",
+    "sha256": "353f30d000290f60699db2a0744d1aa1e6a4f8f50978032f97b8b68e02242974"
+  },
+  "og/og-es-docs-markdown-guide.jpg": {
+    "title": "Guía Markdown - Cocxy Terminal",
+    "description": "Escribe, previsualiza, exporta y mantén documentación junto a la terminal.",
+    "sha256": "632dd165ff6822c1ffa7ba76f26af03b2b7dd5409383cfe7e0731b98fb4f747b"
+  },
+  "og/og-es-docs-plugins-dev.jpg": {
+    "title": "Desarrollo de plugins - Cocxy Terminal",
+    "description": "Crea plugins locales con manifest, hooks y permisos explícitos.",
+    "sha256": "4641cd60ea51e4a841c554b1e05df9c1dd9a299028b6b541ebf04e7a58f76ed7"
+  },
+  "og/og-es-docs-release-channels.jpg": {
+    "title": "Canales de release - Cocxy Terminal",
+    "description": "Entiende los canales estable, validación y nocturno antes de cambiar.",
+    "sha256": "954a6850b6e78d91b1d567be9696dd5d0516571dc0cb358e29378579d86c8a19"
+  },
+  "og/og-es-docs-shortcuts.jpg": {
+    "title": "Atajos - Cocxy Terminal",
+    "description": "Atajos para paneles, revisión, Bóveda, paleta, navegador y Markdown.",
+    "sha256": "4fa21c5f41facdf67c979ab8082221bf14a8453170549eeaf507392b6203884b"
+  },
+  "og/og-es-docs-ssh-remote.jpg": {
+    "title": "SSH y remoto - Cocxy Terminal",
+    "description": "Usa espacios SSH, proxies, daemon y SFTP de forma explícita.",
+    "sha256": "f64723e004c1d4ea1f4527b6859cb0e0d18ab6f3d743ab270106ac8fcf0c7f88"
+  },
+  "og/og-es-docs-troubleshooting.jpg": {
+    "title": "Solución de problemas - Cocxy Terminal",
+    "description": "Diagnostica shell, detección, updates, firma, remotos y navegador.",
+    "sha256": "c0f62c7080ca34161193e2864de0f063231b76fadc2aaa59ff7a9a0f0824e070"
+  },
+  "og/og-es-docs.jpg": {
+    "title": "Documentación - Cocxy Terminal",
+    "description": "Documentación para instalar, configurar y extender Cocxy Terminal.",
+    "sha256": "0f6f022aae8712e3ad586c45dad87cc5e2b2d5d1f9cc4306f330586c84bc253e"
+  },
+  "og/og-es-faq.jpg": {
+    "title": "Preguntas frecuentes - Cocxy Terminal",
+    "description": "Respuestas sobre instalación, privacidad, agentes, updates, remotos y código fuente.",
+    "sha256": "07aa94456ad05dbec10f51688a295ae3b57d2f028eda8f473de8308c49faf3c6"
+  },
+  "og/og-es-features-agents.jpg": {
+    "title": "Detección multicapa de agentes - Cocxy Terminal",
+    "description": "Cocxy detecta agentes locales mediante hooks, señales OSC, semántica de terminal, patrones y heurísticas de tiempo.",
+    "sha256": "56cf09b50fabaad30ef69d59246d229a3b894c51469ddd73fec8fa26835b3f76"
+  },
+  "og/og-es-features-browser.jpg": {
+    "title": "Navegador incorporado - Cocxy Terminal",
+    "description": "Previsualiza localhost, inspecciona páginas, mantiene perfiles aislados y coloca el navegador junto a la terminal.",
+    "sha256": "215ea9fddc3dfeedf6185a947121a5d089e96654810c3b2609034e1cbe45e436"
+  },
+  "og/og-es-features-cli.jpg": {
+    "title": "CLI complementaria - Cocxy Terminal",
+    "description": "Automatiza ventanas, pestañas, agentes, hooks, Bóveda, navegador, Markdown, remotos, configuración, temas y diagnósticos.",
+    "sha256": "0ce29b98955135c81a702a718ef2e8f9d99708422dd75f9746a221882ae653a2"
+  },
+  "og/og-es-features-code-review.jpg": {
+    "title": "Revisión de código en línea - Cocxy Terminal",
+    "description": "Revisa cambios del agente junto a la terminal, comenta líneas, acepta o rechaza bloques y devuelve observaciones estructuradas.",
+    "sha256": "4d46cc1d5e5ff16d46d4913aab008118ffea863560b819c96d755d1cb27317d8"
+  },
+  "og/og-es-features-github.jpg": {
+    "title": "Panel de GitHub - Cocxy Terminal",
+    "description": "Mantén pull requests, issues, checks, releases y contexto del repositorio junto a la terminal sin crear una cuenta de Cocxy.",
+    "sha256": "745c2645f192d9668be466e0e099b7274ff2797b3897a29415afd0eac94554ce"
+  },
+  "og/og-es-features-gpu.jpg": {
+    "title": "Motor de terminal con GPU - Cocxy Terminal",
+    "description": "CocxyCore combina núcleo Zig, ABI C, atlas de glifos, manejo PTY y renderizado Metal para rendimiento nativo en macOS.",
+    "sha256": "28d83254177c11c307c752b0a90bb0b822acdd5e21c38cfd7461d29206cb6957"
+  },
+  "og/og-es-features-markdown.jpg": {
+    "title": "Espacio Markdown - Cocxy Terminal",
+    "description": "Un espacio nativo con vista previa, índice, bloques de código, diagramas, matemáticas, exportación y archivos locales.",
+    "sha256": "206ddbd2ee7590f8bb28b8828b0c8fe3e3837f47f26a70f696f240bdcb6f3042"
+  },
+  "og/og-es-features-plugins.jpg": {
+    "title": "Sistema de plugins - Cocxy Terminal",
+    "description": "Hooks locales extienden Cocxy de forma transparente, con permisos explícitos y pocas dependencias.",
+    "sha256": "cb06e70608eb379cfe7ca3bcad1700a65b549b6dea9d28f462744ef717a0d9a8"
+  },
+  "og/og-es-features-remote.jpg": {
+    "title": "Espacios remotos - Cocxy Terminal",
+    "description": "SSH, proxy, relay, daemon y transferencia de archivos se tratan como acciones explícitas bajo control local.",
+    "sha256": "c8da4aa094e707141a39c12141e12b710e3425b45217a7d4ac814e3cb79af427"
+  },
+  "og/og-es-features-shell.jpg": {
+    "title": "Integración de shell - Cocxy Terminal",
+    "description": "Wrappers para zsh, bash y fish preservan dotfiles y añaden cwd, límites de comandos y apertura de navegador.",
+    "sha256": "2312178e4d9b03474c8f7415c421f51ca1057469b3b45cda587cc49a0da112fe"
+  },
+  "og/og-es-features-vault.jpg": {
+    "title": "Bóveda cifrada - Cocxy Terminal",
+    "description": "Busca, reanuda, fija, previsualiza y exporta sesiones locales sin enviar historial de terminal a un servicio remoto.",
+    "sha256": "4a5c1e9e60df91ad334456c83372e9ae9184ca48f2753cc1eaede881e7d594c2"
+  },
+  "og/og-es-features-zero-telemetry.jpg": {
+    "title": "Cero telemetría - Cocxy Terminal",
+    "description": "Cocxy se distribuye sin SDK de analíticas, subida automática de fallos, cuentas obligatorias, rastreo o telemetría de sesiones.",
+    "sha256": "6196a1c9f140f98a73d612e23d14f1ccfee5450da4e5b87559300a2b1cf008a2"
+  },
+  "og/og-es-features.jpg": {
+    "title": "Todas las funciones - Cocxy Terminal",
+    "description": "Mapa completo de capacidades de Cocxy Terminal para desarrollo con agentes.",
+    "sha256": "565774085375a82f28e355cb8fd3244a1d0286fd5b9718010d30a10f0c6c542b"
+  },
+  "og/og-es-getting-started.jpg": {
+    "title": "Primer arranque - Cocxy Terminal",
+    "description": "Esta guía se movió al hub de documentación.",
+    "sha256": "04a04137de7799d3baff2d896e5a3d7e6854a0bd3fd781ff94650e5b614a1969"
+  },
+  "og/og-es-index.jpg": {
+    "title": "La terminal nativa de macOS para agentes de IA - Cocxy Terminal",
+    "description": "Cocxy es una terminal nativa para macOS que sigue a tus agentes de IA en tiempo real, con revisión de código, proyectos, espejo móvil cifrado y cero telemetría.",
+    "sha256": "bb99cf8312e6308d04b5adfbbeeb1ff37b4f6c2de9ee19a0eae93319510f45ce"
+  },
+  "og/og-es-press.jpg": {
+    "title": "Prensa - Cocxy Terminal",
+    "description": "Datos de marca, descripciones, capturas, colores y contacto.",
+    "sha256": "6840858deac55c16f3e60754a61f80bceefdfecdb46768eb40695ca3d24679ba"
+  },
+  "og/og-es-privacy.jpg": {
+    "title": "Privacidad - Cocxy Terminal",
+    "description": "Cero telemetría es un detalle verificable de implementación, no una promesa de marketing.",
+    "sha256": "f923e0d2e412fdd391d38781180eff864a833295ea0a44c9906c2b1f1a17d2b9"
+  },
+  "og/og-es-releases.jpg": {
+    "title": "Versiones - Cocxy Terminal",
+    "description": "Historial de versiones y cambios de Cocxy Terminal.",
+    "sha256": "1a35f98305b9cc99f96c7c1d2c597826636f9c99a97750135e3fbda69be779b7"
+  },
+  "og/og-es-roadmap.jpg": {
+    "title": "Ruta pública - Cocxy Terminal",
+    "description": "Dirección pública sin exponer planificación privada.",
+    "sha256": "9e8946c50eb52fd0d78947c1a63d5e8d30191945898112ce9fbaaa9759856f8b"
+  },
+  "og/og-es-security.jpg": {
+    "title": "Seguridad - Cocxy Terminal",
+    "description": "Secretos locales, updates firmados, almacenes cifrados, ejecución reforzada y red explícita.",
+    "sha256": "0d107ff95de767bb9c11b6d599a5bb321c30e13b1149b56a9133b1a43d6f4693"
+  },
+  "og/og-es-sponsors.jpg": {
+    "title": "Patrocinios - Cocxy Terminal",
+    "description": "Apoya el desarrollo MIT sin crear un nivel de pago.",
+    "sha256": "3fdba6464360e5561a7a0aeefbcdd717cbee77b64ca4b05c64e21f994db2cb8d"
+  },
+  "og/og-es-why-cocxy.jpg": {
+    "title": "Por qué Cocxy - Cocxy Terminal",
+    "description": "Una terminal diseñada alrededor de flujos locales con agentes en macOS.",
+    "sha256": "f272bd6bc82980b6741a48ff19f6f712a1c74da6bda19ce87c8650d1d8212ca7"
+  },
+  "og/og-faq.jpg": {
+    "title": "FAQ - Cocxy Terminal",
+    "description": "Answers about installation, privacy, agents, updates, remotes, and source code.",
+    "sha256": "ec08875412e547c18c032023f1d066100800db2ebf049cedf1200e935fc13077"
+  },
+  "og/og-features-agents.jpg": {
+    "title": "Multi-Layer Agent Detection - Cocxy Terminal",
+    "description": "Cocxy detects local coding agents through hooks, OSC signals, terminal semantics, pattern matching, and timing heuristics.",
+    "sha256": "5b5ab7d5d399ffb2b6efb6e26e346b71d7e4f5276beaea1f5139a4393f2b9f78"
+  },
+  "og/og-features-browser.jpg": {
+    "title": "Built-in Browser - Cocxy Terminal",
+    "description": "Preview localhost, inspect pages, keep profiles isolated, and place the browser beside terminal panes.",
+    "sha256": "d5da7634b4161491d1105cd6c666e0173ed6ff6bad1e6606d9e34ba5128a203e"
+  },
+  "og/og-features-cli.jpg": {
+    "title": "CLI Companion - Cocxy Terminal",
+    "description": "Script windows, tabs, agents, hooks, Vault, browser, markdown, remotes, configuration, themes, and diagnostics.",
+    "sha256": "9eda7f0e40fad2869c472e137f4b4ce52480995939589ba23f7b90f0ee3ed7c0"
+  },
+  "og/og-features-code-review.jpg": {
+    "title": "Inline Code Review - Cocxy Terminal",
+    "description": "Review agent changes beside the terminal, comment on lines, accept or reject hunks, and return structured feedback to the session.",
+    "sha256": "899f4a5f1e91ab2cb006f7b37a66d0e543d277ec2db5bedca17b4649f188915a"
+  },
+  "og/og-features-github.jpg": {
+    "title": "GitHub Pane - Cocxy Terminal",
+    "description": "Keep pull requests, issues, checks, release pages, and repository context next to the terminal without adding a Cocxy account.",
+    "sha256": "d6089b198132baa6be1cc2f0983c1260c1a43f6ae3b9bf9616fba1f5c15e1bf8"
+  },
+  "og/og-features-gpu.jpg": {
+    "title": "GPU Terminal Engine - Cocxy Terminal",
+    "description": "CocxyCore combines a Zig terminal core, C ABI, glyph atlas hardening, PTY handling, and Metal rendering for native macOS performance.",
+    "sha256": "819d22a500a85d671e4f9cc4c4731026881b00bd90443cd217a17c0f6a673639"
+  },
+  "og/og-features-markdown.jpg": {
+    "title": "Markdown Workspace - Cocxy Terminal",
+    "description": "A native writing surface with preview, outline, code blocks, diagrams, math, exports, and local file workflows.",
+    "sha256": "58aba77658f438286cf89e480cdbe4a93a34c7d2168fc106ef3fccf43718c15f"
+  },
+  "og/og-features-plugins.jpg": {
+    "title": "Plugin System - Cocxy Terminal",
+    "description": "Local plugin hooks extend Cocxy while staying transparent, permissioned, and dependency-light.",
+    "sha256": "e8905e8f11656e7343ec63cde0cdd55259531a1067fce20c25daa366e3c2df91"
+  },
+  "og/og-features-remote.jpg": {
+    "title": "Remote Workspaces - Cocxy Terminal",
+    "description": "SSH, proxy, relay, daemon, and file-transfer paths are designed as explicit user actions with local control.",
+    "sha256": "95e34d7f48320acb7270eb4335a25b087f0050b5d048a19adf69e1174adc1c6f"
+  },
+  "og/og-features-shell.jpg": {
+    "title": "Shell Integration - Cocxy Terminal",
+    "description": "zsh, bash, and fish wrappers preserve user dotfiles while adding cwd, command-boundary, and browser-open signals.",
+    "sha256": "b7323a8abd1ba66687cc263e3b0b074c16cfd3be54d70902ca32dd54e41908b8"
+  },
+  "og/og-features-vault.jpg": {
+    "title": "Encrypted Vault - Cocxy Terminal",
+    "description": "Search, resume, pin, preview, and export local agent sessions without sending terminal history to a remote service.",
+    "sha256": "6332c8608c47137ea016bb42ad9b878bb7f79213e5bb81dcd7906743865a17b4"
+  },
+  "og/og-features-zero-telemetry.jpg": {
+    "title": "Zero Telemetry - Cocxy Terminal",
+    "description": "Cocxy ships without analytics SDKs, automatic crash upload, required accounts, visitor tracking, or session telemetry.",
+    "sha256": "9ae184d7deb5559741ea992eccb4963bc4bae8bd064e5391c48068cbbc412843"
+  },
+  "og/og-features.jpg": {
+    "title": "All Features - Cocxy Terminal",
+    "description": "A complete map of Cocxy Terminal capabilities for agent-driven development.",
+    "sha256": "b6a4fd482b579f68d6017eab78ce65a17d8f6b05cf7d54ccda11a34ebb8e75c8"
+  },
+  "og/og-getting-started.jpg": {
+    "title": "First Run - Cocxy Terminal",
+    "description": "This guide moved into the documentation hub.",
+    "sha256": "681fe4206b6722d0dd2d06e4abc63cb94400591256ecf122fe4350582448a75d"
+  },
+  "og/og-index.jpg": {
+    "title": "The native macOS terminal for AI coding agents - Cocxy Terminal",
+    "description": "Cocxy is a native macOS terminal that follows your AI coding agents in real time, with code review, projects, an encrypted phone mirror, and zero telemetry.",
+    "sha256": "e8f7a6f2052295119386ffe820da2d1ba63f8d39323f5e6755e1a05592b6e76c"
+  },
+  "og/og-press.jpg": {
+    "title": "Press - Cocxy Terminal",
+    "description": "Brand facts, concise descriptions, screenshots, colors, and contact details.",
+    "sha256": "ed8ff23875a1b1a0cfefae259d9371e333ca27359ac597477e550a8716df771a"
+  },
+  "og/og-privacy.jpg": {
+    "title": "Privacy - Cocxy Terminal",
+    "description": "Zero telemetry is a verifiable implementation detail, not a marketing promise.",
+    "sha256": "dcf615cbf245f1ae8de703161ab30926365c93c4c313d9f7f88e8a3458575ddc"
+  },
+  "og/og-releases.jpg": {
+    "title": "Releases - Cocxy Terminal",
+    "description": "Release history and changelog for Cocxy Terminal.",
+    "sha256": "ddc222fa708a14cad68ccd9a131132fb376dc06bf7e771fe19ddd2a17680ed7a"
+  },
+  "og/og-roadmap.jpg": {
+    "title": "Roadmap - Cocxy Terminal",
+    "description": "Public direction without exposing private planning details.",
+    "sha256": "483e4e6e1263fc1692b4a34d05e815613ae3d7818ab307e8d37ab073b264bc02"
+  },
+  "og/og-security.jpg": {
+    "title": "Security - Cocxy Terminal",
+    "description": "Local secrets, signed updates, encrypted stores, hardened runtime, and explicit network actions.",
+    "sha256": "0a522971de7557ee123325e13fd0ee071975e567addad3b80da6585a06c0c672"
+  },
+  "og/og-sponsors.jpg": {
+    "title": "Sponsors - Cocxy Terminal",
+    "description": "Support ongoing MIT development without creating a paid tier.",
+    "sha256": "ab40c3929d8a5cd4f1451400bd137a37d3ec889b576e64b6b6c8ab523866f184"
+  },
+  "og/og-why-cocxy.jpg": {
+    "title": "Why Cocxy - Cocxy Terminal",
+    "description": "A terminal designed around local-first agent workflows on macOS.",
+    "sha256": "148042aac2a5d087f4cabf626c20150369b91b5ba859f0d51ec7c1df6657d164"
+  }
+}

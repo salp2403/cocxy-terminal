@@ -256,7 +256,7 @@ struct BrowserBookmarksView: View {
         let isExpanded = expandedFolderIDs.contains(folder.id)
 
         return HStack(spacing: 6) {
-            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+            Image(systemName: isExpanded ? "chevron.down" : "chevron.forward")
                 .font(.system(size: 8, weight: .bold))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 .frame(width: 12)

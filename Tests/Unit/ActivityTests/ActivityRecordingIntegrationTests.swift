@@ -179,6 +179,81 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
         XCTAssertNotNil(usage.project)
     }
 
+    func testAgentUsageRecorderRetainsOriginAfterTabSwitch() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-agent-usage-origin-\(UUID().uuidString)", isDirectory: true)
+        let origin = root.appendingPathComponent("origin", isDirectory: true)
+        let destination = root.appendingPathComponent("destination", isDirectory: true)
+        try FileManager.default.createDirectory(at: origin, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        let controller = try makeActivityEnabledController(store: store, costTracking: true)
+        controller.showWindow(nil)
+        let originTabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        controller.handleOSCNotification(.currentDirectory(origin), fromTabID: originTabID)
+        let expectedContext = try XCTUnwrap(
+            controller.agentUsageAttributionContext(tabID: originTabID, surfaceID: nil)
+        )
+        let recorder = try XCTUnwrap(controller.currentAgentModeUsageRecorder())
+        try store.deleteAll()
+
+        controller.newTabAction(nil)
+        let destinationTabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        XCTAssertNotEqual(destinationTabID, originTabID)
+        controller.handleOSCNotification(
+            .currentDirectory(destination),
+            fromTabID: destinationTabID
+        )
+        await recorder(AgentLLMUsage(
+            provider: "openai",
+            model: "request-origin",
+            inputTokens: 10,
+            outputTokens: 5
+        ))
+
+        let usage = try XCTUnwrap(try store.tokenUsage().first)
+        XCTAssertEqual(usage.sessionID, expectedContext.sessionID)
+        XCTAssertEqual(usage.project?.id, expectedContext.project?.id)
+        XCTAssertEqual(
+            usage.project?.projectIdentity,
+            expectedContext.project?.projectIdentity
+        )
+    }
+
+    func testProjectAliasesIncludeDirectoriesFromOtherWindows() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-activity-cross-window-\(UUID().uuidString)", isDirectory: true)
+        let sources = root.appendingPathComponent("Sources", isDirectory: true)
+        let tests = root.appendingPathComponent("Tests", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent(".git", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: tests, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        let controller = try makeActivityEnabledController(store: store, costTracking: true)
+        controller.activityWorkingDirectoryProvider = ActivityWorkingDirectoryProvider {
+            [sources, tests]
+        }
+        controller.showWindow(nil)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        controller.handleOSCNotification(.currentDirectory(root), fromTabID: tabID)
+
+        let context = try XCTUnwrap(
+            controller.agentUsageAttributionContext(tabID: tabID, surfaceID: nil)
+        )
+        let aliases = Set(context.project?.legacyIDs ?? [])
+
+        XCTAssertEqual(context.project?.projectIdentity, ProjectID(rootURL: root))
+        XCTAssertTrue(aliases.contains(ActivityProjectRef.workingDirectory(sources).id))
+        XCTAssertTrue(aliases.contains(ActivityProjectRef.workingDirectory(tests).id))
+    }
+
     func testEnabledConfigRecordsProjectSwitchesOnlyWhenDirectoryChanges() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-project-switch-\(UUID().uuidString)", isDirectory: true)

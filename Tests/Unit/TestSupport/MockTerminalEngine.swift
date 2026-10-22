@@ -1,10 +1,11 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
 import AppKit
+import CocxyShared
 @testable import CocxyTerminal
 
 @MainActor
-final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
+final class MockTerminalEngine: DescriptorBoundTerminalEngine, SessionReplayTerminalBridging {
     struct SessionReplayStartRequest: Equatable {
         let surface: SurfaceID
         let outputURL: URL
@@ -21,13 +22,20 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
     private(set) var initializeCalls: [TerminalEngineConfig] = []
     private(set) var createdSurfaces: [SurfaceID: NativeTerminalView] = [:]
     private(set) var createSurfaceRequests: [(surface: SurfaceID, workingDirectory: URL?, command: String?)] = []
+    private(set) var descriptorBoundCreateRequests: [ProjectDirectoryFileIdentity] = []
     private(set) var destroyedSurfaces: [SurfaceID] = []
     private(set) var keyEvents: [(surface: SurfaceID, event: KeyEvent)] = []
     private(set) var sentTexts: [(surface: SurfaceID, text: String)] = []
-    private(set) var preeditTexts: [(surface: SurfaceID, text: String)] = []
+    private(set) var preeditTexts: [(surface: SurfaceID, text: String, cursorByteOffset: Int?)] = []
     private(set) var resizedSurfaces: [(surface: SurfaceID, size: TerminalSize)] = []
+    private(set) var fontApplications: [(surface: SurfaceID, family: String, size: Double)] = []
+    private(set) var fontDefaultUpdates: [(family: String, size: Double)] = []
     private(set) var scrolledResults: [(surface: SurfaceID, lineNumber: Int)] = []
     private(set) var viewportScrollRequests: [(surface: SurfaceID, deltaRows: Int)] = []
+    private(set) var semanticNavigationRequests: [(
+        surface: SurfaceID,
+        action: TerminalSemanticNavigationAction
+    )] = []
     private(set) var focusNotifications: [(surface: SurfaceID, focused: Bool)] = []
     private(set) var nativeSearchRequests: [(surface: SurfaceID, options: SearchOptions)] = []
     private(set) var sessionReplayStartRequests: [SessionReplayStartRequest] = []
@@ -36,8 +44,12 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
     private(set) var tickCount: Int = 0
 
     var createSurfaceError: Error?
+    var createSurfaceFailureAfterSuccessCount: Int?
     var sendKeyEventReturnValue: Bool = true
+    var sendTextReturnValue: Bool = true
     var nativeSearchResults: [SurfaceID: [SearchResult]?] = [:]
+    var detectedContents: [SurfaceID: [TerminalDetectedContent]] = [:]
+    var semanticNavigationResult: TerminalSemanticNavigationResult?
     var sessionReplayShouldStart = true
     var sessionReplayShouldReplay = true
 
@@ -53,6 +65,14 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
         workingDirectory: URL?,
         command: String?
     ) throws -> SurfaceID {
+        if let failureCount = createSurfaceFailureAfterSuccessCount,
+           createSurfaceRequests.count >= failureCount {
+            throw NSError(
+                domain: "MockTerminalEngine",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Injected surface creation failure"]
+            )
+        }
         if let createSurfaceError {
             throw createSurfaceError
         }
@@ -61,6 +81,19 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
         createdSurfaces[surfaceID] = view
         createSurfaceRequests.append((surface: surfaceID, workingDirectory: workingDirectory, command: command))
         return surfaceID
+    }
+
+    func createSurface(
+        in view: NativeTerminalView,
+        verifiedWorkingDirectory: ProjectDirectoryRoot,
+        command: String?
+    ) throws -> SurfaceID {
+        descriptorBoundCreateRequests.append(verifiedWorkingDirectory.identity)
+        return try createSurface(
+            in: view,
+            workingDirectory: try verifiedWorkingDirectory.descriptorBoundURL(),
+            command: command
+        )
     }
 
     func destroySurface(_ id: SurfaceID) {
@@ -76,16 +109,30 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
         return sendKeyEventReturnValue
     }
 
-    func sendText(_ text: String, to surface: SurfaceID) {
+    @discardableResult
+    func sendText(_ text: String, to surface: SurfaceID) -> Bool {
         sentTexts.append((surface, text))
+        return sendTextReturnValue
     }
 
-    func sendPreeditText(_ text: String, to surface: SurfaceID) {
-        preeditTexts.append((surface, text))
+    func sendPreeditText(
+        _ text: String,
+        cursorByteOffset: Int?,
+        to surface: SurfaceID
+    ) {
+        preeditTexts.append((surface, text, cursorByteOffset))
     }
 
     func resize(_ surface: SurfaceID, to size: TerminalSize) {
         resizedSurfaces.append((surface, size))
+    }
+
+    func applyFont(family: String, size: Double, to surface: SurfaceID) {
+        fontApplications.append((surface, family, size))
+    }
+
+    func updateFontDefaults(family: String, size: Double) {
+        fontDefaultUpdates.append((family, size))
     }
 
     func tick() {
@@ -114,6 +161,14 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
         viewportScrollRequests.append((surfaceID, deltaRows))
     }
 
+    func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction,
+        for surface: SurfaceID
+    ) -> TerminalSemanticNavigationResult? {
+        semanticNavigationRequests.append((surface, action))
+        return semanticNavigationResult
+    }
+
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {
         focusNotifications.append((surface, focused))
     }
@@ -121,6 +176,20 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
     func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
         nativeSearchRequests.append((surfaceID, options))
         return nativeSearchResults[surfaceID] ?? nil
+    }
+
+    func detectedContent(
+        atAbsoluteRow row: UInt32,
+        column: UInt16,
+        for surface: SurfaceID
+    ) -> TerminalDetectedContent? {
+        visibleDetectedContents(for: surface).first {
+            $0.contains(absoluteRow: row, column: column)
+        }
+    }
+
+    func visibleDetectedContents(for surface: SurfaceID) -> [TerminalDetectedContent] {
+        detectedContents[surface] ?? []
     }
 
     func beginSessionRecording(

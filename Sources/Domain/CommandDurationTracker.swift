@@ -45,7 +45,7 @@ final class CommandDurationTracker: @unchecked Sendable {
         self.detector = BlockOSCDetector { event in
             switch event {
             case .commandStarted:
-                onNotification(.commandStarted)
+                onNotification(.commandStarted(inputPosition: nil))
             case .commandFinished(let exitCode):
                 onNotification(.commandFinished(exitCode: exitCode))
             case .promptStarted, .commandExecuted:

@@ -3,6 +3,24 @@
 
 import Foundation
 import Combine
+import CocxyShared
+
+struct DroppedHookEventContext: Equatable, Sendable {
+    let sessionId: String
+    let cwd: String
+    let eventType: HookEventType
+    let timestamp: Date
+}
+
+struct HookReceiverDiagnostics: Equatable, Sendable {
+    let droppedByCwdCount: Int
+    let lastDroppedByCwd: DroppedHookEventContext?
+
+    static let empty = HookReceiverDiagnostics(
+        droppedByCwdCount: 0,
+        lastDroppedByCwd: nil
+    )
+}
 
 // MARK: - Hook Event Receiving Protocol
 
@@ -52,6 +70,10 @@ final class HookEventReceiverImpl: HookEventReceiving, @unchecked Sendable {
         eventSubject.eraseToAnyPublisher()
     }
 
+    var diagnosticsPublisher: AnyPublisher<HookReceiverDiagnostics, Never> {
+        diagnosticsSubject.eraseToAnyPublisher()
+    }
+
     // MARK: - State
 
     /// Active session IDs. Thread-safe via lock.
@@ -96,6 +118,16 @@ final class HookEventReceiverImpl: HookEventReceiving, @unchecked Sendable {
         }
     }
 
+    private(set) var droppedByCwdCount: Int {
+        get { lock.lock(); defer { lock.unlock() }; return _droppedByCwdCount }
+        set { lock.lock(); defer { lock.unlock() }; _droppedByCwdCount = newValue }
+    }
+
+    private(set) var lastDroppedByCwd: DroppedHookEventContext? {
+        get { lock.lock(); defer { lock.unlock() }; return _lastDroppedByCwd }
+        set { lock.lock(); defer { lock.unlock() }; _lastDroppedByCwd = newValue }
+    }
+
     // MARK: - Last Event Context
 
     /// The session ID from the most recently received event.
@@ -115,12 +147,16 @@ final class HookEventReceiverImpl: HookEventReceiving, @unchecked Sendable {
     // MARK: - Private
 
     private let eventSubject = PassthroughSubject<HookEvent, Never>()
+    private let diagnosticsSubject = CurrentValueSubject<HookReceiverDiagnostics, Never>(.empty)
     private let lock = NSLock()
     private var _activeSessionIds: Set<String> = []
     private var _receivedEventCount: Int = 0
     private var _failedEventCount: Int = 0
     private var _lastSessionId: String?
     private var _lastCwd: String?
+    private var _droppedByCwdCount: Int = 0
+    private var _lastDroppedByCwd: DroppedHookEventContext?
+    private var _debugLoggingEnabled: Bool
 
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
@@ -128,20 +164,18 @@ final class HookEventReceiverImpl: HookEventReceiving, @unchecked Sendable {
         return decoder
     }()
 
+    init(debugLoggingEnabled: Bool = false) {
+        self._debugLoggingEnabled = debugLoggingEnabled
+    }
+
     // MARK: - HookEventReceiving
 
     @discardableResult
     func receiveRawJSON(_ data: Data) -> Bool {
         guard !data.isEmpty else {
             incrementFailedCount()
+            writeDebugLog("stage=app-decode-failed reason=empty-payload")
             return false
-        }
-
-        // Extract session_id and cwd from raw JSON before decoding into HookEvent.
-        // These fields are used to map events to the correct tab.
-        if let rawJSON = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            lastReceivedSessionId = rawJSON["session_id"] as? String
-            lastReceivedCwd = rawJSON["cwd"] as? String
         }
 
         let event: HookEvent
@@ -149,8 +183,14 @@ final class HookEventReceiverImpl: HookEventReceiving, @unchecked Sendable {
             event = try decoder.decode(HookEvent.self, from: data)
         } catch {
             incrementFailedCount()
+            writeDebugLog("stage=app-decode-failed reason=invalid-payload")
             return false
         }
+
+        // Use the canonical decoded event so CwdChanged records `new_cwd`,
+        // not only the legacy top-level `cwd` field.
+        lastReceivedSessionId = event.sessionId
+        lastReceivedCwd = event.cwd
 
         // Track active sessions
         updateSessionTracking(for: event)
@@ -158,6 +198,7 @@ final class HookEventReceiverImpl: HookEventReceiving, @unchecked Sendable {
         // Increment success counter BEFORE publishing, so subscribers
         // see a consistent count when they receive the event.
         incrementReceivedCount()
+        writeDebugLog(for: event, stage: "app-received")
 
         // Publish to subscribers (after counter is updated)
         eventSubject.send(event)
@@ -173,7 +214,51 @@ final class HookEventReceiverImpl: HookEventReceiving, @unchecked Sendable {
         lastReceivedCwd = event.cwd
         updateSessionTracking(for: event)
         incrementReceivedCount()
+        writeDebugLog(for: event, stage: "app-received-internal")
         eventSubject.send(event)
+    }
+
+    func updateDebugLogging(enabled: Bool) {
+        lock.lock()
+        _debugLoggingEnabled = enabled
+        lock.unlock()
+    }
+
+    func recordDroppedByCwd(_ event: HookEvent) {
+        guard let cwd = event.cwd, !cwd.isEmpty else { return }
+        let context = DroppedHookEventContext(
+            sessionId: event.sessionId,
+            cwd: cwd,
+            eventType: event.type,
+            timestamp: event.timestamp
+        )
+
+        lock.lock()
+        _droppedByCwdCount += 1
+        _lastDroppedByCwd = context
+        let diagnostics = HookReceiverDiagnostics(
+            droppedByCwdCount: _droppedByCwdCount,
+            lastDroppedByCwd: context
+        )
+        lock.unlock()
+
+        writeDebugLog(for: event, stage: "app-dropped-cwd")
+        diagnosticsSubject.send(diagnostics)
+    }
+
+    func acknowledgeDroppedByCwd(sessionId: String) {
+        lock.lock()
+        guard _lastDroppedByCwd?.sessionId == sessionId else {
+            lock.unlock()
+            return
+        }
+        _lastDroppedByCwd = nil
+        let diagnostics = HookReceiverDiagnostics(
+            droppedByCwdCount: _droppedByCwdCount,
+            lastDroppedByCwd: nil
+        )
+        lock.unlock()
+        diagnosticsSubject.send(diagnostics)
     }
 
     // MARK: - Private Helpers
@@ -202,5 +287,27 @@ final class HookEventReceiverImpl: HookEventReceiving, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         _failedEventCount += 1
+    }
+
+    private func writeDebugLog(for event: HookEvent, stage: String) {
+        let filePath: String
+        if case .fileChanged(let data) = event.data {
+            filePath = data.filePath
+        } else {
+            filePath = "none"
+        }
+        writeDebugLog(
+            "stage=\(stage) event=\(event.type.rawValue) session=\(event.sessionId) cwd=\(event.cwd ?? "unknown") file=\(filePath)"
+        )
+    }
+
+    private func writeDebugLog(_ message: String) {
+        lock.lock()
+        let enabled = _debugLoggingEnabled
+        lock.unlock()
+        guard enabled else { return }
+        var environment = ProcessInfo.processInfo.environment
+        environment[HookIntegrationDebugLog.enabledEnvironmentKey] = "1"
+        HookIntegrationDebugLog.append(message, environment: environment)
     }
 }

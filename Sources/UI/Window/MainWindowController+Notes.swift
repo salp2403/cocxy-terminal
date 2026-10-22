@@ -33,17 +33,20 @@ extension MainWindowController {
 
         let panelWidth = clampedNotesPanelWidth(containerWidth: overlayContainer.bounds.width)
         let swiftUIView = makeNotesOverlayView(viewModel: viewModel, panelWidth: panelWidth)
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.appearance = Design.appearance(for: swiftUIView.themeIdentity)
         hostingView.wantsLayer = true
         let panelY = statusBarHostingView?.frame.height ?? 24
         hostingView.frame = NSRect(
-            x: overlayContainer.bounds.width - panelWidth,
+            x: trailingPanelOrigin(
+                containerWidth: overlayContainer.bounds.width,
+                panelWidth: panelWidth
+            ),
             y: panelY,
             width: panelWidth,
             height: max(0, overlayContainer.bounds.height - panelY)
         )
-        hostingView.autoresizingMask = [.height, .minXMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
 
         notesHostingView = hostingView
         overlayContainer.addSubview(hostingView)
@@ -54,7 +57,7 @@ extension MainWindowController {
             await self.loadNotesForVisibleTab(using: viewModel)
         }
 
-        layoutRightDockedAgentPanels()
+        layoutTrailingDockedPanels()
     }
 
     func dismissNotes() {
@@ -67,7 +70,10 @@ extension MainWindowController {
         }
 
         isNotesVisible = false
-        let targetX = overlayContainer.bounds.width
+        let targetX = trailingPanelExitOrigin(
+            containerWidth: overlayContainer.bounds.width,
+            panelWidth: hostingView.frame.width
+        )
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -76,7 +82,7 @@ extension MainWindowController {
             Task { @MainActor [weak self] in
                 self?.notesHostingView?.removeFromSuperview()
                 self?.notesHostingView = nil
-                self?.layoutRightDockedAgentPanels()
+                self?.layoutTrailingDockedPanels()
                 self?.focusActiveTerminalSurface()
             }
         })
@@ -160,13 +166,21 @@ extension MainWindowController {
     func currentNotesWorkingDirectory() -> URL? {
         if let tabID = visibleTabID ?? tabManager.activeTabID,
            let tab = tabManager.tab(for: tabID) {
-            return tab.worktreeRoot ?? tab.workingDirectory
+            return notesGroupingRoot(for: tab)
         }
         return nil
     }
 
     func loadNotesForVisibleTab(using viewModel: NotesViewModel) async {
-        guard let directory = currentNotesWorkingDirectory() else { return }
+        guard let tabID = visibleTabID ?? tabManager.activeTabID,
+              let tab = tabManager.tab(for: tabID) else { return }
+        let directory = notesGroupingRoot(for: tab)
+        let config = configService?.current.notes ?? .defaults
+        let store = NoteStore(
+            storageRoot: Self.expandedNotesStorageURL(config.storageDir),
+            format: config.format
+        )
+        await migrateLegacyNotes(for: [tab], using: store)
         await viewModel.load(directory: directory)
     }
 
@@ -211,7 +225,7 @@ extension MainWindowController {
         if rebuildHostForAppearanceChange,
            hostingView.appearance?.name != appearance?.name,
            let parent = hostingView.superview {
-            let replacement = NSHostingView(rootView: swiftUIView)
+            let replacement = makeShellHostingView(rootView: swiftUIView)
             replacement.appearance = appearance
             replacement.wantsLayer = hostingView.wantsLayer
             replacement.frame = hostingView.frame
@@ -259,6 +273,11 @@ extension MainWindowController {
 
         let storageRoot = Self.expandedNotesStorageURL(config.storageDir)
         let store = NoteStore(storageRoot: storageRoot, format: config.format)
+        let relevantTabs = tabManager.tabs.filter { tab in
+            let canonicalID = NoteWorkspaceID(workspaceRoot: notesGroupingRoot(for: tab))
+            return workspaceIDs.contains(canonicalID.rawValue)
+        }
+        await migrateLegacyNotes(for: relevantTabs, using: store)
         let typedIDs = workspaceIDs.map { NoteWorkspaceID(rawValue: $0) }
         let summaries = await store.summaries(for: typedIDs, recentLimit: 5)
 
@@ -267,6 +286,7 @@ extension MainWindowController {
             let rows = summary.recent.map { note in
                 Design.AuroraNoteRow(
                     id: note.id.uuidString,
+                    workspaceID: id.rawValue,
                     title: note.derivedTitle,
                     updatedAt: note.updatedAt
                 )
@@ -280,23 +300,59 @@ extension MainWindowController {
         return result
     }
 
-    /// Resolves the tab whose workspace identifier matches `rawID`.
-    /// Walks the live tab list through the same resolver the Notes
-    /// store uses on disk so the lookup follows the user's git-root
-    /// grouping exactly. Returns `nil` when no tab matches (closed
-    /// tab, stale sidebar fetch) so the caller can no-op silently.
+    /// Resolves the tab whose canonical project grouping identifier matches `rawID`.
     func tabForNotesWorkspace(rawID: String) -> Tab? {
-        let resolver = DefaultNoteWorkspaceResolver()
         for tab in tabManager.tabs {
-            let directory = tab.worktreeRoot ?? tab.workingDirectory
-            guard let resolved = resolver.resolveWorkspace(for: directory) else {
-                continue
-            }
-            if resolved.workspaceID.rawValue == rawID {
+            let workspaceID = NoteWorkspaceID(workspaceRoot: notesGroupingRoot(for: tab))
+            if workspaceID.rawValue == rawID {
                 return tab
             }
         }
         return nil
+    }
+
+    private func notesGroupingRoot(for tab: Tab) -> URL {
+        if let origin = tab.worktreeOriginRepo {
+            return resolvedNotesRoot(for: origin)
+        }
+        if let worktreeRoot = tab.worktreeRoot,
+           let parent = projectResolver.resolveProject(for: worktreeRoot).parent {
+            return ProjectPathCanonicalizer.canonicalURL(
+                URL(fileURLWithPath: parent.rawValue, isDirectory: true)
+            )
+        }
+        return resolvedNotesRoot(for: tab.worktreeRoot ?? tab.workingDirectory)
+    }
+
+    private func resolvedNotesRoot(for directory: URL) -> URL {
+        return DefaultNoteWorkspaceResolver()
+            .resolveWorkspace(for: directory)?.rootURL
+            ?? ProjectPathCanonicalizer.canonicalURL(directory)
+    }
+
+    private func migrateLegacyNotes(for tabs: [Tab], using store: NoteStore) async {
+        var migrations: [NoteWorkspaceID: NoteWorkspaceID] = [:]
+        for tab in tabs {
+            let canonicalID = NoteWorkspaceID(workspaceRoot: notesGroupingRoot(for: tab))
+            let directory = tab.worktreeRoot ?? tab.workingDirectory
+            let publishedRoot = URL(
+                fileURLWithPath: LegacyProjectAliasIdentityResolver.identity(for: directory),
+                isDirectory: true
+            )
+            let developmentRoot = ProjectPathCanonicalizer.canonicalURL(directory)
+            for legacyID in Set([
+                NoteWorkspaceID(workspaceRoot: publishedRoot),
+                NoteWorkspaceID(workspaceRoot: developmentRoot),
+            ]) where legacyID != canonicalID {
+                migrations[legacyID] = canonicalID
+            }
+        }
+
+        for (legacyID, canonicalID) in migrations {
+            // A failed move leaves the legacy files in place. A later load
+            // retries, so transient filesystem errors never delete notes.
+            _ = try? await store.migrateNotes(from: legacyID, to: canonicalID)
+        }
     }
 
     /// Opens the per-workspace overlay focused on the supplied note.

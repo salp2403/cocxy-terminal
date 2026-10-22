@@ -40,8 +40,9 @@ struct NoteWorkspaceID: Sendable, Equatable, Hashable, Codable {
     let rawValue: String
 
     /// Builds an identifier from a workspace root URL. The URL is
-    /// standardised (resolves symlinks and removes trailing slashes)
-    /// before hashing so equivalent URLs collapse onto the same ID.
+    /// standardised before hashing to normalize path syntax and trailing
+    /// slashes. Symlinks deliberately remain distinct for compatibility
+    /// with the published on-disk identifier contract.
     init(workspaceRoot: URL) {
         self.rawValue = Self.computeID(from: workspaceRoot)
     }

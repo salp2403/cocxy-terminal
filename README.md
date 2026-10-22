@@ -5,7 +5,7 @@
 [![Build](https://github.com/salp2403/cocxy-terminal/actions/workflows/ci.yml/badge.svg)](https://github.com/salp2403/cocxy-terminal/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/salp2403/cocxy-terminal?label=latest&color=8839ef)](https://github.com/salp2403/cocxy-terminal/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![macOS](https://img.shields.io/badge/macOS-14%2B-black.svg)](https://www.apple.com/macos/)
+[![macOS](https://img.shields.io/badge/macOS-15%2B-black.svg)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.10-orange.svg)](https://swift.org)
 [![No Telemetry](https://img.shields.io/badge/telemetry-zero-brightgreen.svg)](#zero-telemetry)
 [![Stars](https://img.shields.io/github/stars/salp2403/cocxy-terminal?style=flat&color=fab387)](https://github.com/salp2403/cocxy-terminal/stargazers)
@@ -24,7 +24,7 @@ Cocxy knows when your coding agent is thinking, working, waiting for input, or d
 - [Install](#install)
 - [Features](#features)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
-- [Supported Agents](#supported-agents)
+- [Agent Profile Coverage](#agent-profile-coverage)
 - [Configuration](#configuration)
 - [CLI Companion](#cli-companion)
 - [Building from Source](#building-from-source)
@@ -37,7 +37,7 @@ Cocxy knows when your coding agent is thinking, working, waiting for input, or d
 
 Every terminal shows you text. Cocxy is a native macOS workspace built around how developers work with AI coding agents. It detects multiple coding agents across four independent layers, gives you a live dashboard of every session, lets you review an agent's changes inline before shipping them, runs your own local AI workspace (multi-provider Agent Mode, MCP servers, codebase indexing, skills, inline completions, sandboxed Computer Use), executes notebooks and workflows on-device, and ships with a native Markdown workspace for notes, plans, and docs. When your agent finishes a task at 3 AM, Cocxy knows — and you know.
 
-Built from scratch in Swift and Metal. No Electron. No web view wrapping a terminal. No data leaves your machine. Just a fast, native macOS app designed for the way developers work in 2026.
+Built from scratch in Swift and Metal. No Electron. No web view wrapping a terminal. No telemetry. Just a fast, native macOS app designed for the way developers work in 2026.
 
 ## Install
 
@@ -57,7 +57,7 @@ brew update && brew upgrade --cask cocxy
 
 ### Direct Download
 
-Download the latest `.dmg` from the [Releases](https://github.com/salp2403/cocxy-terminal/releases) page. Universal builds for Apple Silicon (native) and Intel.
+Download the latest `.dmg` from the [Releases](https://github.com/salp2403/cocxy-terminal/releases) page. Builds are for Apple Silicon Macs.
 
 ### Nightly Channel
 
@@ -101,6 +101,35 @@ A native panel to review every change an agent made, comment inline, and feed co
 - **Cross-tab-safe** — Feedback always reaches the agent in the tab the review belongs to, even if you switched tabs
 
 Open with `Cmd+Option+R` or `cocxy review`.
+
+### Projects
+
+Every Git repository you work in gets its own home for sessions, notes, and tasks.
+
+- **Project list** — Repositories you open or work in are registered locally and listed in the sidebar under Pinned and Recent, with a task count per project
+- **Project Home** — Git status, a task inbox, managed worktrees, and actions to start a session, create a worktree, launch an agent team, open code review, or open the most recent diff
+- **Open and clone** — File > Open Project, Open Recent, and Clone Project for HTTPS or SSH Git URLs, plus Quick Switch and the Jump to Project command
+- **Aliases and pinning** — Rename a workspace in the sidebar to give its project a display name, and pin the projects you use most
+- **Project activity** — Time, tokens, and cost per project for the week and month when local activity tracking is on; the Agent Timeline filters by project
+- **Shared notes** — Linked worktrees of a project share one set of notes
+- **Parallel tasks** — Fan Out Task sends one prompt to several local agents, each in its own worktree; compare the candidates by status, cost, branch, and diff, then promote one and clean up the rest
+- **Task Queue** — Persistent local agent pipelines that run manually, on a cron schedule, or on terminal events
+- **Task handoff** — Pass This Task To... continues the active task in another local agent with its recent context
+- **Project layouts** — Tab configs save split pane layouts with paths relative to the project
+
+Manage projects from the command line with `cocxy project-list`, `project-open`, `project-pin`, `project-alias`, `project-clone`, and `project-tasks`.
+
+### Phone Mirror
+
+Follow your sessions from your phone's browser on the same private network. No app to install, no account, and no Cocxy cloud in between.
+
+- **QR pairing with approval** — View > Pair Phone... shows a single-use code that expires after 90 seconds; the phone gets access only after you allow it on the Mac
+- **End-to-end encrypted** — Terminal traffic and phone actions are encrypted with a key carried in the QR code, over a TLS relay on your private network or an optional connected SSH profile; terminal servers stay on loopback
+- **Projects and agents** — Local projects and live agents at a glance, with replies to waiting agents and approve / reject for agent approvals
+- **Live terminal** — Follow a terminal with pinch and double-tap zoom, send keys, and paste text
+- **New projects** — Create a project from the phone in a folder chosen on the Mac, after you confirm it there
+- **Local notifications** — Browser notifications on the phone for agent updates and approval requests
+- **Revocable** — Access ends after eight hours or as soon as you choose Revoke Access on the Mac
 
 ### Local AI Workspace
 
@@ -319,15 +348,15 @@ Native shell integration for zsh, bash, and fish — installed automatically, no
 
 ### Liquid Glass UI
 
-A polished glass-material design system covering 36+ surfaces — sidebar, command palette, status bar, panels, overlays, and contextual sheets — tuned for macOS 14 through macOS 26 and ready for the Liquid Glass aesthetic when the host supports it.
+A polished glass-material design system covering 36+ surfaces — sidebar, command palette, status bar, panels, overlays, and contextual sheets — tuned for macOS 15 through macOS 26 and ready for the Liquid Glass aesthetic when the host supports it.
 
 ### Localization
 
-Shipped in English and Spanish out of the box (2,651+ strings each, kept symmetric). The active language follows the system or can be picked manually from Preferences. Public website covers EN and ES landings, features, releases, getting started, FAQ, and migration guidance.
+Shipped in 21 languages out of the box (3,700+ strings each, kept symmetric), with a right-to-left layout in Arabic. The active language follows the system or can be picked manually from Preferences. Public website covers EN and ES landings, features, releases, getting started, FAQ, and migration guidance.
 
 ### Zero Telemetry
 
-Cocxy has no telemetry pipeline, no analytics SDK, no automatic diagnostic sender, and no tracking. Network use exists only for signed updates and explicit user actions such as browser sessions, remotes, GitHub CLI operations, plugins, or tools you run yourself. Terminal activity is not uploaded to a Cocxy backend. Verify with any network monitor.
+Cocxy has no telemetry pipeline, no analytics SDK, no automatic diagnostic sender, and no tracking. Network use exists only for signed updates and explicit user actions such as browser sessions, remotes, GitHub CLI operations, plugins, a phone you pair, or tools you run yourself. Terminal activity is not uploaded to a Cocxy backend. Verify with any network monitor.
 
 ## Keyboard Shortcuts
 
@@ -342,7 +371,11 @@ Cocxy has no telemetry pipeline, no analytics SDK, no automatic diagnostic sende
 | Agent Timeline | `Cmd+Shift+T` |
 | Smart Routing | `Cmd+Shift+U` |
 | Notifications | `Cmd+Shift+I` |
-| Browser Panel | `Cmd+Shift+B` |
+| Toggle Browser | `Cmd+Option+B` |
+| Hide Command Blocks | `Cmd+Shift+B` |
+| Previous / Next Prompt | `Cmd+Up` / `Cmd+Down` |
+| Select Command Output | `Cmd+Shift+A` |
+| Show Content Hints | `Cmd+Shift+L` |
 | Remote Workspaces | `Cmd+Shift+R` |
 | Markdown Outline (when active) | `Cmd+Shift+O` |
 | Markdown Source / Preview / Split | `Cmd+1` / `Cmd+2` / `Cmd+3` |
@@ -412,6 +445,7 @@ scrollback-lines = 10000
 cursor-style = "block"
 cursor-blink = true
 copy-on-select = true
+cursor-click-to-move = true
 clipboard-paste-protection = true
 
 [appearance]
@@ -440,6 +474,9 @@ cocxy list-tabs                  # List all tabs as JSON
 cocxy window list                # List all open windows
 cocxy session save my-workspace  # Save current session
 cocxy session restore my-workspace
+cocxy project-list               # List registered local projects
+cocxy project-open ~/code/app    # Open or focus a local project
+cocxy task-run-list              # List parallel task runs and their candidates
 cocxy remote list                # List SSH profiles and status
 cocxy remote connect prod-web    # Connect to a remote profile
 cocxy plugin list                # List installed plugins
@@ -459,7 +496,7 @@ Run `cocxy help` for the full reference.
 
 ### Prerequisites
 
-- macOS 14.0 (Sonoma) or later
+- macOS 15.0 (Sequoia) or later
 - Xcode 16 or later
 - Swift 5.10+
 - Zig 0.15+ (`brew install zig`) — required to build CocxyCore locally

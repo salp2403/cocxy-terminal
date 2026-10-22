@@ -61,6 +61,17 @@ struct UnifiedQuickSwitchRankerSwiftTestingTests {
         #expect(ranked.first?.item.id == "worktree")
     }
 
+    @Test("project kind ranks between tabs and worktrees")
+    func projectKindBias() {
+        let ranked = UnifiedQuickSwitchRanker.rank(query: "same", items: [
+            item("worktree", kind: .worktree, title: "same"),
+            item("project", kind: .project, title: "same"),
+            item("tab", kind: .tab, title: "same"),
+        ], now: now)
+
+        #expect(ranked.map { $0.item.id } == ["tab", "project", "worktree"])
+    }
+
     private func item(
         _ id: String,
         kind: UnifiedQuickSwitchItemKind,

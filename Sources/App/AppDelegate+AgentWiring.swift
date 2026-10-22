@@ -29,6 +29,8 @@ extension AppDelegate {
     ///
     /// Window-dependent wiring is deferred to `wireAgentDetectionToWindow()`.
     func initializeAgentDetectionEngine() {
+        agentWorkspaceFileMonitor?.stopAll()
+        agentWorkspaceFileMonitor = nil
         let config = configService?.current ?? .defaults
         guard config.agentDetection.enabled else { return }
 
@@ -65,7 +67,33 @@ extension AppDelegate {
             }
         }
 
-        hookEventReceiver = HookEventReceiverImpl()
+        let hookReceiver = HookEventReceiverImpl(
+            debugLoggingEnabled: config.hooks.debugLog
+        )
+        hookEventReceiver = hookReceiver
+        let workspaceFileMonitor = AgentWorkspaceFileMonitorImpl(
+            debugLoggingEnabled: config.hooks.debugLog
+        ) { [weak hookReceiver] change in
+            hookReceiver?.receive(HookEvent(
+                type: .fileChanged,
+                sessionId: change.sessionId,
+                timestamp: change.timestamp,
+                data: .fileChanged(FileChangedData(
+                    filePath: change.filePath,
+                    changeType: change.operation.rawValue
+                )),
+                cwd: change.rootPath
+            ))
+        }
+        agentWorkspaceFileMonitor = workspaceFileMonitor
+        configService?.configChangedPublisher
+            .map(\.hooks.debugLog)
+            .removeDuplicates()
+            .sink { [weak hookReceiver, weak workspaceFileMonitor] enabled in
+                hookReceiver?.updateDebugLogging(enabled: enabled)
+                workspaceFileMonitor?.updateDebugLogging(enabled: enabled)
+            }
+            .store(in: &hookCancellables)
         let sessionDiffTracker = SessionDiffTrackerImpl(editHistoryRecorder: AIEditHistoryGitRecorder())
         self.sessionDiffTracker = sessionDiffTracker
 
@@ -144,13 +172,29 @@ extension AppDelegate {
                     return
                 }
 
-                let resolved = self.resolvedControllerAndTab(
-                    forHookSessionID: event.sessionId,
-                    cwd: event.cwd
-                )
+                let resolved: (controller: MainWindowController, tabID: TabID)?
+                if event.type == .cwdChanged {
+                    // CwdChanged must prove ownership against old_cwd before
+                    // mutating or routing. Resolving by new_cwd first would let
+                    // an unrelated external session target an existing tab.
+                    resolved = self.handleCwdChangedHook(event)
+                } else {
+                    resolved = self.resolvedControllerAndTab(
+                        forHookSessionID: event.sessionId,
+                        cwd: event.cwd
+                    )
+                }
 
                 // Drop hook events from sessions not running inside Cocxy tabs.
                 if event.cwd != nil, resolved == nil {
+                    // If OSC 7 already moved a previously-bound tab to
+                    // `new_cwd`, the CwdChanged hook is a harmless duplicate,
+                    // not a routing failure that should prompt the user.
+                    if self.isBoundCwdChangedAlreadyApplied(event) {
+                        self.updateAgentWorkspaceFileMonitoring(forAccepted: event)
+                    } else {
+                        receiver.recordDroppedByCwd(event)
+                    }
                     return
                 }
 
@@ -170,6 +214,7 @@ extension AppDelegate {
                         surfaceID: resolvedSurfaceID
                     )
                 }
+                self.updateAgentWorkspaceFileMonitoring(forAccepted: event)
 
                 // Route tool activity into the per-surface store and bump
                 // the tab's last-activity timestamp for sidebar sorting.
@@ -207,14 +252,6 @@ extension AppDelegate {
                     resolved.controller.refreshStatusBar()
                 }
 
-                // CwdChanged is consumed by the dedicated tab-sync handler.
-                // It runs alongside the engine dispatch (which treats it as
-                // informational and returns nil) so tab.workingDirectory
-                // stays in sync without needing a separate subscription.
-                if event.type == .cwdChanged {
-                    self.handleCwdChangedHook(event)
-                }
-
                 engine?.processHookEvent(event, surfaceID: resolvedSurfaceID)
 
                 if event.type == .sessionEnd {
@@ -222,6 +259,19 @@ extension AppDelegate {
                 }
             }
             .store(in: &hookCancellables)
+    }
+
+    /// Starts native workspace observation only after the caller has accepted
+    /// the hook event against a Cocxy tab. FileChanged events are produced by
+    /// this monitor and must not recursively restart it.
+    func updateAgentWorkspaceFileMonitoring(forAccepted event: HookEvent) {
+        guard event.type != .fileChanged,
+              event.type != .sessionEnd,
+              let cwd = event.cwd,
+              !cwd.isEmpty else {
+            return
+        }
+        agentWorkspaceFileMonitor?.start(sessionId: event.sessionId, rootPath: cwd)
     }
 
     // MARK: - Agent Detection -> Tab State
@@ -410,11 +460,11 @@ extension AppDelegate {
     func wireAgentDashboardAndTimeline(_ engine: AgentDetectionEngineImpl) {
         // Dashboard: subscribes to both hook events and detection engine signals.
         let dashboardVM = AgentDashboardViewModel(
-            hookEventReceiver: hookEventReceiver,
-            detectionEngine: engine
+            hookEventReceiver: hookEventReceiver, detectionEngine: engine,
+            projectResolver: projectResolver
         )
         self.agentDashboardViewModel = dashboardVM
-
+        taskInboxStore.connect(sessionRegistry: sessionRegistry, dashboard: dashboardVM)
         // Provide tab CWDs from ALL windows so the dashboard can filter
         // out hook events from Claude sessions running outside Cocxy.
         dashboardVM.tabCwdProvider = { [weak self] in
@@ -438,6 +488,10 @@ extension AppDelegate {
                 forHookSessionID: sessionID,
                 cwd: cwd
             )?.tabID.rawValue
+        }
+
+        dashboardVM.surfaceIDForHookSessionProvider = { [weak self] sessionID in
+            self?.boundSurfaceIDForHookSession(sessionID)
         }
 
         dashboardVM.windowIDForTabProvider = { [weak self] tabUUID in
@@ -535,12 +589,35 @@ extension AppDelegate {
             bus.broadcast(.focusSession(sessionID: entry.sessionID))
         }
 
-        // Timeline: subscribes to hook events.
+        dashboardVM.onOpenFileImpact = { [weak self, weak dashboardVM] sessionID, filePath in
+            guard let self, let dashboardVM,
+                  let tabUUID = dashboardVM.tabIdForSession(sessionID),
+                  let controller = self.controllerContainingTab(TabID(rawValue: tabUUID)) else {
+                return
+            }
+
+            let tabID = TabID(rawValue: tabUUID)
+            _ = controller.focusTab(id: tabID)
+            NSApp.activate(ignoringOtherApps: true)
+            controller.showWindow(nil)
+            controller.window?.makeKeyAndOrderFront(nil)
+
+            let codeReviewViewModel = controller.resolveCodeReviewViewModel()
+            codeReviewViewModel.selectFile(filePath)
+            controller.showCodeReviewPanel()
+        }
+
+        dashboardVM.onReinstallHooks = { [weak self] in
+            self?.reinstallClaudeCodeHooksForDiagnostics() ?? false
+        }
+
+        dashboardVM.onBindDroppedSession = { [weak self] context in
+            self?.bindDroppedHookSessionToFocusedTab(context) ?? false
+        }
+
         let timelineStore = AgentTimelineStoreImpl()
         self.agentTimelineStore = timelineStore
 
-        // Inject the timeline store into all windows so timeline panels
-        // share a single event stream across the app.
         for controller in allWindowControllers {
             controller.injectedTimelineStore = timelineStore
         }
@@ -548,6 +625,10 @@ extension AppDelegate {
         guard let receiver = hookEventReceiver else { return }
 
         receiver.eventPublisher
+            // FileChanged bursts belong in the bounded dashboard impact
+            // model. Keeping them off the append-only timeline preserves
+            // prompts, tools, and errors during large workspace updates.
+            .filter { $0.type != .fileChanged }
             .receive(on: DispatchQueue.main)
             .sink { [weak self, weak timelineStore] hookEvent in
                 guard let self, let store = timelineStore else { return }
@@ -565,7 +646,8 @@ extension AppDelegate {
                 let timelineEvent = TimelineEvent.from(
                     hookEvent: hookEvent,
                     windowID: eventWindowID,
-                    windowLabel: self.windowDisplayName(for: eventWindowID)
+                    windowLabel: self.windowDisplayName(for: eventWindowID),
+                    projectIdentity: self.timelineProjectIdentity(cwd: hookEvent.cwd, resolved: resolved)
                 )
                 store.addEvent(timelineEvent)
             }
@@ -701,8 +783,9 @@ extension AppDelegate {
 
         cocxyBridge.semanticAdapter.timelinePublisher
             .receive(on: DispatchQueue.main)
-            .sink { [weak timelineStore] event in
-                timelineStore?.addEvent(event)
+            .sink { [weak self, weak timelineStore] event in
+                let identity = self?.timelineProjectIdentity(forSessionID: event.sessionId)
+                timelineStore?.addEvent(event.assigningProjectIdentity(identity))
             }
             .store(in: &hookCancellables)
     }
@@ -719,6 +802,24 @@ extension AppDelegate {
         }
 
         return nil
+    }
+
+    private func bindDroppedHookSessionToFocusedTab(
+        _ context: DroppedHookEventContext
+    ) -> Bool {
+        guard hookEventReceiver?.lastDroppedByCwd?.sessionId == context.sessionId,
+              let controller = focusedWindowController(),
+              let tabID = controller.visibleTabID ?? controller.tabManager.activeTabID else {
+            return false
+        }
+        let surfaceID = controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
+        bindHookSession(context.sessionId, to: tabID, surfaceID: surfaceID)
+        agentWorkspaceFileMonitor?.start(
+            sessionId: context.sessionId,
+            rootPath: context.cwd
+        )
+        hookEventReceiver?.acknowledgeDroppedByCwd(sessionId: context.sessionId)
+        return true
     }
 
     func makeTimelineNavigator() -> TimelineNavigating {

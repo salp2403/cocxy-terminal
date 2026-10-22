@@ -214,7 +214,42 @@ final class ConfigService: ConfigProviding {
         try reload()
     }
 
+    func updateVoiceConsent(enabled: Bool?, consentPrompted: Bool) throws {
+        var content = fileProvider.readConfigFile()
+            ?? Self.generateDefaultToml(updateChannel: fallbackUpdatesChannel)
+        if let enabled {
+            content = Self.upsertingTomlValue(
+                table: "voice",
+                key: "enabled",
+                value: String(enabled),
+                in: content
+            )
+        }
+        content = Self.upsertingTomlValue(
+            table: "voice",
+            key: "consent-prompted",
+            value: String(consentPrompted),
+            in: content
+        )
+        try fileProvider.writeConfigFile(content)
+        try reload()
+    }
+
     private static func upsertingAppearanceValue(
+        key: String,
+        value: String,
+        in content: String
+    ) -> String {
+        upsertingTomlValue(
+            table: "appearance",
+            key: key,
+            value: value,
+            in: content
+        )
+    }
+
+    private static func upsertingTomlValue(
+        table: String,
         key: String,
         value: String,
         in content: String
@@ -223,22 +258,22 @@ final class ConfigService: ConfigProviding {
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map(String.init)
 
-        guard let appearanceIndex = lines.firstIndex(where: {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines) == "[appearance]"
+        guard let tableIndex = lines.firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines) == "[\(table)]"
         }) else {
             if !lines.isEmpty, lines.last?.isEmpty == false {
                 lines.append("")
             }
-            lines.append("[appearance]")
+            lines.append("[\(table)]")
             lines.append("\(key) = \(value)")
             return lines.joined(separator: "\n") + "\n"
         }
 
-        let sectionEnd = lines[(appearanceIndex + 1)...].firstIndex(where: {
+        let sectionEnd = lines[(tableIndex + 1)...].firstIndex(where: {
             isTomlTableHeader($0)
         }) ?? lines.endIndex
 
-        if let keyIndex = lines[(appearanceIndex + 1)..<sectionEnd].firstIndex(where: {
+        if let keyIndex = lines[(tableIndex + 1)..<sectionEnd].firstIndex(where: {
             tomlKey(in: $0) == key
         }) {
             lines[keyIndex] = "\(key) = \(value)"
@@ -349,6 +384,7 @@ final class ConfigService: ConfigProviding {
         cursor-opacity = \(defaults.terminal.cursorOpacity)
         mouse-hide-while-typing = \(defaults.terminal.mouseHideWhileTyping)
         copy-on-select = \(defaults.terminal.copyOnSelect)
+        cursor-click-to-move = \(defaults.terminal.cursorClickToMove)
         clipboard-paste-protection = \(defaults.terminal.clipboardPasteProtection)
         # OSC 52 policies: prompt, allow, or deny. Reads send clipboard data
         # to the terminal program; writes replace the system clipboard.
@@ -390,6 +426,10 @@ final class ConfigService: ConfigProviding {
         auto-show-on-failure = \(defaults.commandCorrections.autoShowOnFailure)
         show-confidence-badge = \(defaults.commandCorrections.showConfidenceBadge)
         max-suggestions-shown = \(defaults.commandCorrections.maxSuggestionsShown)
+
+        [command-blocks]
+        enabled = \(defaults.commandBlocks.enabled)
+        show-only-on-hover = \(defaults.commandBlocks.showOnlyOnHover)
 
         [security]
         # Local artifact signature policy. Defaults preserve existing
@@ -453,16 +493,24 @@ final class ConfigService: ConfigProviding {
         # installed bridges keep working; turn off the global switch or a
         # per-agent switch to inject COCXY_*_HOOKS_DISABLED into new shells.
         enabled = \(defaults.hooks.enabled)
+        # Writes local hook delivery diagnostics to ~/Library/Logs/Cocxy.
+        # Disabled by default because session IDs and paths are sensitive.
+        debug-log = \(defaults.hooks.debugLog)
 
         \(hookAgentsToml)
 
         [voice]
-        # Local voice input. Disabled by default. "system" resolves to
-        # the current macOS locale when Speech supports it, with a
-        # same-language fallback when only another region is available.
+        # Local voice input. Recognition starts only when explicitly invoked
+        # and remains gated by macOS Speech and microphone permissions.
+        # "system" resolves to the current macOS locale when Speech supports
+        # it, with a same-language fallback when only another region is available.
         # Set a BCP-47 locale such as "es-ES" to override manually.
         enabled = \(defaults.voice.enabled)
         locale = "\(defaults.voice.localeIdentifier)"
+        # Keep false to place dictated text at the detected agent prompt for review.
+        auto-send-to-agent = \(defaults.voice.autoSendToAgent)
+        # Internal one-time acknowledgement state; managed by Cocxy.
+        consent-prompted = \(defaults.voice.consentPrompted)
 
         [backup]
         # Local-only automatic backups. Enabled by default and stored on
@@ -567,9 +615,9 @@ final class ConfigService: ConfigProviding {
 
         [worktree]
         # Per-agent git worktree feature (v0.1.81).
-        # When false (default), all `cocxy worktree` CLI verbs and palette
-        # actions refuse with a helpful message instead of mutating state.
-        # Opt in to get per-agent isolated worktrees without leaving Cocxy.
+        # Enabled by default, but Cocxy does not mutate repository state until
+        # an explicit worktree or parallel-task action is requested. Set this
+        # to false to disable all worktree CLI verbs and palette actions.
         enabled = \(defaults.worktree.enabled)
         # Base directory for worktree storage. Final path is
         # `<base-path>/<repo-hash>/<worktree-id>/`. Tilde is expanded at
@@ -798,6 +846,7 @@ final class ConfigService: ConfigProviding {
         let agentDetection = parseAgentDetectionConfig(from: parsed)
         let inputClassifier = parseInputClassifierConfig(from: parsed)
         let commandCorrections = parseCommandCorrectionsConfig(from: parsed)
+        let commandBlocks = parseCommandBlocksConfig(from: parsed)
         let security = parseSecurityConfig(from: parsed)
         let uxPolish = parseUXPolishConfig(from: parsed)
         let agent = parseAgentModeConfig(from: parsed)
@@ -841,6 +890,7 @@ final class ConfigService: ConfigProviding {
             agentDetection: agentDetection,
             inputClassifier: inputClassifier,
             commandCorrections: commandCorrections,
+            commandBlocks: commandBlocks,
             security: security,
             uxPolish: uxPolish,
             agent: agent,
@@ -1077,6 +1127,8 @@ final class ConfigService: ConfigProviding {
             ),
             mouseHideWhileTyping: boolValue(table["mouse-hide-while-typing"]) ?? defaults.mouseHideWhileTyping,
             copyOnSelect: boolValue(table["copy-on-select"]) ?? defaults.copyOnSelect,
+            cursorClickToMove: boolValue(table["cursor-click-to-move"])
+                ?? defaults.cursorClickToMove,
             clipboardPasteProtection: boolValue(table["clipboard-paste-protection"]) ?? defaults.clipboardPasteProtection,
             clipboardReadAccess: stringValue(table["clipboard-read-access"])
                 .flatMap { ClipboardReadAccess(rawValue: $0) }
@@ -1158,6 +1210,16 @@ final class ConfigService: ConfigProviding {
             autoShowOnFailure: boolValue(table["auto-show-on-failure"]) ?? defaults.autoShowOnFailure,
             showConfidenceBadge: boolValue(table["show-confidence-badge"]) ?? defaults.showConfidenceBadge,
             maxSuggestionsShown: maxSuggestions
+        )
+    }
+
+    private func parseCommandBlocksConfig(from parsed: [String: TOMLValue]) -> CommandBlocksConfig {
+        let table = extractTable("command-blocks", from: parsed)
+        let defaults = CommandBlocksConfig.defaults
+
+        return CommandBlocksConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            showOnlyOnHover: boolValue(table["show-only-on-hover"]) ?? defaults.showOnlyOnHover
         )
     }
 
@@ -1296,20 +1358,24 @@ final class ConfigService: ConfigProviding {
 
         return HookIntegrationConfig(
             enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            debugLog: boolValue(table["debug-log"]) ?? defaults.debugLog,
             agents: agents
         )
     }
 
-    /// Parses the `[voice]` section. Missing or malformed values stay
-    /// disabled and system-locale-first; locale strings are normalized to a
-    /// stable BCP-47-ish form while empty values fall back to `"system"`.
+    /// Parses the `[voice]` section. Missing or malformed values use the
+    /// discoverable, permission-gated defaults; locale strings are normalized
+    /// to a stable BCP-47-ish form while empty values fall back to `"system"`.
     private func parseVoiceConfig(from parsed: [String: TOMLValue]) -> VoiceConfig {
         let table = extractTable("voice", from: parsed)
         let defaults = VoiceConfig.defaults
 
         return VoiceConfig(
             enabled: boolValue(table["enabled"]) ?? defaults.enabled,
-            localeIdentifier: stringValue(table["locale"]) ?? defaults.localeIdentifier
+            localeIdentifier: stringValue(table["locale"]) ?? defaults.localeIdentifier,
+            autoSendToAgent: boolValue(table["auto-send-to-agent"]) ?? defaults.autoSendToAgent,
+            consentPrompted: boolValue(table["consent-prompted"])
+                ?? defaults.consentPrompted
         )
     }
 

@@ -300,14 +300,15 @@ struct AuroraChromeControllerSwiftTestingTests {
         let tab = harness.tabManager.addTab(
             workingDirectory: URL(fileURLWithPath: "/tmp/aurora-rename")
         )
-        var renamed: TabID?
-        harness.controller.onRenameSession = { renamed = $0 }
+        var renamed: (TabID, String?)?
+        harness.controller.onRenameSession = { renamed = ($0, $1) }
 
         if let tabID = harness.controller.tabID(forSessionID: tab.id.rawValue.uuidString) {
-            harness.controller.onRenameSession?(tabID)
+            harness.controller.onRenameSession?(tabID, "Renamed")
         }
 
-        #expect(renamed == tab.id)
+        #expect(renamed?.0 == tab.id)
+        #expect(renamed?.1 == "Renamed")
     }
 
     @Test

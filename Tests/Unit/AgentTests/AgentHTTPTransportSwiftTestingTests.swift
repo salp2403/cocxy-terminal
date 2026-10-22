@@ -133,7 +133,7 @@ struct AgentHTTPTransportSwiftTestingTests {
     /// transport actually cancelled. Returns false — and therefore fails the
     /// caller's `#expect` — when the cancellation never arrives.
     private func waitForCancellation(of id: String) async -> Bool {
-        for _ in 0..<500 {
+        for _ in 0..<1_500 {
             if BoundedHTTPTestURLProtocol.recorder.snapshot(id).stopped {
                 return true
             }

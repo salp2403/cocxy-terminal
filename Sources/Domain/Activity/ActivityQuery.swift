@@ -72,16 +72,22 @@ struct ActivityQueryService {
         matching query: ActivityStoreQuery = ActivityStoreQuery()
     ) throws -> [ProjectTimeBreakdown] {
         let events = try store.events(matching: query)
-        let durations = events.reduce(into: [ActivityProjectRef: Int64]()) { partial, event in
+        let durations = events.reduce(
+            into: [String: (project: ActivityProjectRef, duration: Int64)]()
+        ) { partial, event in
             guard let project = event.project,
                   let duration = commandDurationMilliseconds(for: event) else {
                 return
             }
-            partial[project, default: 0] += duration
+            let current = partial[project.id]
+            partial[project.id] = (project, (current?.duration ?? 0) + duration)
         }
         return durations
-            .map { project, duration in
-                ProjectTimeBreakdown(project: project, durationMilliseconds: duration)
+            .map { _, value in
+                ProjectTimeBreakdown(
+                    project: value.project,
+                    durationMilliseconds: value.duration
+                )
             }
             .sorted { lhs, rhs in
                 if lhs.durationMilliseconds == rhs.durationMilliseconds {
@@ -89,6 +95,20 @@ struct ActivityQueryService {
                 }
                 return lhs.durationMilliseconds > rhs.durationMilliseconds
             }
+    }
+
+    func projectSummary(
+        projectID: ProjectID,
+        at date: Date = Date()
+    ) throws -> ProjectActivitySummary {
+        guard let week = calendar.dateInterval(of: .weekOfYear, for: date),
+              let month = calendar.dateInterval(of: .month, for: date) else {
+            return ProjectActivitySummary(week: .zero, month: .zero)
+        }
+        return ProjectActivitySummary(
+            week: try projectMetrics(projectID: projectID, interval: week),
+            month: try projectMetrics(projectID: projectID, interval: month)
+        )
     }
 
     func productivityInsights(
@@ -133,6 +153,25 @@ struct ActivityQueryService {
             return nil
         }
         return duration
+    }
+
+    private func projectMetrics(
+        projectID: ProjectID,
+        interval: DateInterval
+    ) throws -> ProjectActivityMetrics {
+        let query = ActivityStoreQuery(
+            dateInterval: interval,
+            projectID: projectID.rawValue
+        )
+        let duration = try store.events(matching: query).reduce(Int64(0)) { total, event in
+            total + (commandDurationMilliseconds(for: event) ?? 0)
+        }
+        let usage = try store.tokenUsage(matching: query)
+        return ProjectActivityMetrics(
+            durationMilliseconds: duration,
+            totalTokens: usage.reduce(0) { $0 + $1.totalTokens },
+            totalCostMicros: usage.reduce(0) { $0 + $1.estimatedCostMicros }
+        )
     }
 }
 

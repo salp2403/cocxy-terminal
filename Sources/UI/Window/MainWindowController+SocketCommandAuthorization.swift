@@ -12,131 +12,6 @@ struct SocketPrivilegedCommandApprovalCopy: Equatable {
 }
 
 @MainActor
-final class SocketPrivilegedCommandAuthorizationCoordinator {
-    typealias PresentationTargetProvider = @MainActor () -> SocketPrivilegedCommandPresentationTarget?
-    typealias Completion = @MainActor (SocketPrivilegedCommandAuthorizationGrant?) -> Void
-
-    var presenter: ((
-        SocketPrivilegedCommandAuthorizationRequest,
-        SocketPrivilegedCommandContext
-    ) -> Bool)?
-
-    private var activeRequestID: UUID?
-    private var consumedRequestIDs: [UUID: Date] = [:]
-
-    func requestAuthorization(
-        _ request: SocketPrivilegedCommandAuthorizationRequest,
-        targetProvider: @escaping PresentationTargetProvider,
-        completion: @escaping Completion
-    ) {
-        let now = Date()
-        consumedRequestIDs = consumedRequestIDs.filter { $0.value > now }
-        guard request.isValid(at: now),
-              activeRequestID == nil,
-              consumedRequestIDs[request.id] == nil,
-              let target = targetProvider() else {
-            completion(nil)
-            return
-        }
-
-        consumedRequestIDs[request.id] = request.expiresAt
-        activeRequestID = request.id
-
-        if let presenter {
-            let approved = presenter(request, target.context)
-            activeRequestID = nil
-            guard approved,
-                  request.isValid(at: Date()),
-                  let currentTarget = targetProvider(),
-                  currentTarget.context == target.context,
-                  let approvedContext = currentTarget.contextAfterApproval(),
-                  approvedContext.replacingLocalResourceDigests(
-                    target.context.localResourceDigests
-                  ) == target.context,
-                  targetProvider()?.context == target.context,
-                  request.isValid(at: Date()) else {
-                completion(nil)
-                return
-            }
-            completion(SocketPrivilegedCommandAuthorizationGrant(
-                request: request,
-                context: approvedContext
-            ))
-            return
-        }
-
-        guard let parentWindow = target.controller.window,
-              parentWindow.attachedSheet == nil else {
-            activeRequestID = nil
-            completion(nil)
-            return
-        }
-
-        let copy = MainWindowController.localizedPrivilegedSocketCommandApprovalCopy(
-            request: request,
-            context: target.context,
-            localizer: target.controller.appLocalizer()
-        )
-        let alert = NSAlert()
-        alert.messageText = copy.title
-        alert.informativeText = copy.message
-        alert.alertStyle = .warning
-        alert.icon = NSImage(
-            systemSymbolName: "lock.shield.fill",
-            accessibilityDescription: copy.title
-        ) ?? AppIconGenerator.generatePlaceholderIcon()
-        let approveButton = alert.addButton(withTitle: copy.approveButton)
-        approveButton.keyEquivalent = ""
-        let cancelButton = alert.addButton(withTitle: copy.cancelButton)
-        cancelButton.keyEquivalent = "\u{1B}"
-        alert.accessoryView = MainWindowController.privilegedSocketCommandPreview(
-            MainWindowController.privilegedSocketCommandApprovalPreview(
-                request: request,
-                context: target.context
-            ),
-            accessibilityLabel: copy.previewAccessibilityLabel
-        )
-
-        alert.beginSheetModal(for: parentWindow) { [weak self] response in
-            MainActor.assumeIsolated {
-                guard let self, self.activeRequestID == request.id else { return }
-                self.activeRequestID = nil
-                guard response == .alertFirstButtonReturn,
-                      request.isValid(at: Date()),
-                      let currentTarget = targetProvider(),
-                      currentTarget.context == target.context,
-                      let approvedContext = currentTarget.contextAfterApproval(),
-                      approvedContext.replacingLocalResourceDigests(
-                        target.context.localResourceDigests
-                      ) == target.context,
-                      targetProvider()?.context == target.context,
-                      request.isValid(at: Date()) else {
-                    completion(nil)
-                    return
-                }
-                completion(SocketPrivilegedCommandAuthorizationGrant(
-                    request: request,
-                    context: approvedContext
-                ))
-            }
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, request.expiresAt.timeIntervalSinceNow)) {
-            MainActor.assumeIsolated { [weak self, weak parentWindow, weak alert] in
-                guard let self,
-                      self.activeRequestID == request.id,
-                      let parentWindow,
-                      let alert,
-                      alert.window.sheetParent === parentWindow else {
-                    return
-                }
-                parentWindow.endSheet(alert.window, returnCode: .abort)
-            }
-        }
-    }
-}
-
-@MainActor
 struct SocketPrivilegedCommandPresentationTarget {
     typealias ApprovedContextProvider = @MainActor () -> SocketPrivilegedCommandContext?
 
@@ -215,6 +90,74 @@ extension AppDelegate {
             return nil
         }
         return (controller, surfaceID)
+    }
+
+    @MainActor
+    func preauthorizedTaskOrchestrationGrant(
+        for request: SocketPrivilegedCommandAuthorizationRequest
+    ) -> SocketPrivilegedCommandAuthorizationGrant? {
+        guard request.command == .send || request.command == .sendKey,
+              let token = request.params["orchestration-session"],
+              let rawTabID = request.params["tabId"],
+              let tabUUID = UUID(uuidString: rawTabID),
+              let authorization = taskOrchestrationSessionManager.authorization(
+                  token: token,
+                  tabID: tabUUID
+              ),
+              let run = activeTaskRuns[authorization.runID],
+              run.status == .running,
+              let candidate = run.candidates.first(where: {
+                  $0.status == .running && $0.worktree?.tabID?.rawValue == tabUUID
+              }),
+              let entry = candidate.worktree,
+              let focusedController = focusedWindowController() ?? windowController,
+              let target = terminalInputPresentationTarget(
+                  tabID: rawTabID,
+                  fallbackController: focusedController,
+                  authorityDetails: [
+                      "orchestration-preauthorized": "true",
+                      "orchestration-run-id": authorization.runID,
+                      "orchestration-session-id": authorization.sessionID.uuidString,
+                  ]
+              ),
+              target.context.workingDirectory
+                == entry.path.resolvingSymlinksInPath().standardizedFileURL.path else {
+            return nil
+        }
+        return SocketPrivilegedCommandAuthorizationGrant(
+            request: request,
+            context: target.context
+        )
+    }
+
+    @MainActor
+    func auditTaskOrchestrationWriteIfNeeded(
+        context: SocketPrivilegedCommandContext,
+        command: CLICommandName,
+        payloadBytes: Int
+    ) -> Bool {
+        guard context.authorityDetails["orchestration-preauthorized"] == "true" else {
+            return true
+        }
+        guard command == .send || command == .sendKey,
+              let rawSessionID = context.authorityDetails["orchestration-session-id"],
+              let sessionID = UUID(uuidString: rawSessionID),
+              let runID = context.authorityDetails["orchestration-run-id"],
+              let tabID = context.tabID,
+              let run = activeTaskRuns[runID],
+              run.status == .running,
+              run.candidates.contains(where: {
+                  $0.status == .running && $0.worktree?.tabID?.rawValue == tabID
+              }) else {
+            return false
+        }
+        return taskOrchestrationSessionManager.recordWrite(
+            sessionID: sessionID,
+            runID: runID,
+            tabID: tabID,
+            command: command.rawValue,
+            payloadBytes: payloadBytes
+        )
     }
 
     @MainActor
@@ -306,8 +249,8 @@ extension AppDelegate {
               let focusedController = focusedWindowController() ?? windowController else {
             return nil
         }
-
         switch request.category {
+        case .project: return projectSocketPresentationTarget(for: request, controller: focusedController)
         case .terminalInput, .terminalRead, .terminalSharing:
             if request.command == .timelineShow || request.command == .timelineExport {
                 if let rawTabID = request.params["tabId"] {
@@ -333,16 +276,28 @@ extension AppDelegate {
                 )
             }
             if let rawTabID = request.params["tabId"] {
-                guard request.command == .timelineShow
-                    || request.command == .timelineExport
-                    || request.command == .search else {
+                switch request.command {
+                case .send, .sendKey:
+                    return terminalInputPresentationTarget(
+                        tabID: rawTabID,
+                        fallbackController: focusedController,
+                        requiredSurfaceID: request.params["surfaceId"]
+                    )
+                case .handoffExport:
+                    return terminalTabPresentationTarget(
+                        tabID: rawTabID,
+                        fallbackController: focusedController,
+                        displayPrefix: "Task handoff source"
+                    )
+                case .timelineShow, .timelineExport, .search:
+                    return terminalTabPresentationTarget(
+                        tabID: rawTabID,
+                        fallbackController: focusedController,
+                        displayPrefix: "Terminal tab"
+                    )
+                default:
                     return nil
                 }
-                return terminalTabPresentationTarget(
-                    tabID: rawTabID,
-                    fallbackController: focusedController,
-                    displayPrefix: "Terminal tab"
-                )
             }
             guard let (tabID, tab) = activeTab(in: focusedController) else { return nil }
             let workingDirectory = canonicalWorkingDirectory(for: tab)
@@ -362,24 +317,11 @@ extension AppDelegate {
                     controller: focusedController
                 )
             }
-            guard let surfaceID = focusedController.focusedSplitSurfaceView?.terminalViewModel?.surfaceID
-                ?? focusedController.activeTerminalSurfaceView?.terminalViewModel?.surfaceID,
-                  focusedController.surfaceIDs(for: tabID).contains(surfaceID) else {
-                return nil
-            }
-            return SocketPrivilegedCommandPresentationTarget(
-                context: SocketPrivilegedCommandContext(
-                    scope: .terminalSurface,
-                    windowControllerIdentifier: ObjectIdentifier(focusedController),
-                    tabID: tabID.rawValue,
-                    workingDirectory: workingDirectory,
-                    surfaceID: surfaceID.rawValue,
-                    browserViewModelIdentifier: nil,
-                    browserTabID: nil,
-                    browserURL: nil,
-                    targetDisplayName: "Terminal surface \(surfaceID.rawValue.uuidString)"
-                ),
-                controller: focusedController
+            return terminalInputPresentationTarget(
+                tabID: tabID,
+                tab: tab,
+                controller: focusedController,
+                workingDirectory: workingDirectory
             )
 
         case .browserControl, .browserRead:
@@ -471,8 +413,16 @@ extension AppDelegate {
             )
 
         case .localExecution:
-            if request.command == .agentTeamLaunch {
-                guard let (tabID, tab) = activeTab(in: focusedController) else { return nil }
+            if request.command == .handoffImport {
+                guard let rawAgent = request.params["agent"],
+                      let artifact = request.params["artifact"],
+                      let destination = try? TaskHandoffDestination.make(
+                          agent: rawAgent,
+                          artifact: artifact
+                      ),
+                      let (tabID, tab) = activeTab(in: focusedController) else {
+                    return nil
+                }
                 let workingDirectory = canonicalWorkingDirectory(for: tab)
                 return SocketPrivilegedCommandPresentationTarget(
                     context: SocketPrivilegedCommandContext(
@@ -480,11 +430,147 @@ extension AppDelegate {
                         windowControllerIdentifier: ObjectIdentifier(focusedController),
                         tabID: tabID.rawValue,
                         workingDirectory: workingDirectory,
+                        authorityDetails: destination.authorityDetails,
                         surfaceID: nil,
                         browserViewModelIdentifier: nil,
                         browserTabID: nil,
                         browserURL: nil,
-                        targetDisplayName: "Agent team in \(tab.displayTitle)"
+                        targetDisplayName: "Pass task from \(tab.displayTitle) to "
+                            + destination.provider.displayName
+                    ),
+                    controller: focusedController
+                )
+            }
+            if request.command == .taskRunPromote {
+                guard let rawRunID = request.params["run-id"],
+                      let rawCandidateID = request.params["candidate-id"],
+                      let run = activeTaskRuns[AgentTeamConfig.slug(rawRunID)],
+                      run.status == .running,
+                      let candidate = run.candidates.first(where: {
+                          $0.id == AgentTeamConfig.slug(rawCandidateID) }),
+                      candidate.status != .orphaned,
+                      let entry = candidate.worktree,
+                      let tabID = entry.tabID,
+                      let controller = controllerContainingTab(tabID),
+                      controller.tabManager.tab(for: tabID) != nil else {
+                    return nil
+                }
+                let workingDirectory = entry.path
+                    .resolvingSymlinksInPath()
+                    .standardizedFileURL.path
+                return SocketPrivilegedCommandPresentationTarget(
+                    context: SocketPrivilegedCommandContext(
+                        scope: .localExecution,
+                        windowControllerIdentifier: ObjectIdentifier(controller),
+                        tabID: tabID.rawValue,
+                        workingDirectory: workingDirectory,
+                        authorityDetails: Self.taskRunPromotionAuthorityDetails(
+                            run: run,
+                            candidate: candidate,
+                            entry: entry
+                        ),
+                        surfaceID: nil,
+                        browserViewModelIdentifier: nil,
+                        browserTabID: nil,
+                        browserURL: nil,
+                        targetDisplayName: "Promote \(candidate.provider.displayName) candidate \(entry.branch)"
+                    ),
+                    controller: controller
+                )
+            }
+            if request.command == .taskEnqueue {
+                guard let authorityDetails = TaskQueueSocketAuthority.details(
+                    operation: "enqueue", params: request.params
+                ),
+                      let workingDirectoryURL = canonicalCLIPath(request.params["cwd"]),
+                      Self.isExistingDirectory(workingDirectoryURL) else { return nil }
+                var localResourcePaths = ["cwd": workingDirectoryURL.path]
+                var localResourceDigests: [String: String] = [:]
+                if let rawProject = request.params["project"] {
+                    guard let projectURL = canonicalCLIPath(rawProject),
+                          Self.isExistingDirectory(projectURL) else { return nil }
+                    localResourcePaths["project"] = projectResolver
+                        .resolveProject(for: projectURL).groupingRootURL.path
+                }
+                if request.params["input"] != nil {
+                    guard let inputURL = canonicalCLIPath(request.params["input"]),
+                          let digest = SocketPrivilegedCommandSecurity
+                            .boundedFileDigest(at: inputURL) else { return nil }
+                    localResourcePaths["input"] = inputURL.path
+                    localResourceDigests["input"] = digest
+                }
+                return globalPresentationTarget(
+                    controller: focusedController,
+                    scope: .localExecution,
+                    workingDirectory: workingDirectoryURL.path,
+                    localResourcePaths: localResourcePaths,
+                    localResourceDigests: localResourceDigests,
+                    authorityDetails: authorityDetails,
+                    displayName: "Queue task \(authorityDetails["task-id"] ?? "task")"
+                )
+            }
+            if request.command == .taskCancel
+                || request.command == .taskRerun
+                || request.command == .taskRemove {
+                let operation: String
+                switch request.command {
+                case .taskCancel: operation = "cancel"
+                case .taskRerun: operation = "rerun"
+                case .taskRemove: operation = "remove"
+                default: preconditionFailure("Validated task queue command drifted")
+                }
+                guard let authorityDetails = TaskQueueSocketAuthority.details(
+                    operation: operation,
+                    params: request.params
+                ) else {
+                    return nil
+                }
+                return globalPresentationTarget(
+                    controller: focusedController,
+                    scope: .localExecution,
+                    authorityDetails: authorityDetails,
+                    displayName: "\(operation.capitalized) task \(authorityDetails["task-id"] ?? "task")"
+                )
+            }
+            if request.command == .agentTeamLaunch || request.command == .taskRun {
+                guard let (tabID, tab) = activeTab(in: focusedController) else { return nil }
+                let workingDirectory = canonicalWorkingDirectory(for: tab)
+                let authorityDetails: [String: String]
+                if request.command == .taskRun {
+                    guard let launchContext = focusedTaskRunLaunchContext(),
+                          launchContext.windowID == focusedController.windowID,
+                          launchContext.sourceTabID == tabID else {
+                        return nil
+                    }
+                    authorityDetails = Self.taskRunLaunchAuthorityDetails(
+                        for: launchContext
+                    )
+                } else {
+                    guard let plan = try? AgentTeamCLILaunchPlanner.make(
+                        params: request.params,
+                        workingDirectory: workingDirectory,
+                        fallbackTeamID: "team-\(request.id.uuidString.prefix(8))",
+                        adapterRegistry: agentTeamProviderAdapterRegistry
+                    ) else {
+                        return nil
+                    }
+                    authorityDetails = plan.authorityDetails
+                }
+                let targetName = request.command == .taskRun
+                    ? "Parallel task in \(tab.displayTitle)"
+                    : "Agent team in \(tab.displayTitle)"
+                return SocketPrivilegedCommandPresentationTarget(
+                    context: SocketPrivilegedCommandContext(
+                        scope: .localExecution,
+                        windowControllerIdentifier: ObjectIdentifier(focusedController),
+                        tabID: tabID.rawValue,
+                        workingDirectory: workingDirectory,
+                        authorityDetails: authorityDetails,
+                        surfaceID: nil,
+                        browserViewModelIdentifier: nil,
+                        browserTabID: nil,
+                        browserURL: nil,
+                        targetDisplayName: targetName
                     ),
                     controller: focusedController
                 )
@@ -754,6 +840,12 @@ extension AppDelegate {
         return URL(fileURLWithPath: expanded)
             .resolvingSymlinksInPath()
             .standardizedFileURL
+    }
+
+    private static func isExistingDirectory(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
     }
 
     private func canonicalSocketResourcePaths(

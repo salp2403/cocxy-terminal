@@ -1,25 +1,5 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// AuroraChromeController.swift - Integration seam between the live
-// production domain (TabManager + AgentStatePerSurfaceStore) and the
-// Aurora presentation module.
-//
-// This is the only file in `Sources/UI/Design/` that imports AppKit and
-// domain types. The rest of the design module stays presentation-only;
-// here we bridge the two without leaking SwiftUI internals into the
-// domain or AppKit mount points into the views.
-//
-// Responsibilities:
-//   - Own the `@ObservableObject` state consumed by Aurora views.
-//   - Build the Aurora input list through `AuroraSourceBuilder` and feed
-//     the adapter so the sidebar/status bar always reflect live data.
-//   - Hand the host view controller ready-to-mount `NSHostingView`
-//     instances for sidebar, status bar and palette overlay.
-//   - Route SwiftUI callbacks (activate session, create tab, execute
-//     palette action) to injectable closures so the host stays in
-//     control of every mutation.
-//
-// The controller is additive: while the feature flag is off it is never
-// instantiated, so the classic chrome path stays bit-for-bit unchanged.
+// AuroraChromeController.swift - Bridges domain snapshots and callbacks into Aurora hosts.
 
 import AppKit
 import Combine
@@ -30,27 +10,25 @@ final class AuroraChromeController: ObservableObject {
 
     // MARK: - Published state
 
-    /// Aurora workspace tree consumed by the sidebar and the status-bar
-    /// agent matrix. Rebuilt on every snapshot update.
     @Published var workspaces: [Design.AuroraWorkspace] = []
-
-    /// Session id matching `Tab.id.uuidString`, used by the sidebar to
-    /// highlight the active row.
+    @Published var projects: [ProjectPresentationItem] = []
+    @Published private(set) var projectTaskCounts: [String: Int] = [:]
+    @Published var projectRegistryErrorDescription: String?
+    @Published private(set) var projectRegistryWritable = true
+    @Published private(set) var projectRegistryRecoveryDiagnostic:
+        ProjectRegistryRecoveryDiagnostic?
     @Published var activeSessionID: String?
 
-    /// Port bindings surfaced on the Aurora status bar. Mirrored from the
-    /// live `PortScannerImpl` whenever the integration layer wires one in.
+    @Published var sidebarRenameRequest: Design.AuroraSidebarRenameRequest?
+
     @Published var ports: [Design.AuroraPortBinding] = []
 
-    /// Timeline scrubber snapshot. Default "live / now" until the
-    /// command-duration store feeds a real replay window.
     @Published var timeline: Design.AuroraTimelineState = .init(progress: 1)
 
-    /// Clock label rendered at the far right of the Aurora status bar.
-    /// Updated once per second by the integration layer.
     @Published var clockLabel: String = ""
 
-    /// Palette data mirrored from the production engine.
+    @Published var isTerminalMouseCaptured: Bool = false
+
     @Published var paletteActions: [Design.AuroraPaletteAction] = []
     @Published var paletteStrings: Design.AuroraPaletteStrings = .english
     @Published var isPaletteVisible: Bool = false
@@ -68,65 +46,39 @@ final class AuroraChromeController: ObservableObject {
     @Published var paletteShortcutLabel: String = "⇧⌘P"
     @Published var newTabShortcutLabel: String = "⌘T"
 
-    /// Available Cocxy update detected by the Sparkle bridge. Nil hides
-    /// the sidebar update affordance.
     @Published var availableUpdate: CocxyUpdateAvailability?
 
-    /// Live Aurora visual theme. The host keeps this aligned with the
-    /// terminal theme so the sidebar/status/palette do not stay dark when
-    /// the user switches the shell to a light palette.
     @Published var themeIdentity: Design.ThemeIdentity = .aurora
 
-    /// User-selected density for the Aurora vertical sidebar.
     @Published var sidebarDisplayMode: AuroraSidebarDisplayMode = .detailed
 
-    /// User-selected metadata signal shown in Aurora session rows.
     @Published var sidebarPrimaryInfo: AuroraSidebarPrimaryInfo = .state
 
-    /// Local app-language resolver mirrored from the window controller.
-    /// Aurora hosts are SwiftUI overlays, so publishing this value lets
-    /// language config reloads repaint sidebar chrome without rebuilding
-    /// the AppKit mount points.
     @Published var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
-    /// Sidebar hover inspector rendered by a separate passthrough host
-    /// on the window overlay layer. Keeping it outside the sidebar's
-    /// hosting view prevents the card from covering rows while the user
-    /// navigates or opens context menus.
     @Published var sidebarTooltip: Design.AuroraSidebarTooltipSnapshot?
     @Published var sidebarTooltipSidebarFrameInOverlay: CGRect = .zero
 
-    // MARK: - Dependencies (weak)
-
     private weak var tabManager: TabManager?
     private weak var store: AgentStatePerSurfaceStore?
+    private let projectResolver: (any ProjectResolving)?
+    private let projectRegistry: ProjectRegistry?
+    private let gitInfoProvider: (any GitInfoProviding)?
 
     // MARK: - Host callbacks
 
-    /// Invoked when the user picks a session row in the Aurora sidebar.
-    /// The host resolves the session id back to the owning tab and
-    /// activates it through the existing focus path.
     var onActivateSession: ((TabID) -> Void)?
 
-    /// Invoked when the user taps the "+" button in the Aurora sidebar
-    /// header. Wired to the controller's `createTab()` path so the new
-    /// tab goes through the standard lifecycle hooks.
     var onCreateTab: (() -> Void)?
 
-    /// Invoked when the user clicks a session-row close affordance in
-    /// the Aurora sidebar. The host routes this through the same
-    /// `closeTab(_:)` lifecycle as the classic tab strip, including
-    /// pinned-tab guards, close confirmation, split teardown and store
-    /// cleanup.
     var onCloseSession: ((TabID) -> Void)?
 
-    /// Context-menu parity with the classic sidebar. Aurora rows are
-    /// SwiftUI, not `TabItemView`, so pinning / close-others / movement
-    /// are routed through explicit callbacks instead of reusing AppKit's
-    /// `NSMenuItem` target-action handlers.
     var onTogglePinSession: ((TabID) -> Void)?
-    var onRenameSession: ((TabID) -> Void)?
-    var onRenameWorkspace: ((String, String) -> Void)?
+    var onRenameSession: ((TabID, String?) -> Void)?
+    var onRenameWorkspace: ((String, String?) -> Void)?
+    var onSetWorkspaceCollapsed: ((String, Bool) -> Void)?
+    var onActivateProject: ((String) -> Void)?
+    var onSetProjectPinned: ((String, Bool) -> Void)?
     var onCloseOtherSessions: ((TabID) -> Void)?
     var onMoveSessionUp: ((TabID) -> Void)?
     var onMoveSessionDown: ((TabID) -> Void)?
@@ -134,18 +86,12 @@ final class AuroraChromeController: ObservableObject {
     var onSidebarDisplayModeChange: ((AuroraSidebarDisplayMode) -> Void)?
     var onSidebarPrimaryInfoChange: ((AuroraSidebarPrimaryInfo) -> Void)?
 
-    /// Invoked when the user presses the palette hotkey inside an
-    /// Aurora view (sidebar header button, palette-trigger keyboard
-    /// shortcut). Delegates to `toggleCommandPalette()` on the host.
+    var workspaceTitlesProvider: (() -> [String: String])?
+    var projectLiveIDsProvider: (() -> Set<String>)?
     var onTogglePalette: (() -> Void)?
 
-    /// Invoked when a palette action is executed. Uses the action id
-    /// so the host can forward to the shared engine without leaking
-    /// engine types into the design module.
     var onExecutePaletteAction: ((String) -> Void)?
 
-    /// Invoked when the palette overlay is dismissed without picking
-    /// an action (escape key, backdrop tap).
     var onDismissPalette: (() -> Void)?
 
     /// Invoked when the user clicks the bell glyph in the Aurora
@@ -241,6 +187,14 @@ final class AuroraChromeController: ObservableObject {
     /// arrives so a slow provider cannot race a faster follow-up and
     /// publish stale data on top.
     private var notesSummariesTask: Task<Void, Never>?
+    private var projectRecordsSnapshot: [ProjectRecord] = []
+    private var liveProjectIDs: Set<String> = []
+
+    var projectAvailabilityProvider: (URL) -> Bool = { url in
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+    }
 
     /// Live provider for each tab's effective `[worktree].show-badge`
     /// config flag. The controller reads it on every refresh so
@@ -254,10 +208,16 @@ final class AuroraChromeController: ObservableObject {
 
     init(
         tabManager: TabManager,
-        store: AgentStatePerSurfaceStore
+        store: AgentStatePerSurfaceStore,
+        projectResolver: (any ProjectResolving)? = nil,
+        projectRegistry: ProjectRegistry? = nil,
+        gitInfoProvider: (any GitInfoProviding)? = nil
     ) {
         self.tabManager = tabManager
         self.store = store
+        self.projectResolver = projectResolver
+        self.projectRegistry = projectRegistry
+        self.gitInfoProvider = gitInfoProvider
         updateClockLabel()
     }
 
@@ -270,6 +230,8 @@ final class AuroraChromeController: ObservableObject {
 
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
+        let hosts: [NSView?] = [sidebarHost, statusBarHost, paletteHost, sidebarTooltipHost]
+        hosts.compactMap { $0 }.forEach(applyCurrentLayoutDirection)
     }
 
     func updateSidebarDisplayMode(_ mode: AuroraSidebarDisplayMode) {
@@ -286,9 +248,6 @@ final class AuroraChromeController: ObservableObject {
 
     // MARK: - Subscriptions
 
-    /// Starts observing domain changes. Called by the host after the
-    /// controller is installed. Safe to call multiple times; prior
-    /// subscriptions are dropped so reinstalls do not accumulate sinks.
     func beginObservingDomain() {
         cancellables.removeAll()
 
@@ -309,6 +268,33 @@ final class AuroraChromeController: ObservableObject {
         store.$states
             .sink { [weak self] states in
                 self?.refreshSources(stateSnapshot: states)
+            }
+            .store(in: &cancellables)
+
+        projectRegistry?.$records
+            .sink { [weak self] records in
+                guard let self else { return }
+                projectRecordsSnapshot = records
+                refreshSources(projectRecordsSnapshot: records)
+                refreshRegisteredProjects()
+            }
+            .store(in: &cancellables)
+
+        projectRegistry?.$persistenceErrorDescription
+            .sink { [weak self] errorDescription in
+                self?.projectRegistryErrorDescription = errorDescription
+            }
+            .store(in: &cancellables)
+
+        projectRegistry?.$recoveryDiagnostic
+            .sink { [weak self] diagnostic in
+                self?.projectRegistryRecoveryDiagnostic = diagnostic
+            }
+            .store(in: &cancellables)
+
+        projectRegistry?.$canPersist
+            .sink { [weak self] canPersist in
+                self?.projectRegistryWritable = canPersist
             }
             .store(in: &cancellables)
 
@@ -367,7 +353,7 @@ final class AuroraChromeController: ObservableObject {
     /// previous in-flight task is cancelled so the latest input wins.
     @discardableResult
     func refreshNotesSummaries() -> Task<Void, Never>? {
-        let ids = Set(workspaces.compactMap(\.notesWorkspaceID))
+        let ids = Set(workspaces.flatMap(\.notesWorkspaceIDs))
         return fetchNotesSummaries(for: ids)
     }
 
@@ -377,7 +363,7 @@ final class AuroraChromeController: ObservableObject {
     /// added/removed tabs without forcing a refetch on every render
     /// (agent state churn, surface lifecycle, palette toggles).
     private func refreshNotesSummariesIfWorkspacesChanged() {
-        let ids = Set(workspaces.compactMap(\.notesWorkspaceID))
+        let ids = Set(workspaces.flatMap(\.notesWorkspaceIDs))
         if ids == lastRequestedNotesWorkspaceIDs { return }
         _ = fetchNotesSummaries(for: ids)
     }
@@ -440,17 +426,22 @@ final class AuroraChromeController: ObservableObject {
         )
     }
 
-    /// Rebuilds the workspace tree while using an explicit active tab
-    /// and domain snapshots. `@Published` emits during `willSet`, so
-    /// sinks must use the value Combine just delivered instead of
-    /// reading the source object again. Otherwise the terminal/agent can
-    /// update correctly while Aurora repaints from the previous tab list,
-    /// previous active tab, or previous per-surface agent state until
-    /// some unrelated refresh happens.
+    func refreshProjects() {
+        refreshSources()
+        refreshRegisteredProjects()
+    }
+
+    func applyProjectTaskCountsSnapshot(_ counts: [String: Int]) {
+        guard counts != projectTaskCounts else { return }
+        projectTaskCounts = counts
+    }
+
+    /// Explicit snapshots avoid rereading stale `@Published` values during `willSet`.
     private func refreshSources(
         tabsSnapshot: [Tab]? = nil,
         activeTabID: TabID? = nil,
-        stateSnapshot: [SurfaceID: SurfaceAgentState]? = nil
+        stateSnapshot: [SurfaceID: SurfaceAgentState]? = nil,
+        projectRecordsSnapshot: [ProjectRecord]? = nil
     ) {
         guard let tabManager, let store else { return }
 
@@ -461,16 +452,38 @@ final class AuroraChromeController: ObservableObject {
             surfaceIDsByTab: surfaceMap,
             store: store,
             stateSnapshot: stateSnapshot,
+            projectResolver: projectResolver,
+            gitInfoProvider: gitInfoProvider,
+            workspaceTitlesByIdentity: workspaceTitlesProvider?(),
             worktreeBadgeVisibleProvider: worktreeBadgeVisibleProvider
         )
         let resolvedActiveTabID = activeTabID ?? tabManager.activeTabID
         activeSessionID = resolvedActiveTabID?.rawValue.uuidString
-        workspaces = Design.AuroraWorkspaceAdapter.workspaces(from: sources)
+        let records = projectRecordsSnapshot ?? projectRegistry?.records ?? []
+        let collapsedIDs = Set(records.lazy.filter(\.isCollapsed).map { $0.id.rawValue })
+        workspaces = Design.AuroraWorkspaceAdapter.workspaces(
+            from: sources,
+            collapsedWorkspaceIDs: collapsedIDs
+        )
+        let updatedLiveProjectIDs = projectLiveIDsProvider?() ?? Set(workspaces.map(\.id))
+        if updatedLiveProjectIDs != liveProjectIDs {
+            liveProjectIDs = updatedLiveProjectIDs
+            refreshRegisteredProjects()
+        }
         // Re-fetch notes summaries when the visible workspace IDs
         // change (tab opened/closed, project switched). Internal dedup
         // makes this safe to call on every refresh — agent state churn
         // does not retrigger a fetch.
         refreshNotesSummariesIfWorkspacesChanged()
+    }
+
+    private func refreshRegisteredProjects() {
+        projects = ProjectPresentationBuilder.makeItems(
+            records: projectRecordsSnapshot,
+            aliases: workspaceTitlesProvider?() ?? [:],
+            liveProjectIDs: liveProjectIDs,
+            availability: projectAvailabilityProvider
+        )
     }
 
     // MARK: - Palette
@@ -536,6 +549,7 @@ final class AuroraChromeController: ObservableObject {
     func makeSidebarHost() -> AuroraHostingView<AuroraSidebarHost> {
         if let cached = sidebarHost { return cached }
         let host = AuroraHostingView(rootView: AuroraSidebarHost(controller: self))
+        applyCurrentLayoutDirection(to: host)
         host.translatesAutoresizingMaskIntoConstraints = true
         sidebarHost = host
         return host
@@ -545,6 +559,7 @@ final class AuroraChromeController: ObservableObject {
     func makeStatusBarHost() -> AuroraHostingView<AuroraStatusBarHost> {
         if let cached = statusBarHost { return cached }
         let host = AuroraHostingView(rootView: AuroraStatusBarHost(controller: self))
+        applyCurrentLayoutDirection(to: host)
         host.translatesAutoresizingMaskIntoConstraints = true
         statusBarHost = host
         return host
@@ -557,6 +572,7 @@ final class AuroraChromeController: ObservableObject {
     func makePaletteHost() -> AuroraHostingView<AuroraPaletteHost> {
         if let cached = paletteHost { return cached }
         let host = AuroraHostingView(rootView: AuroraPaletteHost(controller: self))
+        applyCurrentLayoutDirection(to: host)
         host.translatesAutoresizingMaskIntoConstraints = true
         paletteHost = host
         return host
@@ -568,9 +584,17 @@ final class AuroraChromeController: ObservableObject {
     func makeSidebarTooltipHost() -> AuroraPassthroughHostingView<AuroraSidebarTooltipHost> {
         if let cached = sidebarTooltipHost { return cached }
         let host = AuroraPassthroughHostingView(rootView: AuroraSidebarTooltipHost(controller: self))
+        applyCurrentLayoutDirection(to: host)
         host.translatesAutoresizingMaskIntoConstraints = true
         sidebarTooltipHost = host
         return host
+    }
+
+    private func applyCurrentLayoutDirection(to view: NSView) {
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: view
+        )
     }
 
     func updateSidebarTooltipSidebarFrameInOverlay(_ frame: CGRect) {
@@ -637,6 +661,36 @@ final class AuroraChromeController: ObservableObject {
         }?.id
     }
 
+    @discardableResult
+    func requestRenameSession(_ tabID: TabID) -> Bool {
+        let sessionID = tabID.rawValue.uuidString
+        guard let session = workspaces.lazy
+            .flatMap(\.sessions)
+            .first(where: { $0.id == sessionID }) else {
+            return false
+        }
+        sidebarRenameRequest = Design.AuroraSidebarRenameRequest(
+            target: .session(sessionID),
+            currentName: session.name
+        )
+        return true
+    }
+
+    @discardableResult
+    func requestRenameWorkspace(containing tabID: TabID) -> Bool {
+        let sessionID = tabID.rawValue.uuidString
+        guard let workspace = workspaces.first(where: { workspace in
+            workspace.sessions.contains { $0.id == sessionID }
+        }) else {
+            return false
+        }
+        sidebarRenameRequest = Design.AuroraSidebarRenameRequest(
+            target: .workspace(workspace.id),
+            currentName: workspace.name
+        )
+        return true
+    }
+
     /// Reorders the underlying tabs so the source Aurora session lands
     /// immediately before the target session. Used by the vertical
     /// sidebar's drag-and-drop path and kept on the controller so SwiftUI
@@ -673,100 +727,7 @@ final class AuroraChromeController: ObservableObject {
 
 // MARK: - SwiftUI host wrappers
 
-/// Wrapper view that observes the controller so SwiftUI re-renders when
-/// any published property changes. Using a dedicated wrapper avoids
-/// stashing Combine bindings on NSHostingView (which would break
-/// reactive updates) and keeps the design-module view contracts intact.
-struct AuroraSidebarHost: View {
-
-    @ObservedObject var controller: AuroraChromeController
-
-    var body: some View {
-        // Workspace disclosure is presentation state owned by the
-        // sidebar. The controller owns active selection because it is
-        // derived from `TabManager`.
-        Design.AuroraSidebarView(
-            workspaces: controller.workspaces,
-            activeSessionID: controller.activeSessionID,
-            notesByWorkspace: controller.notesByWorkspace,
-            onTogglePalette: { controller.onTogglePalette?() },
-            onCreateTab: { controller.onCreateTab?() },
-            onActivateSession: { sessionID in
-                if let tabID = controller.tabID(forSessionID: sessionID) {
-                    controller.onActivateSession?(tabID)
-                }
-            },
-            onCloseSession: { sessionID in
-                if let tabID = controller.tabID(forSessionID: sessionID) {
-                    controller.onCloseSession?(tabID)
-                }
-            },
-            onTogglePinSession: { sessionID in
-                if let tabID = controller.tabID(forSessionID: sessionID) {
-                    controller.onTogglePinSession?(tabID)
-                }
-            },
-            onRequestRenameSession: { sessionID in
-                if let tabID = controller.tabID(forSessionID: sessionID) {
-                    controller.onRenameSession?(tabID)
-                }
-            },
-            onRequestRenameWorkspace: { workspaceID, currentName in
-                controller.onRenameWorkspace?(workspaceID, currentName)
-            },
-            onCloseOtherSessions: { sessionID in
-                if let tabID = controller.tabID(forSessionID: sessionID) {
-                    controller.onCloseOtherSessions?(tabID)
-                }
-            },
-            onMoveSessionUp: { sessionID in
-                if let tabID = controller.tabID(forSessionID: sessionID) {
-                    controller.onMoveSessionUp?(tabID)
-                }
-            },
-            onMoveSessionDown: { sessionID in
-                if let tabID = controller.tabID(forSessionID: sessionID) {
-                    controller.onMoveSessionDown?(tabID)
-                }
-            },
-            onMoveSessionBefore: { sourceSessionID, targetSessionID in
-                _ = controller.moveSession(sourceSessionID, before: targetSessionID)
-            },
-            onMovePaneToSession: { paneID, targetSessionID in
-                _ = controller.movePane(paneID, toSessionID: targetSessionID)
-            },
-            onToggleNotifications: controller.onToggleNotifications.map { handler in
-                { handler() }
-            },
-            onToggleNotes: controller.onToggleNotes.map { handler in
-                { handler() }
-            },
-            onOpenNote: controller.onOpenNoteInWorkspace.map { handler in
-                { workspaceID, noteID in handler(workspaceID, noteID) }
-            },
-            onInstallUpdate: controller.availableUpdate.map { _ in
-                { controller.onInstallUpdate?() }
-            },
-            onHoverSession: { snapshot in
-                controller.sidebarTooltip = snapshot
-            },
-            availableUpdate: controller.availableUpdate,
-            displayMode: controller.sidebarDisplayMode,
-            primaryInfo: controller.sidebarPrimaryInfo,
-            onDisplayModeChange: { mode in
-                controller.updateSidebarDisplayMode(mode)
-            },
-            onPrimaryInfoChange: { info in
-                controller.updateSidebarPrimaryInfo(info)
-            },
-            paletteShortcutLabel: controller.paletteShortcutLabel,
-            newTabShortcutLabel: controller.newTabShortcutLabel,
-            localizer: controller.localizer
-        )
-        .designThemePalette(Design.palette(for: controller.themeIdentity))
-    }
-}
-
+/// Observes the controller so published snapshots keep the SwiftUI host current.
 struct AuroraStatusBarHost: View {
 
     @ObservedObject var controller: AuroraChromeController
@@ -780,6 +741,7 @@ struct AuroraStatusBarHost: View {
                 set: { controller.timeline = $0 }
             ),
             clockLabel: controller.clockLabel,
+            isTerminalMouseCaptured: controller.isTerminalMouseCaptured,
             onReplay: controller.statusBarReplayAvailable
                 ? { controller.openSessionReplayFromStatusBar() }
                 : nil,
@@ -876,6 +838,7 @@ final class AuroraHostingView<Content: View>: NSHostingView<Content> {
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func becomeFirstResponder() -> Bool { true }
 }
 

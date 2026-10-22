@@ -1,20 +1,6 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// MainWindowController+AuroraIntegration.swift - Mounts and toggles the
-// Aurora chrome side-by-side with the classic chrome based on the
-// `appearance.aurora-enabled` feature flag.
-//
-// Strategy: dual-mount. Aurora's `NSHostingView`s live alongside the
-// classic `TabBarView` and `statusBarHostingView` as siblings in the
-// same containers. Neither hierarchy is torn down or rebuilt on toggle
-// — we only flip `isHidden` so bindings, first responder and scroll
-// state survive the switch. While the flag is off, the Aurora hosting
-// views are never instantiated so the classic path incurs zero extra
-// work.
-//
-// The Aurora chrome is presentation-only. Every side effect the user
-// triggers from an Aurora view (activate session, create tab, toggle
-// palette, execute a palette action) is routed back to the controller's
-// existing handlers, so behaviour is identical across both chromes.
+// MainWindowController+AuroraIntegration.swift - Dual-mounts Aurora with
+// classic chrome and routes every action through existing window handlers.
 
 import AppKit
 import Combine
@@ -24,22 +10,10 @@ import SwiftUI
 
 extension MainWindowController {
 
-    /// Fallback height for the Aurora status bar used only when the
-    /// classic `statusBarHostingView` has not been built yet (extremely
-    /// rare — essentially tests without a full window boot). Matches
-    /// the classic `statusBarHeight` so both chromes share the same
-    /// vertical budget and the split view never shifts when the user
-    /// toggles the feature flag at runtime.
+    /// Matches the classic status bar when its host has not been built yet.
     private static var auroraStatusBarFallbackHeight: CGFloat { 24 }
 
-    /// How often Aurora audits visible panes while the redesign is active.
-    ///
-    /// Semantic callbacks still update the store immediately. This loop is
-    /// intentionally a slow safety net for launch banners that were already
-    /// visible before the callback wiring existed or for panes whose state
-    /// was reset by shell-prompt recovery while a full-screen TUI remains on
-    /// screen. Keep this slower than live semantic callbacks: it is a recovery
-    /// safety net, not the primary source of truth.
+    /// Slow recovery audit; semantic callbacks remain the primary source.
     private static var auroraAgentReconciliationInterval: TimeInterval { 5.0 }
 
     private static var auroraAgentVisibleRowScanLimit: Int { 80 }
@@ -182,24 +156,11 @@ extension MainWindowController {
         controller.refreshNotesSummaries()
     }
 
-    /// Applies the Aurora chrome state using the current `ConfigService`
-    /// snapshot. Invoked by `AppDelegate.configureSharedServices(...)`
-    /// after every service has been injected, which is the earliest
-    /// moment the integration has the per-surface store it needs to
-    /// build Aurora source data.
-    ///
-    /// Safe no-op when no config service is wired (tests, fallback
-    /// windows) or when the flag is off.
     func applyInitialAuroraChromeStateIfNeeded() {
         guard let appearance = configService?.current.appearance else { return }
         applyAuroraChromeIfNeeded(for: appearance)
     }
 
-    /// Creates the controller, wires its callbacks to the live window
-    /// controller state and mounts the hosting views into the existing
-    /// containers. Called lazily so zero allocations happen while the
-    /// flag is off.
-    ///
     /// The function is a no-op after the first successful install so
     /// config reloads that leave `auroraEnabled` true do not rebuild
     /// subviews and lose scroll / focus state.
@@ -208,11 +169,24 @@ extension MainWindowController {
         guard let rootView = window?.contentView else { return }
         guard let splitView = mainSplitView else { return }
         guard let agentStore = injectedPerSurfaceStore else { return }
-
         let controller = AuroraChromeController(
             tabManager: tabManager,
-            store: agentStore
+            store: agentStore,
+            projectResolver: projectResolver,
+            projectRegistry: projectRegistry,
+            gitInfoProvider: gitInfoProvider
         )
+        wireProjectHomeInbox(to: controller)
+        auroraWorkspaceTitleStore.mergeMissing(
+            AuroraWorkspacePlanner.legacyTitlesByIdentity(
+                from: tabManager.tabs,
+                projectResolver: projectResolver
+            )
+        )
+        controller.workspaceTitlesProvider = { [weak self] in
+            self?.auroraWorkspaceTitleStore.snapshot ?? [:]
+        }
+        controller.projectLiveIDsProvider = { [weak self] in self?.projectLiveIDsProvider?() ?? [] }
         if let variant = (NSApp.delegate as? AppDelegate)?.themeEngine?.activeTheme.metadata.variant {
             controller.themeIdentity = Self.auroraThemeIdentity(for: variant)
         }
@@ -244,11 +218,20 @@ extension MainWindowController {
             self.tabManager.togglePin(id: tabID)
             self.refreshAuroraChromeAfterTabMutation()
         }
-        controller.onRenameSession = { [weak self] tabID in
-            self?.presentAuroraTabRename(for: tabID)
+        controller.onRenameSession = { [weak self] tabID, newTitle in
+            self?.applyAuroraSessionRename(tabID: tabID, newTitle: newTitle)
         }
-        controller.onRenameWorkspace = { [weak self] workspaceID, currentName in
-            self?.presentAuroraWorkspaceRename(workspaceID: workspaceID, currentName: currentName)
+        controller.onRenameWorkspace = { [weak self] workspaceID, newTitle in
+            self?.applyAuroraWorkspaceRename(workspaceID: workspaceID, newTitle: newTitle)
+        }
+        controller.onSetWorkspaceCollapsed = { [weak self] workspaceID, collapsed in
+            self?.setProjectCollapsed(collapsed, projectID: ProjectID(rawValue: workspaceID))
+        }
+        controller.onActivateProject = { [weak self] projectID in
+            self?.projectActivationHandler?(ProjectID(rawValue: projectID))
+        }
+        controller.onSetProjectPinned = { [weak self] projectID, pinned in
+            self?.setProjectPinned(pinned, projectID: ProjectID(rawValue: projectID))
         }
         controller.onCloseOtherSessions = { [weak self] tabID in
             guard let self else { return }
@@ -860,61 +843,24 @@ extension MainWindowController {
             placeholder: TabItemView.localizedRenamePlaceholder(using: localizer),
             icon: "terminal.fill",
             localizer: localizer,
-            onComplete: { [weak self] newTitle in
-                guard let self else { return }
-                let trimmed = (newTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                self.tabManager.renameTab(id: tabID, newTitle: trimmed.isEmpty ? nil : trimmed)
-                self.refreshAuroraChromeAfterTabMutation()
+            onComplete: { [weak self] result in
+                guard case .confirmed(let newTitle) = result else { return }
+                self?.applyAuroraSessionRename(tabID: tabID, newTitle: newTitle)
             }
         )
     }
 
-    private func presentAuroraWorkspaceRename(workspaceID: String, currentName: String) {
-        guard let parentWindow = window else { return }
-
-        let localizer = appLocalizer()
-        RenameSheetController.present(
-            on: parentWindow,
-            currentName: currentName,
-            placeholder: Self.localizedAuroraWorkspaceRenamePlaceholder(using: localizer),
-            icon: "square.stack.3d.up",
-            localizer: localizer,
-            onComplete: { [weak self] newTitle in
-                guard let self else { return }
-                let trimmed = (newTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                self.applyAuroraWorkspaceRename(
-                    workspaceID: workspaceID,
-                    newTitle: trimmed.isEmpty ? nil : trimmed
-                )
-            }
-        )
-    }
-
-    private func applyAuroraWorkspaceRename(workspaceID: String, newTitle: String?) {
-        let resolver = GitAncestorWorkspaceRootResolver()
-        let matchingIDs = tabManager.tabs.compactMap { tab -> TabID? in
-            AuroraSourceBuilder.workspaceGroup(for: tab, resolver: resolver) == workspaceID
-                ? tab.id
-                : nil
-        }
-        guard !matchingIDs.isEmpty else { return }
-
-        for tabID in matchingIDs {
-            tabManager.updateTab(id: tabID) { tab in
-                tab.workspaceCustomTitle = newTitle
-            }
-        }
+    func applyAuroraSessionRename(tabID: TabID, newTitle: String?) {
+        guard tabManager.tab(for: tabID) != nil else { return }
+        let normalized = AuroraWorkspacePlanner.normalizedTitle(newTitle)
+        tabManager.renameTab(id: tabID, newTitle: normalized)
         refreshAuroraChromeAfterTabMutation()
-    }
-
-    private static func localizedAuroraWorkspaceRenamePlaceholder(using localizer: AppLocalizer) -> String {
-        localizer.string("auroraSidebar.workspace.rename.placeholder", fallback: "Workspace name")
     }
 
     /// Keeps the window-level tooltip overlay aligned with the sidebar's
     /// AppKit frame. The SwiftUI row frames are local to the sidebar; the
     /// overlay host needs the sidebar's frame in overlay coordinates so
-    /// it can render the card to the right of the list instead of inside
+    /// it can render the card beyond the sidebar's logical inner edge instead of inside
     /// the navigable row area.
     private func refreshAuroraSidebarTooltipAnchor() {
         guard let controller = auroraChromeController,
@@ -971,6 +917,16 @@ extension MainWindowController {
     var isAuroraChromeActive: Bool {
         guard let controller = auroraChromeController else { return false }
         return controller.sidebarHost?.isHidden == false
+    }
+
+    func renameActiveSessionFromPalette() {
+        guard let tabID = tabManager.activeTabID else { return }
+        if isAuroraChromeActive, let controller = auroraChromeController {
+            controller.refreshSources()
+            _ = controller.requestRenameSession(tabID)
+            return
+        }
+        presentAuroraTabRename(for: tabID)
     }
 
     /// Shows or hides the Aurora palette overlay. Refreshes the action

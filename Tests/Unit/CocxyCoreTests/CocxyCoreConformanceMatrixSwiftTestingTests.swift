@@ -230,8 +230,10 @@ struct CocxyCoreConformanceMatrixSwiftTestingTests {
                 }
             },
             VersionedConformanceCase(id: "MODE-MOUSE-SGR-018", category: "Mode") {
-                try terminalCase(input: "\u{001B}[?1006h") {
+                try terminalCase(input: "\u{001B}[?1000h\u{001B}[?1006h") {
                     cocxycore_terminal_mode_mouse($0) == 6
+                        && cocxycore_terminal_mode_mouse_tracking($0) == 2
+                        && cocxycore_terminal_mode_mouse_encoding($0) == 3
                 }
             },
             VersionedConformanceCase(id: "MODE-ALT-SCREEN-019", category: "Mode") {

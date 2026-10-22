@@ -13,14 +13,22 @@ extension Design {
         static func placement(
             for tooltip: AuroraSidebarTooltipSnapshot,
             sidebarFrame: CGRect,
-            containerSize: CGSize
+            containerSize: CGSize,
+            layoutDirection: LayoutDirection
         ) -> VerticalTabHoverSidecarPlacement {
-            let rightSpace = max(0, containerSize.width - sidebarFrame.maxX - 18)
-            let width = min(360, max(260, rightSpace - 18))
-            let x = min(
-                containerSize.width - width * 0.5 - 12,
-                sidebarFrame.maxX + 18 + width * 0.5
-            )
+            let availableSpace = layoutDirection == .rightToLeft
+                ? max(0, sidebarFrame.minX - 18)
+                : max(0, containerSize.width - sidebarFrame.maxX - 18)
+            let width = min(360, max(260, availableSpace - 18))
+            let x: CGFloat
+            if layoutDirection == .rightToLeft {
+                x = max(width * 0.5 + 12, sidebarFrame.minX - 18 - width * 0.5)
+            } else {
+                x = min(
+                    containerSize.width - width * 0.5 - 12,
+                    sidebarFrame.maxX + 18 + width * 0.5
+                )
+            }
             let sidebarTopY = max(0, containerSize.height - sidebarFrame.maxY)
             let rawY = sidebarTopY + tooltip.rowFrame.midY
             let approximateHalfHeight: CGFloat = 158
@@ -37,12 +45,14 @@ extension Design {
         let sidebarFrame: CGRect
         let containerSize: CGSize
         var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+        @Environment(\.layoutDirection) private var layoutDirection
 
         var body: some View {
             let placement = VerticalTabHoverSidecarPlacement.placement(
                 for: tooltip,
                 sidebarFrame: sidebarFrame,
-                containerSize: containerSize
+                containerSize: containerSize,
+                layoutDirection: layoutDirection
             )
             AuroraSessionTooltipCard(
                 session: tooltip.session,
@@ -53,7 +63,10 @@ extension Design {
             .frame(width: placement.width)
             .allowsHitTesting(false)
             .position(x: placement.x, y: placement.y)
-            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .leading)))
+            .transition(.opacity.combined(with: .scale(
+                scale: 0.98,
+                anchor: layoutDirection == .rightToLeft ? .trailing : .leading
+            )))
         }
     }
 }

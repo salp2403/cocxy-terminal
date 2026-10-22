@@ -20,7 +20,9 @@ extension MainWindowController {
     @discardableResult
     func createTab(
         workingDirectory: URL? = nil,
-        terminalEnginePreference: TerminalEnginePreference? = nil
+        terminalEnginePreference: TerminalEnginePreference? = nil,
+        triggersTaskQueueLifecycleEvents: Bool = true,
+        surfaceCreator: ((any TerminalEngine, TerminalHostView, URL?) throws -> SurfaceID)? = nil
     ) -> TabID {
         let dir = workingDirectory
             ?? tabManager.activeTab?.workingDirectory
@@ -34,12 +36,15 @@ extension MainWindowController {
         let viewModel = TerminalViewModel(engine: engine)
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
+        let configuredFontFamily = configService?.current.appearance.fontFamily
+            ?? AppearanceConfig.defaults.fontFamily
         viewModel.setDefaultFontSize(configuredFontSize)
         let surfaceView = TerminalHostViewFactory.make(
             viewModel: viewModel,
             engine: engine,
             localizer: appLocalizer()
         )
+        surfaceView.applyFont(family: configuredFontFamily, size: configuredFontSize)
 
         tabViewModels[newTab.id] = viewModel
         tabSurfaceViews[newTab.id] = surfaceView
@@ -49,13 +54,17 @@ extension MainWindowController {
             in: surfaceView,
             viewModel: viewModel,
             workingDirectory: dir,
-            engine: engine
+            engine: engine,
+            surfaceCreator: surfaceCreator
         )
 
         // Register this session with the multi-window registry so other
         // windows can see it in the dashboard and notification aggregator.
         let sessionID = SessionID()
         tabSessionMap[newTab.id] = sessionID
+        if !triggersTaskQueueLifecycleEvents {
+            taskQueueLifecycleExcludedTabIDs.insert(newTab.id)
+        }
         sessionRegistry?.registerSession(SessionEntry(
             sessionID: sessionID,
             ownerWindowID: windowID,
@@ -63,6 +72,7 @@ extension MainWindowController {
             title: newTab.displayTitle,
             workingDirectory: dir
         ))
+        observeProjectDirectory(dir)
 
         // Load project config from .cocxy.toml if present in the tab's directory.
         let projectConfigService = ProjectConfigService()
@@ -78,11 +88,54 @@ extension MainWindowController {
             workingDirectory: dir,
             sessionID: sessionID.rawValue.uuidString
         )
-        dispatchPluginEvent(.tabCreated, tabID: newTab.id, sessionID: sessionID)
-        dispatchPluginEvent(.sessionStart, tabID: newTab.id, sessionID: sessionID)
+        dispatchPluginEvent(
+            .tabCreated,
+            tabID: newTab.id,
+            sessionID: sessionID,
+            triggersTaskQueue: triggersTaskQueueLifecycleEvents
+        )
+        dispatchPluginEvent(
+            .sessionStart,
+            tabID: newTab.id,
+            sessionID: sessionID,
+            triggersTaskQueue: triggersTaskQueueLifecycleEvents
+        )
 
         handleTabSwitch(to: newTab.id)
         return newTab.id
+    }
+
+    @discardableResult
+    func createTab(
+        verifiedWorkingDirectory: ProjectDirectoryRoot,
+        terminalEnginePreference: TerminalEnginePreference? = nil
+    ) throws -> TabID {
+        let directory = try verifiedWorkingDirectory.descriptorBoundURL()
+        var creationError: Error?
+        let tabID = createTab(
+            workingDirectory: directory,
+            terminalEnginePreference: terminalEnginePreference,
+            surfaceCreator: { engine, surfaceView, _ in
+                do {
+                    guard let descriptorBoundEngine = engine as? any DescriptorBoundTerminalEngine else {
+                        throw ProjectActivationError.verifiedSurfaceUnavailable
+                    }
+                    return try descriptorBoundEngine.createSurface(
+                        in: surfaceView,
+                        verifiedWorkingDirectory: verifiedWorkingDirectory,
+                        command: nil
+                    )
+                } catch {
+                    creationError = error
+                    throw error
+                }
+            }
+        )
+        guard tabSurfaceMap[tabID] != nil else {
+            performCloseTab(tabID)
+            throw creationError ?? ProjectActivationError.verifiedSurfaceUnavailable
+        }
+        return tabID
     }
 
     /// Attaches worktree metadata to a tab and points tab-level consumers
@@ -96,8 +149,7 @@ extension MainWindowController {
         sendShellDirectoryChange: Bool = false
     ) {
         let worktreeRoot = entry.path
-        let gitProvider = GitInfoProviderImpl()
-        let branch = gitProvider.currentBranch(at: worktreeRoot)
+        let branch = gitInfoProvider.currentBranch(at: worktreeRoot)
 
         tabManager.updateTab(id: tabID) { tab in
             tab.workingDirectory = worktreeRoot
@@ -186,10 +238,23 @@ extension MainWindowController {
         let isClosingActiveTab = (tabID == tabManager.activeTabID)
         let closingTab = tabManager.tab(for: tabID)
         let closingSessionID = sessionIDForTab(tabID)
+        let triggersTaskQueue = !taskQueueLifecycleExcludedTabIDs.contains(tabID)
+        let agentTeamTerminalEnd = unregisterAgentTeamTab(tabID, reason: .tabClosed)
         deferredRestoredTabs.removeValue(forKey: tabID)
         deferredRestoredTabMetadataIDs.remove(tabID)
-        dispatchPluginEvent(.sessionEnd, tabID: tabID, sessionID: closingSessionID)
-        dispatchPluginEvent(.tabClosed, tabID: tabID, sessionID: closingSessionID)
+        dispatchPluginEvent(
+            .sessionEnd,
+            tabID: tabID,
+            sessionID: closingSessionID,
+            triggersTaskQueue: triggersTaskQueue
+        )
+        dispatchPluginEvent(
+            .tabClosed,
+            tabID: tabID,
+            sessionID: closingSessionID,
+            triggersTaskQueue: triggersTaskQueue
+        )
+        taskQueueLifecycleExcludedTabIDs.remove(tabID)
 
         // Remove this session from the multi-window registry before
         // destroying surfaces, so other windows receive the removal
@@ -274,12 +339,21 @@ extension MainWindowController {
         }
         tabOutputBuffers.removeValue(forKey: tabID)
         tabCommandTrackers.removeValue(forKey: tabID)
+        tabConfigProjectContextStore.removeProjectRoot(for: tabID)
+        releaseProjectConfigWatcher(for: tabID)
         tabSplitCoordinator.removeSplitManager(for: tabID)
         tabSessionMap.removeValue(forKey: tabID)
         processMonitor?.unregisterTab(tabID)
 
         // Remove from TabManager (activates next tab).
         tabManager.removeTab(id: tabID)
+        if tabManager.tab(for: tabID) == nil {
+            injectedDashboardViewModel?.removeSessions(forTabID: tabID.rawValue)
+            onAgentTabClosed?(tabID)
+        }
+        if let agentTeamTerminalEnd {
+            notifyAgentTeamTerminalEnded(agentTeamTerminalEnd)
+        }
         handleWorktreeLifecycleAfterTabClose(
             closingTab,
             overridePolicy: worktreeClosePolicyOverride
@@ -357,9 +431,10 @@ extension MainWindowController {
             }
 
         case .remove:
+            let worktreeService = self.worktreeService
             Task.detached {
                 do {
-                    _ = try await AppDelegate.sharedWorktreeService.remove(
+                    _ = try await worktreeService.remove(
                         id: worktreeID,
                         force: false,
                         originRepoPath: originRepo,
@@ -399,20 +474,23 @@ extension MainWindowController {
     /// Creates a terminal surface and wires OSC + output handlers.
     ///
     /// Shared by `createTab`, `newTabAction`, and session restoration.
+    @discardableResult
     func createAndWireSurface(
         for tabID: TabID,
         in surfaceView: TerminalHostView,
         viewModel: TerminalViewModel,
         workingDirectory: URL?,
-        engine providedEngine: (any TerminalEngine)? = nil
-    ) {
+        engine providedEngine: (any TerminalEngine)? = nil,
+        surfaceCreator: ((any TerminalEngine, TerminalHostView, URL?) throws -> SurfaceID)? = nil
+    ) -> SurfaceID? {
         let engine = providedEngine ?? terminalEngine(for: tabID)
         do {
-            let surfaceID = try engine.createSurface(
-                in: surfaceView,
-                workingDirectory: workingDirectory,
-                command: nil
-            )
+            let surfaceID = try surfaceCreator?(engine, surfaceView, workingDirectory)
+                ?? engine.createSurface(
+                    in: surfaceView,
+                    workingDirectory: workingDirectory,
+                    command: nil
+                )
             viewModel.markRunning(surfaceID: surfaceID)
             surfaceView.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
             surfaceView.syncSizeWithTerminal()
@@ -427,9 +505,11 @@ extension MainWindowController {
                 initialWorkingDirectory: workingDirectory ?? tabManager.tab(for: tabID)?.workingDirectory
             )
             startAutomaticSessionReplayIfNeeded(surfaceID: surfaceID, tabID: tabID)
+            return surfaceID
         } catch {
             NSLog("[MainWindowController] Failed to create surface for tab: %@",
                   String(describing: error))
+            return nil
         }
     }
 }

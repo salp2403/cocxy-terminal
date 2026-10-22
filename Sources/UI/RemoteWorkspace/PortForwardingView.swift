@@ -276,7 +276,11 @@ struct PortForwardingView: View {
             forward = .local(localPort: localPort, remotePort: remotePort)
         case .remote:
             guard let remotePort = Int(newRemotePort) else { return }
-            forward = .remote(remotePort: remotePort, localPort: localPort)
+            forward = .remote(
+                remotePort: remotePort,
+                localPort: localPort,
+                remoteBindHost: RemoteConnectionProfile.PortForward.remoteLoopbackBindHost
+            )
         case .dynamic:
             return
         }
@@ -488,9 +492,9 @@ struct TunnelRow: View {
     private var typeIconAndColor: (String, Color) {
         switch tunnel.forward {
         case .local:
-            return ("arrow.right", Color(nsColor: CocxyColors.blue))
+            return ("arrow.forward", Color(nsColor: CocxyColors.blue))
         case .remote:
-            return ("arrow.left", Color(nsColor: CocxyColors.mauve))
+            return ("arrow.backward", Color(nsColor: CocxyColors.mauve))
         case .dynamic:
             return ("globe", Color(nsColor: CocxyColors.teal))
         }
@@ -503,11 +507,11 @@ struct TunnelRow: View {
             switch tunnel.forward {
             case let .local(localPort, remotePort, _):
                 portLabel("\(localPort)")
-                directionArrow("arrow.right")
+                directionArrow("arrow.forward")
                 portLabel("\(remotePort)")
-            case let .remote(remotePort, localPort, _):
+            case let .remote(remotePort, localPort, _, _):
                 portLabel("\(localPort)")
-                directionArrow("arrow.left")
+                directionArrow("arrow.backward")
                 portLabel("\(remotePort)")
             case let .dynamic(localPort):
                 portLabel("\(localPort)")
@@ -559,7 +563,7 @@ struct TunnelRow: View {
                 localPort,
                 remotePort
             )
-        case let .remote(remotePort, localPort, _):
+        case let .remote(remotePort, localPort, _, _):
             return String(
                 format: localized("remoteWorkspace.portForward.accessibility.remote", fallback: "Remote forward, port %d to %d"),
                 remotePort,

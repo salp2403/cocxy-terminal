@@ -13,6 +13,7 @@ public enum CocxyPrivilegedSocketCommandCategory: String, Equatable, Sendable {
     case localExecution = "local-execution"
     case computeControl = "compute-control"
     case remoteConnection = "remote-connection"
+    case project
 }
 
 public enum CocxyPrivilegedSocketCommandPolicy {
@@ -34,6 +35,7 @@ public enum CocxyPrivilegedSocketCommandPolicy {
             return .terminalInput
 
         case "capture-pane",
+             "handoff-export",
              "timeline-show",
              "timeline-export",
              "search",
@@ -141,8 +143,15 @@ public enum CocxyPrivilegedSocketCommandPolicy {
              "notebook-template-create",
              "notebook-run",
              "workflow-run",
+             "handoff-import",
              "agent-team-launch",
-             "agent-team-stop":
+             "agent-team-stop",
+             "task-run",
+             "task-run-promote",
+             "task-enqueue",
+             "task-cancel",
+             "task-rerun",
+             "task-remove":
             return .localExecution
 
         case "cell-create",
@@ -156,6 +165,9 @@ public enum CocxyPrivilegedSocketCommandPolicy {
 
         case "ssh":
             return .remoteConnection
+
+        case "project-open", "project-clone":
+            return .project
 
         default:
             return nil

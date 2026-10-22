@@ -456,7 +456,7 @@ struct BrowserImportWizardView: View {
                     .keyboardShortcut(.defaultAction)
             } else {
                 Button { viewModel.goBack() } label: {
-                    Label(localized("common.back", fallback: "Back"), systemImage: "chevron.left")
+                    Label(localized("common.back", fallback: "Back"), systemImage: "chevron.backward")
                 }
                 .disabled(!viewModel.canGoBack)
 
@@ -565,56 +565,6 @@ struct BrowserImportWizardView: View {
         .padding(.vertical, 9)
         .background(Color(nsColor: CocxyColors.surface0).opacity(0.4))
         .clipShape(RoundedRectangle(cornerRadius: 7))
-    }
-
-    static func uncertainCookieMessage(count: Int, localizer: AppLocalizer) -> String {
-        let key = count == 1
-            ? "browser.import.result.cookieUnconfirmed.one"
-            : "browser.import.result.cookieUnconfirmed.many"
-        let fallback = count == 1
-            ? "%d cookie write could not be confirmed."
-            : "%d cookie writes could not be confirmed."
-        return String(format: localizer.string(key, fallback: fallback), count)
-    }
-
-    static func localizedIssueMessage(
-        _ issue: BrowserImportIssue,
-        localizer: AppLocalizer
-    ) -> String {
-        guard let kind = issue.kind else {
-            return issue.message
-        }
-        switch kind {
-        case .bookmarkRootConflict:
-            return localizer.string(
-                "browser.import.issue.bookmarkRootConflict",
-                fallback: "The imported bookmark folder conflicts with an existing item."
-            )
-        case .cancelled:
-            return localizer.string(
-                "browser.import.issue.cancelled",
-                fallback: "The browser import was cancelled."
-            )
-        case .cookieBatchWrite(let imported, let total, let uncertain) where uncertain > 0:
-            return String(
-                format: localizer.string(
-                    "browser.import.issue.cookiesPartialUnconfirmed",
-                    fallback: "Imported %d of %d cookies; %d could not be confirmed by WebKit."
-                ),
-                imported,
-                total,
-                uncertain
-            )
-        case .cookieBatchWrite(let imported, let total, _):
-            return String(
-                format: localizer.string(
-                    "browser.import.issue.cookiesPartial",
-                    fallback: "Imported %d of %d cookies before the write stopped."
-                ),
-                imported,
-                total
-            )
-        }
     }
 
     private func issueList(
@@ -821,7 +771,7 @@ struct BrowserImportWizardView: View {
 
     private var primaryButtonSymbol: String {
         switch viewModel.step {
-        case .source, .data: return "chevron.right"
+        case .source, .data: return "chevron.forward"
         case .filters: return "doc.text.magnifyingglass"
         case .review: return "tray.and.arrow.down"
         }

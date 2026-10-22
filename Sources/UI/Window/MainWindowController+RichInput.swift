@@ -121,6 +121,7 @@ extension MainWindowController {
         )
 
         let hostingView = FocusableHostingView(rootView: richInputView)
+        applyShellLayoutDirection(to: hostingView)
         hostingView.onCancelOperation = cancelHandler
         hostingView.wantsLayer = true
         let panelFrame = richInputPanelFrame(

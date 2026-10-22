@@ -195,16 +195,14 @@ struct CocxyCoreBridgeLockingTests {
         #expect(handled == true)
     }
 
-    @Test("sendKeyEvent ignores key-up events without acquiring the lock")
-    func sendKeyEventIgnoresKeyUpEvents() throws {
+    @Test("sendKeyEvent serializes progressive key-up events through the terminal lock")
+    func sendKeyEventSerializesKeyUpEvents() throws {
         let bridge = try Self.makeBridge()
         let (surfaceID, _) = try Self.createSurface(using: bridge)
         defer { bridge.destroySurface(surfaceID) }
 
-        // Hold the lock on a background queue and keep holding it across the
-        // call. A key-up event must NOT wait for the lock — the early
-        // `guard event.isKeyDown` exits before any lock acquisition, so the
-        // holder is still inside its critical section when the call returns.
+        // Key-up encoding reads the negotiated progressive keyboard flags, so
+        // it must observe those flags under the same lock as PTY feed.
         let state = try #require(bridge.surfaceState(for: surfaceID))
 
         let arrowLeftUp = KeyEvent(characters: nil, keyCode: 123, modifiers: [], isKeyDown: false)
@@ -215,8 +213,8 @@ struct CocxyCoreBridgeLockingTests {
 
         #expect(handled == false)
         #expect(
-            waitedForHolder == false,
-            "key-up waited for the terminal lock; the early `guard event.isKeyDown` must return first"
+            waitedForHolder,
+            "key-up returned before the terminal mode lock was released"
         )
     }
 
@@ -326,6 +324,79 @@ struct CocxyCoreBridgeLockingTests {
             waitedForHolder == false,
             "duplicate notifyFocus waited for the terminal lock; the early-return guard must skip it"
         )
+    }
+
+    @Test("host mutations drain every in-band terminal response before releasing the lock")
+    func hostMutationsDrainTerminalResponses() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let enabledResizeReporting = bridge.withTerminalLock(surfaceID) { state in
+            let mode = Array("\u{001B}[?2048h".utf8)
+            cocxycore_terminal_feed(state.terminal, mode, mode.count)
+            guard cocxycore_terminal_has_response(state.terminal) else { return false }
+
+            var response = [UInt8](repeating: 0, count: 4 * 1024)
+            while cocxycore_terminal_has_response(state.terminal) {
+                guard cocxycore_terminal_read_response(
+                    state.terminal,
+                    &response,
+                    response.count
+                ) > 0 else { return false }
+            }
+            return true
+        } ?? false
+        #expect(enabledResizeReporting)
+
+        bridge.resize(
+            surfaceID,
+            to: TerminalSize(columns: 100, rows: 30, pixelWidth: 800, pixelHeight: 480)
+        )
+        let resizeResponseWasDrained = bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_has_response(state.terminal) == false
+        } ?? false
+        #expect(resizeResponseWasDrained)
+
+        bridge.applyFont(family: "Menlo", size: 16, to: surfaceID)
+        let fontResponseWasDrained = bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_has_response(state.terminal) == false
+        } ?? false
+        #expect(fontResponseWasDrained)
+
+        _ = bridge.withTerminalLock(surfaceID) { state in
+            let mode = Array("\u{001B}[?1004h".utf8)
+            cocxycore_terminal_feed(state.terminal, mode, mode.count)
+        }
+        bridge.notifyFocus(true, for: surfaceID)
+        let focusResponseWasDrained = bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_has_response(state.terminal) == false
+        } ?? false
+        #expect(focusResponseWasDrained)
+
+        _ = bridge.withTerminalLock(surfaceID) { state in
+            let mode = Array("\u{001B}[?2031h".utf8)
+            cocxycore_terminal_feed(state.terminal, mode, mode.count)
+        }
+
+        bridge.applyTheme(Self.makeTestPalette(), to: surfaceID)
+        let themeResponseWasDrained = bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_has_response(state.terminal) == false
+        } ?? false
+        #expect(themeResponseWasDrained)
+
+        bridge.setCursorColorOverride(0x102030FF, for: surfaceID)
+        let cursorColorResponseWasDrained = bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_has_response(state.terminal) == false
+        } ?? false
+        #expect(cursorColorResponseWasDrained)
+
+        bridge.applyTheme(Self.makeTestPalette(), to: surfaceID, transitionMs: 50)
+        bridge.advanceThemeTransitionMs(50, for: surfaceID)
+        let transitionResponseWasDrained = bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_has_response(state.terminal) == false
+        } ?? false
+        #expect(transitionResponseWasDrained)
     }
 
     // MARK: - Additional mutator serialization

@@ -17,6 +17,24 @@ enum AgentTeamProvider: String, CaseIterable, Codable, Sendable, Equatable {
     case qoder
     case kiro
 
+    static func resolve(named rawName: String) -> AgentTeamProvider? {
+        switch rawName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "claude", "claude-code", "claude code": return .claudeCode
+        case "codex", "codex-cli", "codex cli": return .codex
+        case "open-code", "open code", "opencode": return .opencode
+        case "pi": return .pi
+        case "cursor", "cursor-agent", "cursor agent": return .cursor
+        case "gemini", "gemini-cli", "gemini cli": return .gemini
+        case "rovo", "rovo-dev", "rovo dev", "rovodev": return .rovoDev
+        case "copilot", "github-copilot", "github copilot": return .copilot
+        case "codebuddy": return .codebuddy
+        case "factory", "droid": return .factory
+        case "qoder", "qodercli": return .qoder
+        case "kiro", "kiro-cli", "kiro cli": return .kiro
+        default: return nil
+        }
+    }
+
     var displayName: String {
         switch self {
         case .claudeCode:
@@ -87,8 +105,9 @@ enum AgentTeamStatus: String, Codable, Sendable, Equatable {
 enum AgentTeamError: Error, Equatable, Sendable {
     case emptyTeammates
     case unknownTeammate(String)
+    case alreadyRunning(String)
     case paneLaunchFailed(String)
-    case persistenceFailed(String)
+    case launchPlanMismatch(String)
 }
 
 struct AgentTeammateConfig: Identifiable, Codable, Sendable, Equatable {
@@ -222,7 +241,11 @@ struct AgentTeamLaunchResult: Sendable, Equatable {
 
 @MainActor
 protocol AgentTeamPaneLaunching: AnyObject {
-    func spawnAgentTeamPane(launchSpec: AgentTeamProviderLaunchSpec) -> Bool
+    func spawnAgentTeamPane(
+        launchSpec: AgentTeamProviderLaunchSpec,
+        initialPrompt: String?
+    ) -> Bool
+    func closeAgentTeamPanes(teamID: String)
 }
 
 @MainActor
@@ -244,88 +267,87 @@ final class AgentTeamLauncher {
     }
 
     func launch(config: AgentTeamConfig) throws -> AgentTeamLaunchResult {
-        guard let paneLauncher else {
-            throw AgentTeamError.paneLaunchFailed("missing pane launcher")
-        }
+        try launch(
+            config: config,
+            preparedLaunchSpecs: prepareLaunchSpecs(config: config)
+        )
+    }
+
+    func prepareLaunchSpecs(config: AgentTeamConfig) throws -> [AgentTeamProviderLaunchSpec] {
         guard let adapter = adapterRegistry.adapter(for: config.provider) else {
             throw AgentTeamProviderAdapterError.executableUnavailable(
                 provider: config.provider,
                 candidates: config.provider.executableCandidates
             )
         }
-
-        var launchedIDs: [String] = []
-        var launchSpecs: [AgentTeamProviderLaunchSpec] = []
-        for teammate in config.teammates {
-            let launchSpec = try adapter.makeLaunchSpec(
+        return try config.teammates.map { teammate in
+            try adapter.makeLaunchSpec(
                 config: config,
                 teammate: teammate,
                 profile: launchProfileProvider(teammate)
             )
-            let didLaunch = paneLauncher.spawnAgentTeamPane(launchSpec: launchSpec)
-            guard didLaunch else {
-                throw AgentTeamError.paneLaunchFailed(teammate.id)
+        }
+    }
+
+    func launch(
+        config: AgentTeamConfig,
+        preparedLaunchSpecs: [AgentTeamProviderLaunchSpec]
+    ) throws -> AgentTeamLaunchResult {
+        guard let paneLauncher else {
+            throw AgentTeamError.paneLaunchFailed("missing pane launcher")
+        }
+        try validatePreparedLaunchSpecs(preparedLaunchSpecs, for: config)
+
+        var hasLaunchedPane = false
+        do {
+            var launchedIDs: [String] = []
+            var launchSpecs: [AgentTeamProviderLaunchSpec] = []
+            for (teammate, launchSpec) in zip(config.teammates, preparedLaunchSpecs) {
+                let didLaunch = paneLauncher.spawnAgentTeamPane(
+                    launchSpec: launchSpec,
+                    initialPrompt: teammate.prompt
+                )
+                guard didLaunch else {
+                    throw AgentTeamError.paneLaunchFailed(teammate.id)
+                }
+                hasLaunchedPane = true
+                launchedIDs.append(teammate.id)
+                launchSpecs.append(launchSpec)
             }
-            launchedIDs.append(teammate.id)
-            launchSpecs.append(launchSpec)
-        }
 
-        return AgentTeamLaunchResult(
-            teamID: config.id,
-            launchedCount: launchedIDs.count,
-            teammateIDs: launchedIDs,
-            launchSpecs: launchSpecs
-        )
-    }
-}
-
-struct AgentTeamPersistence: Sendable {
-    let directory: URL
-
-    init(directory: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".config/cocxy/teams")) {
-        self.directory = directory
-    }
-
-    func save(_ config: AgentTeamConfig) throws {
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let data = try JSONEncoder.agentTeams.encode(config)
-            let url = fileURL(teamID: config.id)
-            try data.write(to: url, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            return AgentTeamLaunchResult(
+                teamID: config.id,
+                launchedCount: launchedIDs.count,
+                teammateIDs: launchedIDs,
+                launchSpecs: launchSpecs
+            )
         } catch {
-            throw AgentTeamError.persistenceFailed(error.localizedDescription)
+            if hasLaunchedPane {
+                paneLauncher.closeAgentTeamPanes(teamID: config.id)
+            }
+            throw error
         }
     }
 
-    func load(teamID: String) throws -> AgentTeamConfig {
-        do {
-            let data = try Data(contentsOf: fileURL(teamID: teamID))
-            return try JSONDecoder.agentTeams.decode(AgentTeamConfig.self, from: data)
-        } catch {
-            throw AgentTeamError.persistenceFailed(error.localizedDescription)
+    private func validatePreparedLaunchSpecs(
+        _ launchSpecs: [AgentTeamProviderLaunchSpec],
+        for config: AgentTeamConfig
+    ) throws {
+        guard launchSpecs.count == config.teammates.count else {
+            throw AgentTeamError.launchPlanMismatch(config.id)
         }
-    }
-
-    func fileURL(teamID: String) -> URL {
-        directory.appendingPathComponent("\(AgentTeamConfig.slug(teamID)).json")
-    }
-}
-
-private extension JSONEncoder {
-    static var agentTeams: JSONEncoder {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        return encoder
-    }
-}
-
-private extension JSONDecoder {
-    static var agentTeams: JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
+        for (teammate, spec) in zip(config.teammates, launchSpecs) {
+            guard spec.provider == config.provider,
+                  spec.teamID == config.id,
+                  spec.teammateID == teammate.id,
+                  spec.teammateName == teammate.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                  spec.environment["COCXY_AGENT_TEAM_ID"] == config.id,
+                  spec.environment["COCXY_AGENT_TEAMMATE_ID"] == teammate.id,
+                  spec.environment["COCXY_AGENT_TEAMMATE_NAME"] == spec.teammateName,
+                  spec.environment["COCXY_AGENT_PROVIDER"] == config.provider.rawValue,
+                  AgentTeamLaunchCommand.makeShellCommand(for: spec) != nil else {
+                throw AgentTeamError.launchPlanMismatch(teammate.id)
+            }
+        }
     }
 }

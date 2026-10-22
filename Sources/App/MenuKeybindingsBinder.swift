@@ -137,6 +137,25 @@ enum MenuKeybindingsBinder {
         return KeybindingShortcut.parse(raw)?.prettyLabel
     }
 
+    /// Returns whether `event` matches one of the selected, live-bound menu actions.
+    static func matches(
+        _ event: NSEvent,
+        actionIds: Set<String>,
+        in menu: NSMenu
+    ) -> Bool {
+        guard let shortcut = KeybindingShortcut.fromEvent(event) else { return false }
+        var matched = false
+        walk(menu) { item in
+            guard !matched,
+                  let actionId = actionId(of: item),
+                  actionIds.contains(actionId) else { return }
+            matched = item.keyEquivalent == shortcut.menuKeyEquivalent
+                && item.keyEquivalentModifierMask.intersection(.deviceIndependentFlagsMask)
+                    == shortcut.modifierMask
+        }
+        return matched
+    }
+
     // MARK: - Private
 
     /// Prefix used to distinguish keybinding-managed menu items from

@@ -1,0 +1,272 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+
+import Foundation
+import Testing
+@testable import CocxyTerminal
+
+@MainActor
+@Suite("Task queue app CLI")
+struct TaskQueueCLISwiftTestingTests {
+    @Test("approved pipeline persists, reports counts, reruns, and removes")
+    func approvedPipelineLifecycle() async throws {
+        let fixture = try await makeFixture(taskID: "scheduled-review")
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        let enqueue = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "enqueue",
+                params: fixture.params,
+                approvedContext: fixture.context
+            )
+        }.value
+        #expect(enqueue.success)
+        #expect(enqueue.data["task-id"] == "scheduled-review")
+
+        let item = try #require(await fixture.queue.item(id: "scheduled-review"))
+        #expect(item.status == .scheduled)
+        #expect(item.pipeline.steps.first?.worktree == fixture.root.path)
+        #expect(item.project == fixture.projectURL.path)
+        #expect(item.pipeline.steps.first?.project == fixture.projectURL.path)
+
+        let listed = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "list",
+                params: ["limit": "50", "offset": "0"]
+            )
+        }.value
+        #expect(listed.success)
+        #expect(listed.data["total"] == "1")
+        #expect(listed.data["active"] == "1")
+        #expect(listed.data["terminal"] == "0")
+        #expect(listed.data["task_0_id"] == "scheduled-review")
+        #expect(!listed.data.values.contains(where: { value in
+            value.contains("Audit private changes") || value.contains(fixture.root.path)
+        }))
+
+        let cancelParams = ["task-id": "scheduled-review"]
+        let cancelContext = Self.context(
+            operation: "cancel",
+            params: cancelParams,
+            workingDirectory: fixture.root.path
+        )
+        let cancelled = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "cancel",
+                params: cancelParams,
+                approvedContext: cancelContext
+            )
+        }.value
+        #expect(cancelled.success)
+        #expect(await fixture.queue.item(id: "scheduled-review")?.status == .cancelled)
+
+        let rerunParams = ["task-id": "scheduled-review"]
+        let rerunContext = Self.context(
+            operation: "rerun",
+            params: rerunParams,
+            workingDirectory: fixture.root.path
+        )
+        let rerun = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "rerun",
+                params: rerunParams,
+                approvedContext: rerunContext
+            )
+        }.value
+        #expect(rerun.success)
+        #expect(rerun.data["task-status"] == "queued")
+
+        _ = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "cancel",
+                params: cancelParams,
+                approvedContext: cancelContext
+            )
+        }.value
+        let removeContext = Self.context(
+            operation: "remove",
+            params: rerunParams,
+            workingDirectory: fixture.root.path
+        )
+        let removed = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "remove",
+                params: rerunParams,
+                approvedContext: removeContext
+            )
+        }.value
+        #expect(removed.success)
+        #expect(await fixture.queue.item(id: "scheduled-review") == nil)
+
+        let emptyList = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "list",
+                params: ["limit": "50", "offset": "0"]
+            )
+        }.value
+        #expect(emptyList.data["total"] == "0")
+        #expect(emptyList.data["active"] == "0")
+        #expect(emptyList.data["terminal"] == "0")
+        await fixture.queue.shutdown()
+    }
+
+    @Test("pipeline bytes changed after approval are rejected")
+    func pipelineTOCTOUIsRejected() async throws {
+        let fixture = try await makeFixture(taskID: "immutable-review")
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        try Data("{}".utf8).write(to: fixture.pipelineURL, options: .atomic)
+
+        let result = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "enqueue",
+                params: fixture.params,
+                approvedContext: fixture.context
+            )
+        }.value
+
+        #expect(!result.success)
+        #expect(result.data["error"]?.contains("changed before execution") == true)
+        #expect(await fixture.queue.item(id: "immutable-review") == nil)
+        await fixture.queue.shutdown()
+    }
+
+    @Test("project replaced by a symlink after approval is rejected")
+    func projectTOCTOUIsRejected() async throws {
+        let fixture = try await makeFixture(taskID: "project-swap")
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let replacement = fixture.root.appendingPathComponent("replacement", isDirectory: true)
+        try FileManager.default.createDirectory(at: replacement, withIntermediateDirectories: true)
+        try FileManager.default.removeItem(at: fixture.projectURL)
+        try FileManager.default.createSymbolicLink(
+            at: fixture.projectURL,
+            withDestinationURL: replacement
+        )
+
+        let result = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "enqueue",
+                params: fixture.params,
+                approvedContext: fixture.context
+            )
+        }.value
+
+        #expect(!result.success)
+        #expect(result.data["error"]?.contains("changed before execution") == true)
+        #expect(await fixture.queue.item(id: "project-swap") == nil)
+        await fixture.queue.shutdown()
+    }
+
+    private func makeFixture(taskID: String) async throws -> TaskQueueCLIFixture {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-task-cli-\(UUID().uuidString)", isDirectory: true)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        let projectURL = root.appendingPathComponent("project", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
+        let pipelineURL = root.appendingPathComponent("pipeline.json")
+        let pipeline = try AgentPipeline(
+            id: "review-pipeline",
+            steps: [AgentPipelineStep(
+                id: "audit",
+                provider: .codex,
+                prompt: "Audit private changes"
+            )]
+        )
+        let pipelineData = try JSONEncoder().encode(pipeline)
+        try pipelineData.write(to: pipelineURL, options: .atomic)
+
+        let queue = try TaskQueue(
+            store: TaskQueueStore(rootDirectory: root.appendingPathComponent("queue")),
+            runHandler: { item in
+                let now = Date()
+                return AgentPipelineRunSummary(
+                    pipelineID: item.pipeline.id,
+                    status: .failed,
+                    stepResults: [],
+                    startedAt: now,
+                    finishedAt: now
+                )
+            }
+        )
+        _ = try await queue.start()
+        let delegate = AppDelegate()
+        delegate.taskQueue = queue
+        delegate.taskQueueIsReady = true
+
+        let params = [
+            "task-id": taskID,
+            "input": pipelineURL.path,
+            "cwd": root.path,
+            "project": projectURL.path,
+            "trigger": "on-event",
+            "event": "tab-created",
+            "retries": "1",
+            "concurrency": "2",
+        ]
+        let context = Self.context(
+            operation: "enqueue",
+            params: params,
+            workingDirectory: root.path,
+            pipelineURL: pipelineURL,
+            pipelineData: pipelineData
+        )
+        return TaskQueueCLIFixture(
+            root: root,
+            projectURL: projectURL,
+            pipelineURL: pipelineURL,
+            params: params,
+            context: context,
+            queue: queue,
+            delegate: delegate
+        )
+    }
+
+    private static func context(
+        operation: String,
+        params: [String: String],
+        workingDirectory: String,
+        pipelineURL: URL? = nil,
+        pipelineData: Data? = nil
+    ) -> SocketPrivilegedCommandContext {
+        var paths = ["cwd": workingDirectory]
+        var digests: [String: String] = [:]
+        if let pipelineURL, let pipelineData {
+            paths["input"] = pipelineURL.path
+            digests["input"] = SocketPrivilegedCommandSecurity.digest(data: pipelineData)
+        }
+        if let project = params["project"] {
+            paths["project"] = project
+        }
+        return SocketPrivilegedCommandContext(
+            scope: .localExecution,
+            windowControllerIdentifier: nil,
+            tabID: nil,
+            workingDirectory: workingDirectory,
+            localResourcePaths: paths,
+            localResourceDigests: digests,
+            authorityDetails: TaskQueueSocketAuthority.details(
+                operation: operation,
+                params: params
+            ) ?? [:],
+            surfaceID: nil,
+            browserViewModelIdentifier: nil,
+            browserTabID: nil,
+            browserURL: nil,
+            targetDisplayName: taskID(from: params)
+        )
+    }
+
+    private static func taskID(from params: [String: String]) -> String {
+        params["task-id"] ?? "task"
+    }
+}
+
+private struct TaskQueueCLIFixture: @unchecked Sendable {
+    let root: URL
+    let projectURL: URL
+    let pipelineURL: URL
+    let params: [String: String]
+    let context: SocketPrivilegedCommandContext
+    let queue: TaskQueue
+    let delegate: AppDelegate
+}

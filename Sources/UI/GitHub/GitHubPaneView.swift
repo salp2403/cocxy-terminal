@@ -18,7 +18,7 @@ struct GitHubPaneView: View {
     enum Layout: Equatable {
         /// Right-docked overlay with a fixed width. Mirrors
         /// `CodeReviewPanelView` so both panels can coexist on the
-        /// same edge via `layoutRightDockedAgentPanels`.
+        /// same edge via `layoutTrailingDockedPanels`.
         case sidePanel
     }
 

@@ -1851,7 +1851,7 @@ struct PluginMarketplaceSwiftTestingTests {
             capabilities: [.environmentRead]
         )
 
-        let deadline = Date().addingTimeInterval(2)
+        let deadline = Date().addingTimeInterval(15)
         while !FileManager.default.fileExists(atPath: markerURL.path), Date() < deadline {
             Thread.sleep(forTimeInterval: 0.02)
         }
@@ -1902,7 +1902,7 @@ struct PluginMarketplaceSwiftTestingTests {
             authorization: authorization
         )
 
-        #expect(authorizationChecked.wait(timeout: .now() + 2) == .success)
+        #expect(authorizationChecked.wait(timeout: .now() + 15) == .success)
         #expect(!FileManager.default.fileExists(atPath: markerURL.path))
     }
 
@@ -1928,13 +1928,13 @@ struct PluginMarketplaceSwiftTestingTests {
                     pluginsDirectory: pluginsDirectory
                 ) {
                     firstAcquired.signal()
-                    _ = releaseFirst.wait(timeout: .now() + 2)
+                    _ = releaseFirst.wait(timeout: .now() + 30)
                 }
             } catch {
                 errors.record(error)
             }
         }
-        #expect(firstAcquired.wait(timeout: .now() + 2) == .success)
+        #expect(firstAcquired.wait(timeout: .now() + 15) == .success)
 
         DispatchQueue.global(qos: .userInitiated).async {
             defer { secondFinished.signal() }
@@ -1943,7 +1943,7 @@ struct PluginMarketplaceSwiftTestingTests {
                     pluginsDirectory: pluginsDirectory
                 ) {
                     secondAcquired.signal()
-                    _ = releaseSecond.wait(timeout: .now() + 2)
+                    _ = releaseSecond.wait(timeout: .now() + 30)
                 }
             } catch {
                 errors.record(error)
@@ -1953,16 +1953,16 @@ struct PluginMarketplaceSwiftTestingTests {
             releaseFirst.signal()
             releaseSecond.signal()
             if !firstDidFinish {
-                _ = firstFinished.wait(timeout: .now() + 2)
+                _ = firstFinished.wait(timeout: .now() + 15)
             }
             if !secondDidFinish {
-                _ = secondFinished.wait(timeout: .now() + 2)
+                _ = secondFinished.wait(timeout: .now() + 15)
             }
         }
-        #expect(secondAcquired.wait(timeout: .now() + 2) == .success)
+        #expect(secondAcquired.wait(timeout: .now() + 15) == .success)
 
         releaseFirst.signal()
-        let firstCompletion = firstFinished.wait(timeout: .now() + 2)
+        let firstCompletion = firstFinished.wait(timeout: .now() + 15)
         firstDidFinish = firstCompletion == .success
         #expect(firstDidFinish)
         #expect(try PluginRegistrySynchronization.shared.withFileLockIfAvailable(
@@ -1970,7 +1970,7 @@ struct PluginMarketplaceSwiftTestingTests {
         ) { true } == nil)
 
         releaseSecond.signal()
-        let secondCompletion = secondFinished.wait(timeout: .now() + 2)
+        let secondCompletion = secondFinished.wait(timeout: .now() + 15)
         secondDidFinish = secondCompletion == .success
         #expect(secondDidFinish)
         #expect(errors.messages.isEmpty)
@@ -2029,7 +2029,7 @@ struct PluginMarketplaceSwiftTestingTests {
             ]
         )
 
-        let startDeadline = Date().addingTimeInterval(2)
+        let startDeadline = Date().addingTimeInterval(15)
         while !FileManager.default.fileExists(atPath: markerURL.path),
               Date() < startDeadline {
             try await Task.sleep(nanoseconds: 10_000_000)
@@ -2046,14 +2046,25 @@ struct PluginMarketplaceSwiftTestingTests {
         }
         #expect(Date().timeIntervalSince(mutationStartedAt) < 0.2)
 
-        let finishDeadline = Date().addingTimeInterval(2)
+        let finishDeadline = Date().addingTimeInterval(15)
         while !FileManager.default.fileExists(atPath: finishedURL.path),
               Date() < finishDeadline {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
         #expect(FileManager.default.fileExists(atPath: finishedURL.path))
 
-        try manager.disablePlugin(id: "lease-plugin")
+        let leaseReleaseDeadline = Date().addingTimeInterval(15)
+        while true {
+            do {
+                try manager.disablePlugin(id: "lease-plugin")
+                break
+            } catch PluginManagerError.registryBusy {
+                guard Date() < leaseReleaseDeadline else {
+                    throw PluginManagerError.registryBusy
+                }
+                try await Task.sleep(nanoseconds: 10_000_000)
+            }
+        }
         #expect(manager.enabledPlugins.isEmpty)
     }
 

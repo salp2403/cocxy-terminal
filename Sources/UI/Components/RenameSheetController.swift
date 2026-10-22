@@ -5,6 +5,11 @@ import AppKit
 
 // MARK: - Rename Sheet Controller
 
+enum RenameSheetResult: Equatable {
+    case confirmed(String?)
+    case cancelled
+}
+
 /// Presents a translucent floating panel for renaming tabs and panels.
 ///
 /// The panel uses `NSVisualEffectView` with `.popover` material for a
@@ -13,14 +18,17 @@ import AppKit
 @MainActor
 final class RenameSheetController {
 
+    nonisolated(unsafe) private static var coordinatorAssociationKey: UInt8 = 0
+
+    @discardableResult
     static func present(
         on window: NSWindow,
         currentName: String,
         placeholder: String? = nil,
         icon: String = "pencil.line",
         localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
-        onComplete: @escaping (String?) -> Void
-    ) {
+        onComplete: @escaping (RenameSheetResult) -> Void
+    ) -> NSPanel {
         let panelWidth: CGFloat = 300
         let panelHeight: CGFloat = 130
 
@@ -48,6 +56,9 @@ final class RenameSheetController {
         panel.hasShadow = true
         panel.appearance = NSAppearance(named: .darkAqua)
         panel.isMovableByWindowBackground = false
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.collectionBehavior = [.fullScreenAuxiliary]
 
         // Translucent background with rounded corners.
         let effectView = NSVisualEffectView(frame: NSRect(origin: .zero, size: NSSize(width: panelWidth, height: panelHeight)))
@@ -62,6 +73,11 @@ final class RenameSheetController {
         effectView.alphaValue = 0.96
 
         panel.contentView = effectView
+        ApplicationLayoutDirectionCoordinator.markAsApplicationManaged(panel)
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: effectView
+        )
 
         // Icon + title row.
         let iconView = NSImageView()
@@ -153,21 +169,49 @@ final class RenameSheetController {
         ])
 
         // Coordinator for button actions.
-        let coordinator = FloatingPanelCoordinator(panel: panel, textField: textField, onComplete: onComplete)
+        let coordinator = FloatingPanelCoordinator(
+            parentWindow: window,
+            panel: panel,
+            textField: textField,
+            onComplete: onComplete
+        )
         renameBtn.target = coordinator
         renameBtn.action = #selector(FloatingPanelCoordinator.confirm)
         cancelBtn.target = coordinator
         cancelBtn.action = #selector(FloatingPanelCoordinator.dismiss)
-        objc_setAssociatedObject(panel, "coordinator", coordinator, .OBJC_ASSOCIATION_RETAIN)
+        panel.delegate = coordinator
+        objc_setAssociatedObject(
+            panel,
+            &coordinatorAssociationKey,
+            coordinator,
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
 
         // Show and focus.
-        panel.orderFront(nil)
-        panel.makeKey()
+        window.addChildWindow(panel, ordered: .above)
+        panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(textField)
         textField.selectText(nil)
+        DispatchQueue.main.async { [weak panel, weak textField] in
+            guard let panel, let textField, panel.isVisible else { return }
+            panel.makeFirstResponder(textField)
+            textField.selectText(nil)
+        }
 
-        // Make the parent window's content dim slightly.
-        window.addChildWindow(panel, ordered: .above)
+        return panel
+    }
+
+    static func hasRetainedCoordinator(for panel: NSPanel) -> Bool {
+        objc_getAssociatedObject(panel, &coordinatorAssociationKey) != nil
+    }
+
+    fileprivate static func releaseCoordinator(from panel: NSPanel) {
+        objc_setAssociatedObject(
+            panel,
+            &coordinatorAssociationKey,
+            nil,
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
     }
 
     static func localizedTitle(using localizer: AppLocalizer) -> String {
@@ -186,31 +230,69 @@ final class RenameSheetController {
 // MARK: - Floating Panel Coordinator
 
 @MainActor
-private final class FloatingPanelCoordinator: NSObject {
+private final class FloatingPanelCoordinator: NSObject, NSWindowDelegate {
     let panel: NSPanel
     let textField: NSTextField
-    let onComplete: (String?) -> Void
+    let onComplete: (RenameSheetResult) -> Void
+    private var hasFinished = false
+    private var isParentWindowClosing = false
 
-    init(panel: NSPanel, textField: NSTextField, onComplete: @escaping (String?) -> Void) {
+    init(
+        parentWindow: NSWindow,
+        panel: NSPanel,
+        textField: NSTextField,
+        onComplete: @escaping (RenameSheetResult) -> Void
+    ) {
         self.panel = panel
         self.textField = textField
         self.onComplete = onComplete
+        super.init()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(parentWindowWillClose),
+            name: NSWindow.willCloseNotification,
+            object: parentWindow
+        )
     }
 
     @objc func confirm() {
         let value = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        close()
-        onComplete(value.isEmpty ? nil : value)
+        finish(with: .confirmed(value.isEmpty ? nil : value))
     }
 
     @objc func dismiss() {
-        close()
-        onComplete(nil)
+        finish(with: .cancelled)
     }
 
-    private func close() {
+    func windowWillClose(_ notification: Notification) {
+        finish(
+            with: .cancelled,
+            orderOut: false,
+            notifyCompletion: !isParentWindowClosing
+        )
+    }
+
+    @objc private func parentWindowWillClose(_ notification: Notification) {
+        isParentWindowClosing = true
+    }
+
+    private func finish(
+        with result: RenameSheetResult,
+        orderOut: Bool = true,
+        notifyCompletion: Bool = true
+    ) {
+        guard !hasFinished else { return }
+        hasFinished = true
+
+        NotificationCenter.default.removeObserver(self)
         panel.parent?.removeChildWindow(panel)
-        panel.orderOut(nil)
-        objc_setAssociatedObject(panel, "coordinator", nil, .OBJC_ASSOCIATION_RETAIN)
+        panel.delegate = nil
+        RenameSheetController.releaseCoordinator(from: panel)
+        if orderOut {
+            panel.orderOut(nil)
+        }
+        if notifyCompletion && !isParentWindowClosing {
+            onComplete(result)
+        }
     }
 }

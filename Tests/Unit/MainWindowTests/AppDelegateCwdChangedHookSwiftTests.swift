@@ -9,6 +9,17 @@ import Testing
 @MainActor
 struct AppDelegateCwdChangedHookSwiftTests {
 
+    @Test("Claude settings decoder refuses malformed or non-object JSON")
+    func settingsDecoderRejectsUnsafeReplacementInputs() throws {
+        let valid = try #require(AppDelegate.decodeClaudeSettingsForUpdate(
+            Data(#"{"theme":"dark"}"#.utf8)
+        ))
+
+        #expect(valid["theme"] as? String == "dark")
+        #expect(AppDelegate.decodeClaudeSettingsForUpdate(Data("invalid".utf8)) == nil)
+        #expect(AppDelegate.decodeClaudeSettingsForUpdate(Data("[]".utf8)) == nil)
+    }
+
     @Test("bound hook sessions can retain the exact originating surface")
     func boundHookSessionRetainsSurfaceID() {
         let delegate = AppDelegate()
@@ -24,6 +35,24 @@ struct AppDelegateCwdChangedHookSwiftTests {
 
         #expect(delegate.hookSessionTabBindings["sess-surface"] == nil)
         #expect(delegate.boundSurfaceIDForHookSession("sess-surface") == nil)
+    }
+
+    @Test("closing a tab removes every hook routing binding owned by it")
+    func tabClosePrunesHookBindings() {
+        let delegate = AppDelegate()
+        let closingTabID = TabID()
+        let otherTabID = TabID()
+        delegate.bindHookSession("closing-one", to: closingTabID, surfaceID: SurfaceID())
+        delegate.bindHookSession("closing-two", to: closingTabID, surfaceID: SurfaceID())
+        delegate.bindHookSession("remaining", to: otherTabID, surfaceID: SurfaceID())
+
+        delegate.unbindHookSessions(for: closingTabID)
+
+        #expect(delegate.hookSessionTabBindings["closing-one"] == nil)
+        #expect(delegate.hookSessionSurfaceBindings["closing-one"] == nil)
+        #expect(delegate.hookSessionTabBindings["closing-two"] == nil)
+        #expect(delegate.hookSessionTabBindings["remaining"] == otherTabID)
+        #expect(delegate.hookSessionSurfaceBindings["remaining"] != nil)
     }
 
     @Test("bound session wins when multiple tabs share the same previous directory")
@@ -85,5 +114,35 @@ struct AppDelegateCwdChangedHookSwiftTests {
 
         #expect(firstController.tabManager.tab(for: firstTabID)?.workingDirectory.path == sharedPath)
         #expect(secondController.tabManager.tab(for: secondTabID)?.workingDirectory.path == sharedPath)
+    }
+
+    @Test("an already-applied CwdChanged requires a prior binding and exact new directory")
+    func alreadyAppliedCwdChangedRequiresBoundDestination() {
+        let delegate = AppDelegate()
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        delegate.additionalWindowControllers = [controller]
+        let tabID = controller.tabManager.tabs.first!.id
+        let newPath = "/tmp/cocxy-new-cwd"
+        controller.tabManager.updateTab(id: tabID) {
+            $0.workingDirectory = URL(fileURLWithPath: newPath, isDirectory: true)
+        }
+        let event = HookEvent(
+            type: .cwdChanged,
+            sessionId: "sess-osc-race",
+            data: .cwdChanged(CwdChangedData(previousCwd: "/tmp/cocxy-old-cwd")),
+            cwd: newPath
+        )
+
+        #expect(delegate.isBoundCwdChangedAlreadyApplied(event) == false)
+
+        delegate.bindHookSession("sess-osc-race", to: tabID)
+
+        #expect(delegate.isBoundCwdChangedAlreadyApplied(event) == true)
+        #expect(delegate.isBoundCwdChangedAlreadyApplied(HookEvent(
+            type: .cwdChanged,
+            sessionId: "sess-osc-race",
+            data: .cwdChanged(CwdChangedData(previousCwd: "/tmp/cocxy-old-cwd")),
+            cwd: "/tmp/different-destination"
+        )) == false)
     }
 }

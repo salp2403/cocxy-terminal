@@ -8,43 +8,8 @@ import SwiftUI
 
 // MARK: - Main Window Controller
 
-/// Controls the main application window layout.
-///
-/// The window contains a `CocxyCoreView` as its content view,
-/// connected to a `TerminalViewModel` that manages the terminal state.
-///
-/// ## Window configuration
-///
-/// - Transparent titlebar for a clean terminal appearance.
-/// - Full size content view so the terminal extends behind the titlebar.
-/// - Default size calculated from config (columns x rows x font metrics).
-/// - Minimum size (320x240) to prevent unusably small windows.
-/// - Frame autosave for position persistence between sessions.
-///
-/// ## Lifecycle
-///
-/// ```
-/// MainWindowController(bridge:configService:)  -- Creates window + view + viewModel
-///   .showWindow(nil)                           -- Shows the window and makes it key
-///   window close                               -- Cleanup via windowWillClose
-/// ```
-///
-/// ## Extensions
-///
-/// Responsibilities are distributed across focused extension files:
-/// - `+Overlays.swift` — SwiftUI overlay lifecycle (Command Palette, Dashboard, etc.)
-/// - `+TabLifecycle.swift` — Tab creation, destruction, and surface wiring.
-/// - `+SplitActions.swift` — Split pane creation, navigation, and management.
-/// - `+SurfaceLifecycle.swift` — Terminal surface creation/destruction/OSC handling.
-/// - `+StatusBar.swift` — Status bar content and refresh.
-/// - `+Theme.swift` — Theme cycling and config application.
-/// - `+TabStrip.swift` — Horizontal tab strip refresh logic.
-/// - `+RemoteWorkspace.swift` — Remote workspace panel lifecycle.
-/// - `+BrowserPro.swift` — Browser Pro overlay panels (history, bookmarks).
-///
-/// - SeeAlso: `CocxyCoreView`
-/// - SeeAlso: `TerminalViewModel`
-/// - SeeAlso: `ConfigService`
+/// Owns one application window and coordinates its terminal, tabs, layout,
+/// overlays, and injected app-scoped services through focused extensions.
 @MainActor
 final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate, DashboardTabNavigating {
     static let codeReviewPanelWidthDefaultsKey = "agentCodeReviewPanelWidth"
@@ -123,16 +88,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var windowEventBus: (any WindowEventBroadcasting)? {
         didSet { subscribeToWindowEvents() }
     }
-
-    /// Cancellable for the window event bus subscription.
+    var projectActivationHandler: ((ProjectID) -> Void)?
+    var projectLiveIDsProvider: (() -> Set<String>)?
+    var projectAliasHandler: ((ProjectID, String?) -> Void)?
     private var eventBusCancellable: AnyCancellable?
-
     /// Periodic Aurora-only safety net that reconciles visible terminal
     /// buffers back into the per-surface agent store. The live semantic
     /// callbacks remain the primary path; this timer covers missed launch
     /// edges after rebuilds, feature-flag toggles, or split focus churn.
     var auroraAgentReconciliationCancellable: AnyCancellable?
-
+    var projectInboxCancellable: AnyCancellable?
     /// Maps tab IDs to their corresponding session IDs in the registry.
     /// Populated when a tab is created and cleaned up when it's closed.
     var tabSessionMap: [TabID: SessionID] = [:]
@@ -156,6 +121,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Optional reference to the configuration service.
     let configService: ConfigService?
 
+    let voiceConsentCoordinator: VoiceConsentCoordinator
+
     var lspServerDiscoveryFactory: () -> LSPServerDiscovery = {
         LSPServerDiscovery()
     }
@@ -175,6 +142,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Manages the lifecycle and ordering of tabs.
     let tabManager: TabManager
 
+    let gitInfoProvider: any GitInfoProviding
+    let projectResolver: any ProjectResolving
+    let projectRegistry: ProjectRegistry?
+    let worktreeService: WorktreeService
+
     /// Presentation logic for the tab bar sidebar.
     private(set) var tabBarViewModel: TabBarViewModel?
 
@@ -191,6 +163,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Maps tab IDs to their associated surface IDs.
     /// Internal access for session restoration in AppDelegate.
     var tabSurfaceMap: [TabID: SurfaceID] = [:]
+
+    /// Tracks the real terminal tabs owned by each locally launched agent team.
+    /// The mapping drives transactional rollback, explicit team stop, and
+    /// cleanup when a user closes an agent tab directly.
+    var agentTeamTabIDsByTeamID: [String: Set<TabID>] = [:]
+    var agentTeamTabContextByTabID: [TabID: AgentTeamTerminalContext] = [:]
+
+    /// Tabs created by the persistent queue still dispatch plugin events, but
+    /// their lifecycle must never feed that same queue again.
+    var taskQueueLifecycleExcludedTabIDs = Set<TabID>()
 
     /// Restored tabs whose metadata has been installed but whose terminal
     /// surfaces have not been created yet. Hidden restore tabs stay here until
@@ -209,6 +191,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var tabTerminalEngines: [TabID: any TerminalEngine] = [:]
     var surfaceTerminalEngines: [SurfaceID: any TerminalEngine] = [:]
 
+    /// Owns daemon-backed transports for as long as their terminal surface lives.
+    var remoteDaemonTerminalViewModels: [SurfaceID: RemoteDaemonTerminalViewModel] = [:]
+
     /// Maps tab IDs to their terminal host views.
     /// Internal access for session restoration in AppDelegate.
     var tabSurfaceViews: [TabID: TerminalHostView] = [:]
@@ -222,14 +207,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// The split container view for the active tab (when splits are active).
     private(set) var splitContainer: SplitContainer?
-
-    /// Watcher for the active tab's `.cocxy.toml` project config.
-    /// Stopped and recreated on every tab switch.
-    private var projectConfigWatcher: ProjectConfigWatcher?
-
+    let projectConfigWatcherRegistry: ProjectConfigWatcherRegistry
+    let tabConfigProjectContextStore: TabConfigProjectContextStore
+    var projectConfigWatchLeases: [TabID: ProjectConfigWatchLease] = [:]
     /// Subscriptions for config change notifications.
     private var cancellables = Set<AnyCancellable>()
-
     // MARK: - SwiftUI Overlay State (used by MainWindowController+Overlays.swift)
 
     var commandPaletteViewModel: CommandPaletteViewModel?
@@ -257,20 +239,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var activityStorePath: String?
     var activityDashboardStorePath: String?
     var injectedActivityStore: ActivityStoring?
+    var activityWorkingDirectoryProvider: ActivityWorkingDirectoryProvider?
 
     var agentPanelViewModel: AgentPanelViewModel?
     var agentModeHostingView: NSHostingView<AgentPanelView>?
     var isAgentModeVisible: Bool = false
     var injectedAgentPromptRunner: (any AgentPromptRunning)?
-
+    var mobileMirrorApprovalRegistry: MobileMirrorApprovalRegistry?
+    var mobileMirrorApprovalCancellable: AnyCancellable?
     var richInputViewModel: RichInputComposerViewModel?
     var richInputHostingView: FocusableHostingView<RichInputComposerView>?
     var richInputPanel: RichInputPanel?
     var richInputCancelHandler: (() -> Void)?
     var richInputDraftStore = RichInputDraftStore()
-
     var voiceTriggerHandler: VoiceTriggerHandler?
     var voiceIndicatorHostingView: NSHostingView<VoiceIndicator>?
+    var voiceConsentBannerHostingView: NSHostingView<VoiceConsentBanner>?
+    var voiceConsentErrorMessage: String?
     var voiceInputTask: Task<Void, Never>?
     var injectedVoiceSessionFactory: VoiceTriggerHandler.SessionFactory?
     var touchBarController: CocxyTouchBarController?
@@ -478,6 +463,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// semantic finish event is delivered through more than one path.
     var persistedCommandBlockKeys: Set<String> = []
 
+    /// App-scoped store used for live command-block persistence and restoration.
+    let commandBlockStore: TerminalBlockStore
+
     /// Persisted command blocks reattached to restored primary surfaces.
     ///
     /// CocxyCore owns live block state for the current process. This map
@@ -514,6 +502,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// `renderFrame` for main-thread cycles.
     var surfaceOutputDispatchers: [SurfaceID: SurfaceOutputBackgroundDispatcher] = [:]
 
+    /// Short-lived cache for semantic agent detection, whose bridge reads take
+    /// the terminal lock. Cheap store/process signals bypass this cache.
+    var surfaceAgentSemanticVerdictCache: [SurfaceID: SurfaceAgentSemanticVerdictCacheEntry] = [:]
+
+    /// Injectable wall clock used to keep cache-expiration tests deterministic.
+    var surfaceAgentSemanticVerdictNow: () -> Date = { Date() }
+
     /// The container view that wraps the terminal area and overlays.
     var terminalContainerView: NSView?
 
@@ -523,10 +518,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// The container view for full-window overlays.
     private(set) var overlayContainerView: NSView?
-
     /// Dashboard ViewModel injected by AppDelegate for real agent data.
     /// When set, the dashboard panel shows live agent sessions instead of an empty view.
     var injectedDashboardViewModel: AgentDashboardViewModel?
+    var injectedTaskInboxStore: TaskInboxStore?
+    var injectedProjectFanOutCoordinator: ProjectFanOutCoordinator?
+    /// Lets AppDelegate release hook routing bindings after a tab is removed.
+    var onAgentTabClosed: ((TabID) -> Void)?
+
+    /// Reports provider-process and direct-tab termination after local tab
+    /// bookkeeping has been detached from the team runtime.
+    var onAgentTeamTerminalEnded: ((AgentTeamTerminalEnd) -> Void)?
 
     /// Timeline store injected by AppDelegate for real event data.
     /// When set, the timeline panel shows live agent events instead of an empty list.
@@ -548,12 +550,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// teardown paths guard for `nil` and skip the reset.
     var injectedPerSurfaceStore: AgentStatePerSurfaceStore?
 
+    /// Deterministic override for agent-team prompt readiness checks.
+    var agentTeamPromptReadinessOverride: ((SurfaceID) -> Bool)?
+    var agentTeamPromptMinimumDelay = Duration.milliseconds(500)
+
     /// Aurora chrome controller instantiated lazily the first time the
     /// `appearance.aurora-enabled` flag is observed to be true. Stays
     /// `nil` while the flag is off so the classic chrome path allocates
     /// zero Aurora state. See `MainWindowController+AuroraIntegration`
     /// for the install / visibility helpers.
     var auroraChromeController: AuroraChromeController?
+
+    let auroraWorkspaceTitleStore: AuroraWorkspaceTitleStore
 
     /// Watchdog that guards against surfaces that enter `.launched`
     /// and never transition further because the agent terminated
@@ -671,6 +679,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var isGitHubSocketMutationAuthorizationPresented = false
     var consumedGitHubSocketMutationAuthorizationIDs: [UUID: Date] = [:]
 
+    /// Optional test seam for project workflow failure alerts.
+    var projectActionAlertPresenter: ((String) -> Void)?
+
     /// Inline image renderers keyed by surface view identity.
     /// Lazily created per surface view in +SurfaceLifecycle.
     var inlineImageRenderers: [ObjectIdentifier: InlineImageRenderer] = [:]
@@ -719,13 +730,27 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         bridge: any TerminalEngine,
         configService: ConfigService? = nil,
         tabManager: TabManager? = nil,
+        appStores: MainWindowAppStores,
+        gitInfoProvider: (any GitInfoProviding)? = nil,
+        projectResolver: (any ProjectResolving)? = nil,
         terminalEngineFactory: ((TerminalEnginePreference) -> (any TerminalEngine)?)? = nil,
+        voiceConsentCoordinator: VoiceConsentCoordinator = VoiceConsentCoordinator(),
         deferContentSetup: Bool = false
     ) {
         self.bridge = bridge
         self.terminalEngineFactory = terminalEngineFactory
         self.configService = configService
-        self.tabManager = tabManager ?? TabManager()
+        self.voiceConsentCoordinator = voiceConsentCoordinator
+        let resolvedGitInfoProvider = gitInfoProvider ?? GitInfoProviderImpl()
+        self.gitInfoProvider = resolvedGitInfoProvider
+        self.projectResolver = projectResolver ?? CachedProjectResolver()
+        self.projectRegistry = appStores.projectRegistry
+        self.projectConfigWatcherRegistry = appStores.projectConfigWatcherRegistry
+        self.tabConfigProjectContextStore = appStores.tabConfigProjectContextStore
+        self.commandBlockStore = appStores.commandBlockStore
+        self.worktreeService = appStores.worktreeService
+        self.tabManager = tabManager ?? TabManager(gitInfoProvider: resolvedGitInfoProvider)
+        self.auroraWorkspaceTitleStore = appStores.auroraWorkspaceTitleStore
         self.terminalViewModel = TerminalViewModel(engine: bridge)
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
@@ -843,6 +868,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         let rootView = buildRootView(
             contentFrame: contentFrame, splitView: splitView
         )
+        applyShellLayoutDirection(to: rootView)
 
         window.contentView = rootView
         if let config = configService?.current {
@@ -878,6 +904,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         subscribeToRateLimitProbeChanges()
         startProcessMonitor()
         installInputDropMonitorObserver()
+        presentVoiceConsentIfNeeded()
     }
 
     // MARK: - Window Configuration Helpers
@@ -994,10 +1021,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func buildTerminalSurface() -> TerminalHostView {
+        let appearance = configService?.current.appearance ?? .defaults
         let surfaceView = TerminalHostViewFactory.make(
             viewModel: terminalViewModel,
             engine: bridge,
             localizer: appLocalizer(for: configService?.current)
+        )
+        surfaceView.applyFont(
+            family: appearance.fontFamily,
+            size: appearance.fontSize
         )
         self.terminalSurfaceView = surfaceView
         return surfaceView
@@ -1235,13 +1267,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             rateLimitSnapshot: rateLimitProbeService.snapshot,
             activePorts: [],
             sshSession: tabManager.activeTab?.sshSession,
+            isTerminalMouseCaptured: activeTerminalSurfaceView?.isTerminalMouseTrackingActive ?? false,
             localizer: appLocalizer()
         )
         statusBar.useVibrancy = isTransparent
         statusBar.vibrancyAppearanceOverride = isTransparent
             ? appearance?.transparencyChromeTheme.vibrancyAppearance
             : nil
-        let statusBarHost = NSHostingView(rootView: statusBar)
+        let statusBarHost = makeShellHostingView(rootView: statusBar)
         statusBarHost.frame = NSRect(x: 0, y: 0, width: contentFrame.width, height: Self.statusBarHeight)
         statusBarHost.wantsLayer = true
         statusBarHost.layer?.backgroundColor = isTransparent
@@ -1617,7 +1650,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             }
     }
 
-    /// Processes a single event from the window event bus.
     private func handleWindowEvent(_ event: WindowEvent) {
         switch event {
         case .focusSession(let sessionID):
@@ -1629,11 +1661,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             window?.makeKeyAndOrderFront(nil)
             _ = focusTab(id: entry.tabID)
 
+        case .custom(let name, _) where name == "project.changed":
+            refreshProjectPresentation()
+
         case .themeChanged, .fontChanged, .configReloaded,
              .globalShortcut, .custom:
-            // These are handled at the AppDelegate level which already
-            // iterates all window controllers. Individual windows do not
-            // need to react to these bus events directly.
             break
         }
     }
@@ -1664,6 +1696,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// Handles a foreground process change for a tab.
     private func handleProcessChange(_ event: ProcessChangeEvent) {
+        for surfaceID in surfaceIDs(for: event.tabID) {
+            invalidateSurfaceAgentSemanticVerdict(for: surfaceID)
+        }
         tabManager.updateTab(id: event.tabID) { tab in
             tab.processName = event.processName
             tab.sshSession = event.sshSession
@@ -1708,10 +1743,28 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     func windowWillClose(_ notification: Notification) {
+        releaseProjectConfigWatchers()
+
         // Deregister this window from the session registry. This cascades:
         // all sessions owned by this window are removed and removal events
         // are published so other windows can update their UI.
         sessionRegistry?.removeWindow(windowID)
+
+        // A whole-window close bypasses the per-tab close path. Mirror its
+        // agent cleanup for every remaining tab so hook-native dashboard rows,
+        // task bindings, and the dock badge cannot outlive the window.
+        for tabID in tabManager.tabs.map(\.id) {
+            let terminalEnd = unregisterAgentTeamTab(tabID, reason: .tabClosed)
+            taskQueueLifecycleExcludedTabIDs.remove(tabID)
+            injectedDashboardViewModel?.removeSessions(forTabID: tabID.rawValue)
+            onAgentTabClosed?(tabID)
+            if let terminalEnd {
+                // Window teardown can release this controller before an
+                // asynchronously queued notification runs. Deliver directly
+                // so the broker and team runtime are always retired.
+                onAgentTeamTerminalEnded?(terminalEnd)
+            }
+        }
 
         processMonitor?.stop()
 
@@ -1752,6 +1805,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         welcomeHostingView = nil
         onboardingHostingView?.removeFromSuperview()
         onboardingHostingView = nil
+        voiceConsentBannerHostingView?.removeFromSuperview()
+        voiceConsentBannerHostingView = nil
 
         // Clean stored closures on the sidebar and tab strip to prevent leaks.
         tabBarView?.onCommandPalette = nil
@@ -1822,6 +1877,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     func windowDidResize(_ notification: Notification) {
         adjustLayoutForWindowSize()
+        layoutVoiceConsentBanner()
     }
 
     // MARK: - Display / Backing Safety Net
@@ -1982,7 +2038,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         }
 
         if isTimelineVisible || isDashboardVisible || isActivityDashboardVisible || isAgentModeVisible || isCodeReviewVisible || isGitHubPaneVisible || isVaultSidebarVisible || isNotesVisible {
-            layoutRightDockedAgentPanels()
+            layoutTrailingDockedPanels()
         }
     }
 
@@ -2001,7 +2057,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     /// Updates the persisted GitHub pane panel width. Mirrors
-    /// `updatePreferredCodeReviewPanelWidth` so the two right-docked
+    /// `updatePreferredCodeReviewPanelWidth` so the two trailing-edge
     /// panels share the same persistence idiom.
     func updatePreferredGitHubPanePanelWidth(_ width: CGFloat) {
         let clampedWidth = MainWindowController.clampStoredGitHubPanePanelWidth(width)
@@ -2113,6 +2169,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         terminalEngine(for: surfaceID).notifyFocus(focused, for: surfaceID)
     }
 
+    /// Reports an explicit terminal focus handoff when a key window changes
+    /// tabs or split panes. Engine-level deduplication keeps responder-chain
+    /// callbacks and this lifecycle safety net from emitting duplicate bytes.
+    func synchronizeSurfaceFocusTransition(
+        from previousSurfaceID: SurfaceID?,
+        to focusedSurfaceID: SurfaceID?
+    ) {
+        guard window?.isKeyWindow == true,
+              previousSurfaceID != focusedSurfaceID else { return }
+        if let previousSurfaceID, previousSurfaceID != focusedSurfaceID {
+            terminalEngine(for: previousSurfaceID).notifyFocus(false, for: previousSurfaceID)
+        }
+        if let focusedSurfaceID {
+            terminalEngine(for: focusedSurfaceID).notifyFocus(true, for: focusedSurfaceID)
+        }
+    }
+
     /// Returns every terminal view model associated with a tab, including split panes.
     func viewModelsForTab(_ tabID: TabID) -> [TerminalViewModel] {
         var result: [TerminalViewModel] = []
@@ -2188,15 +2261,76 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         }
 
         for surfaceID in surfaceIDs(for: tabID) {
-            if let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge {
-                cocxyBridge.applyFont(
-                    family: effective.appearance.fontFamily,
-                    size: fontSize,
-                    to: [surfaceID]
+            applyTerminalFont(
+                family: effective.appearance.fontFamily,
+                size: fontSize,
+                to: surfaceID
+            )
+        }
+    }
+
+    func applyTerminalFont(
+        family: String,
+        size: Double,
+        to surfaceID: SurfaceID
+    ) {
+        let engine = terminalEngine(for: surfaceID)
+        engine.applyFont(family: family, size: size, to: surfaceID)
+        guard engine.cocxyCoreBridge == nil,
+              let surfaceView = surfaceView(for: surfaceID) else { return }
+        surfaceView.applyFont(family: family, size: size)
+    }
+
+    /// Reapplies the latest global font configuration to every managed tab,
+    /// preserving per-project overrides and routing each live surface through
+    /// the engine that owns it. The default CocxyCore engine may already have
+    /// received the global update from AppDelegate, so identical default
+    /// surfaces can be skipped while project-scoped and daemon surfaces still
+    /// receive their effective values.
+    func applyEffectiveTerminalFonts(
+        from globalConfig: CocxyConfig,
+        defaultEngineAlreadyUpdated: Bool
+    ) {
+        terminalViewModel.setDefaultFontSize(globalConfig.appearance.fontSize)
+        var enginesWithUpdatedDefaults = Set<ObjectIdentifier>()
+
+        for tab in tabManager.tabs {
+            let effective = tab.projectConfig.map {
+                globalConfig.applying(projectOverrides: $0)
+            } ?? globalConfig
+            let tabEngine = terminalEngine(for: tab.id)
+            let engineIdentifier = ObjectIdentifier(tabEngine)
+            if enginesWithUpdatedDefaults.insert(engineIdentifier).inserted,
+               defaultEngineAlreadyUpdated == false || tabEngine !== bridge {
+                tabEngine.updateFontDefaults(
+                    family: globalConfig.appearance.fontFamily,
+                    size: globalConfig.appearance.fontSize
                 )
-            } else if let surfaceView = surfaceView(for: surfaceID) {
-                surfaceView.updateInteractionMetrics()
-                surfaceView.requestImmediateRedraw()
+            }
+
+            for viewModel in viewModelsForTab(tab.id) {
+                viewModel.setDefaultFontSize(effective.appearance.fontSize)
+            }
+
+            for surfaceID in surfaceIDs(for: tab.id) {
+                let engine = terminalEngine(for: surfaceID)
+                let matchesGlobalDefault =
+                    effective.appearance.fontFamily == globalConfig.appearance.fontFamily
+                    && effective.appearance.fontSize == globalConfig.appearance.fontSize
+                if defaultEngineAlreadyUpdated,
+                   engine === bridge,
+                   matchesGlobalDefault {
+                    if let surfaceView = surfaceView(for: surfaceID) {
+                        surfaceView.updateInteractionMetrics()
+                        surfaceView.requestImmediateRedraw()
+                    }
+                    continue
+                }
+                applyTerminalFont(
+                    family: effective.appearance.fontFamily,
+                    size: effective.appearance.fontSize,
+                    to: surfaceID
+                )
             }
         }
     }
@@ -2217,9 +2351,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         guard tabManager.tab(for: id) != nil else { return false }
         if tabManager.activeTabID != id {
             tabManager.setActive(id: id)
-        } else {
-            handleTabSwitch(to: id)
         }
+        handleTabSwitch(to: id)
         return true
     }
 
@@ -2232,6 +2365,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     func handleTabSwitch(to tabID: TabID) {
         guard let container = terminalContainerView else { return }
+        let previouslyFocusedSurfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
         materializeDeferredRestoredTabIfNeeded(tabID)
         resolveDeferredRestoredTabMetadataIfNeeded(tabID)
 
@@ -2295,6 +2429,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             container.addSubview(targetSurfaceView, positioned: .below, relativeTo: nil)
         } else {
             activeSplitView = nil
+            synchronizeSurfaceFocusTransition(from: previouslyFocusedSurfaceID, to: nil)
             refreshStatusBar()
             refreshTabStrip()
             return
@@ -2317,17 +2452,36 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         // cell sizes we computed here before. Calling resize twice caused a brief
         // flicker when the approximate and actual sizes diverged.
 
+        let newlyFocusedSurfaceID: SurfaceID?
         if let focusedPane = focusedPaneView() {
-            window?.makeFirstResponder(focusedPane)
-            if let responderSurface = focusedPane as? TerminalHostView {
-                responderSurface.hideNotificationRing()
+            let acceptedFocus = window?.makeFirstResponder(focusedPane) == true
+                || window?.firstResponder === focusedPane
+            if acceptedFocus {
+                if let responderSurface = focusedPane as? TerminalHostView {
+                    responderSurface.hideNotificationRing()
+                    newlyFocusedSurfaceID = responderSurface.terminalViewModel?.surfaceID
+                } else {
+                    targetSurfaceView?.hideNotificationRing()
+                    newlyFocusedSurfaceID = targetSurfaceView?.terminalViewModel?.surfaceID
+                }
             } else {
-                targetSurfaceView?.hideNotificationRing()
+                newlyFocusedSurfaceID = previouslyFocusedSurfaceID
             }
         } else if let targetSurfaceView {
-            window?.makeFirstResponder(targetSurfaceView)
-            targetSurfaceView.hideNotificationRing()
+            if window?.makeFirstResponder(targetSurfaceView) == true
+                || window?.firstResponder === targetSurfaceView {
+                targetSurfaceView.hideNotificationRing()
+                newlyFocusedSurfaceID = targetSurfaceView.terminalViewModel?.surfaceID
+            } else {
+                newlyFocusedSurfaceID = previouslyFocusedSurfaceID
+            }
+        } else {
+            newlyFocusedSurfaceID = nil
         }
+        synchronizeSurfaceFocusTransition(
+            from: previouslyFocusedSurfaceID,
+            to: newlyFocusedSurfaceID
+        )
         refreshVisibleTerminalInteractionState()
 
         // Propagate read state to the session registry so other windows
@@ -2359,8 +2513,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             return
         }
 
-        let gitProvider = GitInfoProviderImpl()
-        let branch = gitProvider.currentBranch(at: tab.workingDirectory)
+        let branch = gitInfoProvider.currentBranch(at: tab.workingDirectory)
         let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
         let originRepo = inheritProjectConfig ? tab.worktreeOriginRepo : nil
         let projectConfig = ProjectConfigService().loadConfig(
@@ -2392,18 +2545,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             }
         guard !snapshots.isEmpty else { return }
 
-        Task.detached(priority: .utility) { [snapshots, delay] in
+        let gitInfoProvider = self.gitInfoProvider
+        Task.detached(priority: .utility) { [snapshots, delay, gitInfoProvider] in
             if delay > 0 {
                 let nanoseconds = UInt64(delay * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: nanoseconds)
             }
 
-            let gitProvider = GitInfoProviderImpl()
             let projectConfigService = ProjectConfigService()
             let results = snapshots.map { snapshot in
                 (
                     tabID: snapshot.tabID,
-                    branch: gitProvider.currentBranch(at: snapshot.workingDirectory),
+                    branch: gitInfoProvider.currentBranch(at: snapshot.workingDirectory),
                     projectConfig: projectConfigService.loadConfig(
                         for: snapshot.workingDirectory,
                         originRepo: snapshot.originRepo
@@ -2475,19 +2628,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             viewModel.setDefaultFontSize(effective.appearance.fontSize)
         }
 
-        if let cocxyBridge = bridge.cocxyCoreBridge {
-            cocxyBridge.applyFont(
+        for surfaceID in surfaceIDs(for: tabID) {
+            applyTerminalFont(
                 family: effective.appearance.fontFamily,
                 size: effective.appearance.fontSize,
-                to: surfaceIDs(for: tabID)
+                to: surfaceID
             )
         }
 
-        // Only the visible tab is allowed to mutate window chrome and active
-        // project watchers. Background tabs must not override the current UI.
+        synchronizeProjectConfigWatcher(for: tab)
+
+        // Only the visible tab is allowed to mutate window chrome.
         if visibleTabID == tabID {
             applyEffectiveAppearance(effective.appearance)
-            restartProjectConfigWatcher(for: tab)
         }
     }
 
@@ -2573,52 +2726,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         }
 
         return ids
-    }
-
-    /// Restarts the file watcher for the active tab's `.cocxy.toml`.
-    ///
-    /// Stops any existing watcher and starts a new one pointing to the
-    /// `.cocxy.toml` in the tab's working directory (or nearest parent).
-    private func restartProjectConfigWatcher(for tab: Tab) {
-        projectConfigWatcher?.stopWatching()
-        projectConfigWatcher = nil
-
-        // Find the .cocxy.toml path (same traversal as loadConfig).
-        // Honours the worktree origin-repo fallback so the watcher
-        // observes the file that actually drives this tab's merged
-        // config — for a tab inside a worktree without its own
-        // `.cocxy.toml`, that file lives in the origin repo.
-        let service = ProjectConfigService()
-        let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
-        let originRepo = inheritProjectConfig ? tab.worktreeOriginRepo : nil
-        let configPath = service.findConfigPath(
-            for: tab.workingDirectory,
-            originRepo: originRepo
-        )
-        guard let configPath else { return }
-
-        let watcher = ProjectConfigWatcher(configFilePath: configPath)
-        watcher.startWatching { [weak self, tabID = tab.id] in
-            // Re-load project config and re-apply. Re-resolves the
-            // worktree origin at fire time so a tab that gained or
-            // lost a worktree between watcher start and this callback
-            // still picks the correct fallback.
-            guard let self else { return }
-            let currentTab = self.tabManager.tab(for: tabID)
-            let workingDirectory = currentTab?.workingDirectory
-                ?? FileManager.default.homeDirectoryForCurrentUser
-            let liveInheritFlag = self.configService?.current.worktree.inheritProjectConfig ?? true
-            let liveOriginRepo = liveInheritFlag ? currentTab?.worktreeOriginRepo : nil
-            let newConfig = ProjectConfigService().loadConfig(
-                for: workingDirectory,
-                originRepo: liveOriginRepo
-            )
-            self.tabManager.updateTab(id: tabID) { tab in
-                tab.projectConfig = newConfig
-            }
-            self.applyProjectConfig(for: tabID)
-        }
-        self.projectConfigWatcher = watcher
     }
 
     /// Applies appearance settings to the window chrome.
@@ -2741,6 +2848,47 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var quickSwitchController: QuickSwitchController?
 
     // MARK: - Zoom Actions
+
+    @objc func scrollTerminalPageUpAction(_ sender: Any?) {
+        activeTerminalSurfaceView?.performLocalViewportScroll(.pageUp)
+    }
+
+    @objc func scrollTerminalPageDownAction(_ sender: Any?) {
+        activeTerminalSurfaceView?.performLocalViewportScroll(.pageDown)
+    }
+
+    @objc func scrollTerminalToTopAction(_ sender: Any?) {
+        activeTerminalSurfaceView?.performLocalViewportScroll(.top)
+    }
+
+    @objc func scrollTerminalToBottomAction(_ sender: Any?) {
+        activeTerminalSurfaceView?.performLocalViewportScroll(.bottom)
+    }
+
+    @objc func previousTerminalPromptAction(_ sender: Any?) {
+        guard activeTerminalSurfaceView?.performSemanticNavigation(.previousPrompt) == true else { return }
+        focusActiveTerminalSurface()
+    }
+
+    @objc func nextTerminalPromptAction(_ sender: Any?) {
+        guard activeTerminalSurfaceView?.performSemanticNavigation(.nextPrompt) == true else { return }
+        focusActiveTerminalSurface()
+    }
+
+    @objc func selectTerminalCommandOutputAction(_ sender: Any?) {
+        guard activeTerminalSurfaceView?.performSemanticNavigation(.selectCommandOutput) == true else { return }
+        focusActiveTerminalSurface()
+    }
+
+    @objc func hideCommandBlocksAction(_ sender: Any?) {
+        activeTerminalSurfaceView?.dismissVisibleCommandBlocks()
+    }
+
+    @objc func showDetectedContentHintsAction(_ sender: Any?) {
+        guard let surfaceView = activeTerminalSurfaceView,
+              surfaceView.showDetectedContentHints() > 0 else { return }
+        focusActiveTerminalSurface()
+    }
 
     /// Increases the terminal font size by one step. Wired to Cmd++ via the View menu.
     @objc func zoomInAction(_ sender: Any?) {

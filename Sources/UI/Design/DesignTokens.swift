@@ -99,7 +99,7 @@ extension Design {
     ///
     /// Conversion to `Color` happens on demand through `resolvedColor`
     /// which routes through Apple's public `Color(oklch:)` initializer
-    /// on macOS 14+. Callers that need an `NSColor` (for AppKit views
+    /// on macOS 15+. Callers that need an `NSColor` (for AppKit views
     /// that still accept the legacy type) get the same precision via
     /// `resolvedNSColor()`.
     struct OKLCHColor: Equatable, Hashable, Sendable {
@@ -137,7 +137,7 @@ extension Design {
         /// Resolves the token to a SwiftUI `Color`.
         ///
         /// Uses the public `Color(oklch:)` initializer introduced with
-        /// macOS 14's `Color` enhancements when available; otherwise
+        /// macOS 15's `Color` enhancements when available; otherwise
         /// converts via a deterministic OKLab -> linear sRGB pipeline
         /// so the early-access builds still render the token.
         func resolvedColor() -> Color {

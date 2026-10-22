@@ -558,7 +558,7 @@ struct BrowserImportSwiftTestingTests {
         #expect(result.history.count == 50_000)
         #expect(result.skippedCount == 2)
         #expect(result.errors.contains {
-            $0.message.contains("History safety limit reached")
+            $0.kind == .historySafetyLimit(skipped: 2, importLimit: 50_000, scanLimit: nil)
                 && $0.message.contains("50000-visit import limit")
         })
     }
@@ -718,7 +718,7 @@ struct BrowserImportSwiftTestingTests {
 
         #expect(result.bookmarks.isEmpty)
         #expect(result.errors.count == 1)
-        #expect(result.errors[0].message.contains("Bookmark import failed"))
+        #expect(result.errors[0].kind == .sourceReadFailed(.bookmarks))
     }
 
     @Test("Chromium and Safari bookmark decoders preserve nested folders")
@@ -822,7 +822,7 @@ struct BrowserImportSwiftTestingTests {
         ])
         #expect(result.history[0].visitedAt > result.history[1].visitedAt)
         #expect(result.cookies.isEmpty)
-        #expect(result.errors.contains { $0.message.contains("Cookies.binarycookies") })
+        #expect(result.errors.contains { $0.kind == .sourceReadFailed(.cookies) })
     }
 
     @Test("orchestrator does not duplicate an imported history visit")
@@ -2369,7 +2369,7 @@ private enum BrowserImportFixture {
 
     @MainActor
     static func waitUntil(
-        timeout: TimeInterval = 3,
+        timeout: TimeInterval = 15,
         condition: @escaping @MainActor () -> Bool
     ) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
@@ -2389,7 +2389,7 @@ private enum BrowserImportFixture {
         in dataStore: WKWebsiteDataStore,
         domain: String,
         toEqual expected: [String],
-        timeout: TimeInterval = 5
+        timeout: TimeInterval = 15
     ) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while true {

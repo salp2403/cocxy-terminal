@@ -1,14 +1,6 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// AuroraModels.swift - Minimal mock models for the Aurora chrome views.
-//
-// These structs mirror the state shapes in the design-reference
-// prototype (`src/data.jsx` — `INITIAL_WORKSPACES`, `SESSION_LOGS`).
-// They are used by `AuroraSidebarView` and `AuroraStatusBarView` so the
-// redesigned chrome can render from either previews/tests or the live
-// adapter layer. Production mapping from `TabManager` +
-// `AgentStatePerSurfaceStore` happens in `AuroraSourceBuilder` and
-// `AuroraWorkspaceAdapter`, keeping these models zero-dependency on
-// AppKit and decoupled from the current domain objects.
+// AuroraModels.swift - Presentation-only snapshots populated by
+// AuroraSourceBuilder and AuroraWorkspaceAdapter.
 
 import Foundation
 
@@ -81,11 +73,14 @@ extension Design {
         let name: String
         let agent: AgentAccent
         let state: AgentStateRole
+        let branch: String?
         let isPinned: Bool
         let panes: [AuroraPane]
         let workingDirectory: String?
         let foregroundProcessName: String?
         let lastCommandSummary: String?
+        /// Raw `NoteWorkspaceID` for this tab's filesystem-derived notes root.
+        let notesWorkspaceID: String?
         /// Whether the underlying tab is attached to a cocxy-managed git
         /// worktree. Drives the sidebar worktree badge in
         /// `AuroraSidebarView`; wired from
@@ -98,22 +93,26 @@ extension Design {
             name: String,
             agent: AgentAccent,
             state: AgentStateRole,
+            branch: String? = nil,
             isPinned: Bool = false,
             panes: [AuroraPane],
             workingDirectory: String? = nil,
             foregroundProcessName: String? = nil,
             lastCommandSummary: String? = nil,
+            notesWorkspaceID: String? = nil,
             hasWorktree: Bool = false
         ) {
             self.id = id
             self.name = name
             self.agent = agent
             self.state = state
+            self.branch = branch
             self.isPinned = isPinned
             self.panes = panes
             self.workingDirectory = workingDirectory
             self.foregroundProcessName = foregroundProcessName
             self.lastCommandSummary = lastCommandSummary
+            self.notesWorkspaceID = notesWorkspaceID
             self.hasWorktree = hasWorktree
         }
 
@@ -270,6 +269,7 @@ extension Design {
                 lastCommandSummary,
                 workspaceName,
                 branch,
+                self.branch,
             ]
             .compactMap(Self.cleaned)
             .map { $0.lowercased() }
@@ -313,6 +313,59 @@ extension Design {
         let rowFrame: CGRect
     }
 
+    enum AuroraRenameTarget: Equatable, Hashable, Sendable {
+        case session(String)
+        case workspace(String)
+    }
+
+    struct AuroraSidebarRenameRequest: Equatable, Sendable {
+        let id: UUID
+        let target: AuroraRenameTarget
+        let currentName: String
+
+        init(
+            id: UUID = UUID(),
+            target: AuroraRenameTarget,
+            currentName: String
+        ) {
+            self.id = id
+            self.target = target
+            self.currentName = currentName
+        }
+    }
+
+    struct AuroraRenameCommit: Equatable, Sendable {
+        let target: AuroraRenameTarget
+        let title: String?
+    }
+
+    struct AuroraInlineRenameState: Equatable, Sendable {
+        private(set) var target: AuroraRenameTarget?
+        var draft = ""
+
+        mutating func begin(target: AuroraRenameTarget, currentName: String) {
+            self.target = target
+            draft = currentName
+        }
+
+        mutating func commit(target expectedTarget: AuroraRenameTarget) -> AuroraRenameCommit? {
+            guard target == expectedTarget else { return nil }
+            let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+            target = nil
+            draft = ""
+            return AuroraRenameCommit(
+                target: expectedTarget,
+                title: trimmed.isEmpty ? nil : trimmed
+            )
+        }
+
+        mutating func cancel(target expectedTarget: AuroraRenameTarget) {
+            guard target == expectedTarget else { return }
+            target = nil
+            draft = ""
+        }
+    }
+
     /// A workspace is the top-level node in the sidebar tree. It
     /// usually maps to a working directory that contains one or more
     /// related sessions (for example `~/code/cocxy` with an API
@@ -324,14 +377,10 @@ extension Design {
         let branch: String?
         var isCollapsed: Bool
         let sessions: [AuroraSession]
-        /// Raw value of the `NoteWorkspaceID` for this workspace, when
-        /// resolvable. Computed by the adapter from the workspace root
-        /// path so the Aurora sidebar can show a per-workspace notes
-        /// section. Stays optional (`nil`) for tabs whose path is not
-        /// resolvable — SSH sessions, detached tabs, fallback shells —
-        /// so the sidebar simply omits the notes block instead of
-        /// surfacing a non-functional affordance.
-        let notesWorkspaceID: String?
+        /// Distinct filesystem-derived note roots represented by the
+        /// sessions in this visual workspace. A registered project can
+        /// widen presentation grouping without changing either identity.
+        let notesWorkspaceIDs: [String]
 
         init(
             id: String,
@@ -339,14 +388,16 @@ extension Design {
             branch: String?,
             isCollapsed: Bool,
             sessions: [AuroraSession],
-            notesWorkspaceID: String? = nil
+            notesWorkspaceIDs: [String]? = nil
         ) {
             self.id = id
             self.name = name
             self.branch = branch
             self.isCollapsed = isCollapsed
             self.sessions = sessions
-            self.notesWorkspaceID = notesWorkspaceID
+            self.notesWorkspaceIDs = Self.uniqueNotesWorkspaceIDs(
+                notesWorkspaceIDs ?? sessions.compactMap(\.notesWorkspaceID)
+            )
         }
 
         /// Filters the session list by case-insensitive tokens across
@@ -370,77 +421,12 @@ extension Design {
                 branch: branch,
                 isCollapsed: isCollapsed,
                 sessions: filtered,
-                notesWorkspaceID: notesWorkspaceID
+                notesWorkspaceIDs: notesWorkspaceIDs
             )
         }
+
     }
 
-    // MARK: - Notes summary models
-
-    /// Compact representation of a single note for the Aurora sidebar
-    /// notes section. Pure value type so the controller can publish it
-    /// across actor boundaries without any reactive plumbing.
-    ///
-    /// `id` is the note's UUID rendered as a string so the sidebar can
-    /// pass it back to the host as a stable identifier without leaking
-    /// the `UUID` type into the design module.
-    struct AuroraNoteRow: Identifiable, Equatable, Hashable, Sendable {
-        let id: String
-        let title: String
-        let updatedAt: Date
-
-        init(id: String, title: String, updatedAt: Date) {
-            self.id = id
-            self.title = title
-            self.updatedAt = updatedAt
-        }
-    }
-
-    /// Aggregated notes state for a single workspace.
-    ///
-    /// The Aurora sidebar shows the workspace's note count plus a
-    /// truncated list of the most recently edited notes. This summary
-    /// captures both pieces in a single value so the published map on
-    /// `AuroraChromeController` remains a flat dictionary keyed by the
-    /// workspace's `NoteWorkspaceID.rawValue`.
-    struct AuroraWorkspaceNotesSummary: Equatable, Hashable, Sendable {
-        let workspaceID: String
-        let count: Int
-        let recentNotes: [AuroraNoteRow]
-
-        init(workspaceID: String, count: Int, recentNotes: [AuroraNoteRow]) {
-            self.workspaceID = workspaceID
-            self.count = count
-            self.recentNotes = recentNotes
-        }
-    }
-
-    /// Presentation-only disclosure overrides for the Aurora sidebar.
-    ///
-    /// Live workspace snapshots are rebuilt as tabs, branches, panes, and
-    /// agent states change. Keeping the user's expanded/collapsed choice in
-    /// this small view-state helper prevents those refreshes from reopening a
-    /// workspace immediately after the user closes it.
-    struct AuroraWorkspaceDisclosureOverrides: Equatable, Sendable {
-        private var collapsedByWorkspaceID: [String: Bool]
-
-        init(collapsedByWorkspaceID: [String: Bool] = [:]) {
-            self.collapsedByWorkspaceID = collapsedByWorkspaceID
-        }
-
-        func isCollapsed(_ workspace: AuroraWorkspace) -> Bool {
-            collapsedByWorkspaceID[workspace.id] ?? workspace.isCollapsed
-        }
-
-        mutating func toggle(_ workspace: AuroraWorkspace) {
-            collapsedByWorkspaceID[workspace.id] = !isCollapsed(workspace)
-        }
-
-        mutating func prune(validWorkspaceIDs: [String]) {
-            let validIDs = Set(validWorkspaceIDs)
-            collapsedByWorkspaceID = collapsedByWorkspaceID.filter { validIDs.contains($0.key) }
-        }
-    }
 }
 
 // MARK: - Status bar models

@@ -61,7 +61,7 @@ struct PreferencesView: View {
     private let pluginManager: PluginManager?
 
     /// Currently selected section in the sidebar.
-    @State private var selectedSection: PreferencesSection = .general
+    @State private var selectedSection: PreferencesSection
 
     /// Status message shown after save attempts.
     @State private var saveStatus: String?
@@ -71,11 +71,13 @@ struct PreferencesView: View {
     /// Backwards-compatible initializer that wraps a read-only config in a view model.
     init(
         config: CocxyConfig,
+        initialSection: PreferencesSection = .general,
         onGitHubSignIn: (() -> Void)? = nil,
         onOpenGitHubCLIInstallGuide: (() -> Void)? = nil,
         pluginManager: PluginManager? = nil
     ) {
         self.viewModel = PreferencesViewModel(config: config)
+        self._selectedSection = State(initialValue: initialSection)
         self.onGitHubSignIn = onGitHubSignIn
         self.onOpenGitHubCLIInstallGuide = onOpenGitHubCLIInstallGuide
         self.pluginManager = pluginManager
@@ -84,11 +86,13 @@ struct PreferencesView: View {
     /// Primary initializer with an editable view model.
     init(
         viewModel: PreferencesViewModel,
+        initialSection: PreferencesSection = .general,
         onGitHubSignIn: (() -> Void)? = nil,
         onOpenGitHubCLIInstallGuide: (() -> Void)? = nil,
         pluginManager: PluginManager? = nil
     ) {
         self.viewModel = viewModel
+        self._selectedSection = State(initialValue: initialSection)
         self.onGitHubSignIn = onGitHubSignIn
         self.onOpenGitHubCLIInstallGuide = onOpenGitHubCLIInstallGuide
         self.pluginManager = pluginManager
@@ -1722,6 +1726,13 @@ struct HookIntegrationPreferencesSection: View {
                     viewModel.localizedString("preferences.hooks.enable", fallback: "Enable hook forwarding"),
                     isOn: $viewModel.hooksIntegrationEnabled
                 )
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.hooks.debugLog",
+                        fallback: "Write local hook diagnostics"
+                    ),
+                    isOn: $viewModel.hooksDebugLogEnabled
+                )
                 Text(
                     viewModel.localizedString(
                         "preferences.hooks.feature.caption",
@@ -1730,6 +1741,16 @@ struct HookIntegrationPreferencesSection: View {
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    viewModel.localizedString(
+                        "preferences.hooks.debugLog.caption",
+                        fallback: "Applies to new shells and writes sensitive local details to ~/Library/Logs/Cocxy/hook-integration.log."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -1910,6 +1931,21 @@ struct VoicePreferencesSection: View {
                     viewModel.localizedString(
                         "preferences.voice.enable.help",
                         fallback: "Enables local dictation entry points when supported by macOS."
+                    )
+                )
+
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.voice.autoSendToAgent",
+                        fallback: "Send automatically to detected agents"
+                    ),
+                    isOn: $viewModel.voiceAutoSendToAgent
+                )
+                .disabled(!viewModel.voiceEnabled)
+                .help(
+                    viewModel.localizedString(
+                        "preferences.voice.autoSendToAgent.help",
+                        fallback: "Submits dictated text immediately instead of leaving it at the prompt for review."
                     )
                 )
             }
@@ -2987,6 +3023,31 @@ struct TerminalPreferencesSection: View {
                     )
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            Section(viewModel.localizedString("preferences.terminal.interaction.section", fallback: "Interaction")) {
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.terminal.cursorClickToMove",
+                        fallback: "Move cursor by clicking shell input"
+                    ),
+                    isOn: $viewModel.cursorClickToMove
+                )
+            }
+
+            Section(viewModel.localizedString("preferences.terminal.commandBlocks.section", fallback: "Command Blocks")) {
+                Toggle(
+                    viewModel.localizedString("preferences.terminal.commandBlocks.enabled", fallback: "Show command blocks"),
+                    isOn: $viewModel.commandBlocksEnabled
+                )
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.terminal.commandBlocks.hoverOnly",
+                        fallback: "Show command block actions only on hover"
+                    ),
+                    isOn: $viewModel.commandBlocksShowOnlyOnHover
+                )
+                .disabled(!viewModel.commandBlocksEnabled)
             }
 
             Section(viewModel.localizedString("preferences.terminal.commandCorrections.section", fallback: "Command Corrections")) {

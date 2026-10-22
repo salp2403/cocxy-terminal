@@ -79,6 +79,7 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
+          check-latest: true
 
       - name: Install pinned XcodeGen
         run: |
@@ -341,7 +342,7 @@ jobs:
               <item>
                 <title>Version ${VERSION}</title>
                 <pubDate>${DATE}</pubDate>
-                <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+                <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
                 <enclosure
                   url="${DMG_URL}"
                   sparkle:version="${VERSION}"
@@ -368,8 +369,8 @@ jobs:
             **Homebrew:** `brew tap salp2403/tap && brew install --cask cocxy`
 
             ### System Requirements
-            - macOS 14.0 (Sonoma) or later
-            - Apple Silicon or Intel Mac
+            - macOS 15.0 (Sequoia) or later
+            - Apple Silicon Mac
           generate_release_notes: true
 
       - name: Update CHANGELOG on main
@@ -434,7 +435,6 @@ jobs:
               "download the dmg",       # Install template
               "brew tap",               # Install template
               "brew install",           # Install template
-              "macos 14",              # System requirements
               "apple silicon",          # System requirements
               "intel mac",              # System requirements
               "system requirements",    # Section header
@@ -731,7 +731,7 @@ jobs:
                   "@type": "SoftwareApplication",
                   "name": f"Cocxy Terminal {tag}",
                   "applicationCategory": "DeveloperApplication",
-                  "operatingSystem": "macOS 14.0+",
+                  "operatingSystem": "macOS 15.0+",
                   "softwareVersion": version,
                   "url": gh,
                   "downloadUrl": dmg,
@@ -779,7 +779,7 @@ jobs:
                       "@type": "SoftwareApplication",
                       "name": "Cocxy Terminal",
                       "applicationCategory": "DeveloperApplication",
-                      "operatingSystem": "macOS 14.0+",
+                      "operatingSystem": "macOS 15.0+",
                       "softwareVersion": version,
                       "url": "https://cocxy.dev",
                       "downloadUrl": "https://github.com/salp2403/cocxy-terminal/releases/latest",
@@ -1021,7 +1021,8 @@ jobs:
               strategy :github_latest
             end
 
-            depends_on macos: ">= :sonoma"
+            depends_on macos: ">= :sequoia"
+            depends_on arch: :arm64
 
             app "Cocxy Terminal.app"
 

@@ -254,6 +254,10 @@ final class TabBarView: NSView {
 
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: self
+        )
         viewModel.updateLocalizer(localizer)
         setupAccessibility()
         applyLocalizedChrome()
@@ -284,6 +288,10 @@ final class TabBarView: NSView {
         super.init(frame: .zero)
         setupAccessibility()
         setupLayout()
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: self
+        )
         setupActions()
         applyLocalizedChrome()
         subscribeToChanges()
@@ -790,29 +798,4 @@ extension TabBarView {
         }
         return onAcceptTabDrop?(dragData) ?? false
     }
-}
-
-// MARK: - Non-Draggable View
-
-/// A plain NSView that opts out of `isMovableByWindowBackground`.
-///
-/// When a window has `isMovableByWindowBackground = true`, plain NSView
-/// containers report `mouseDownCanMoveWindow = true` by default, causing
-/// clicks on their child controls to start a window drag instead.
-/// This subclass overrides that behavior so that buttons and gesture
-/// recognizers inside the view work correctly.
-@MainActor
-final class NonDraggableView: NSView {
-    override var mouseDownCanMoveWindow: Bool { false }
-}
-
-// MARK: - Clickable Image View
-
-/// An NSImageView that opts out of `isMovableByWindowBackground` and
-/// accepts mouse events. Standard NSImageView is non-interactive
-/// and gets treated as window-draggable background.
-@MainActor
-final class ClickableImageView: NSImageView {
-    override var mouseDownCanMoveWindow: Bool { false }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }

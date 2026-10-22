@@ -37,6 +37,7 @@ struct PTYDaemonProtocolSwiftTestingTests {
         #expect(hello.supportsTerminalSurfaces == false)
         #expect(hello.supportsTerminalHostRenderer == false)
         #expect(hello.supportsTerminalEngineAdapter == false)
+        #expect(hello.supportsTerminalSemanticNavigation == false)
     }
 
     @Test("terminal engine adapter requires surface frames, engine transport and host renderer")
@@ -75,6 +76,17 @@ struct PTYDaemonProtocolSwiftTestingTests {
         #expect(complete.supportsTerminalEngineAdapter == true)
     }
 
+    @Test("semantic navigation capability is explicitly negotiated")
+    func semanticNavigationCapabilityIsExplicit() {
+        let hello = PTYDaemonHello(
+            version: "dev",
+            capabilities: [PTYDaemonProtocol.terminalSemanticNavigationCapability]
+        )
+
+        #expect(hello.supportsTerminalSemanticNavigation)
+        #expect(hello.supportsTerminalEngineAdapter == false)
+    }
+
     @Test("surface frame response round-trips through newline codec")
     func surfaceFrameResponseRoundTrips() throws {
         let frame = PTYDaemonSurfaceFrame(
@@ -102,15 +114,115 @@ struct PTYDaemonProtocolSwiftTestingTests {
             ],
             cursor: PTYDaemonCursor(row: 0, column: 1),
             scrollbackTop: 3,
+            historyMaxVisibleStart: 12,
             images: [
                 PTYDaemonImageReference(id: "img-1", row: 0, column: 1, width: 4, height: 2)
             ],
-            mouseTrackingMode: 6
+            wrappedRows: [0],
+            mouseTrackingMode: 2,
+            mouseEncodingMode: 3,
+            isAltScreen: true,
+            bracketedPasteMode: true,
+            alternateScrollMode: false,
+            synchronizedOutput: true,
+            detectedContents: [
+                PTYDaemonDetectedContent(
+                    kind: .filePath,
+                    text: "Sources/App.swift:42:7",
+                    target: "Sources/App.swift",
+                    startRow: 3,
+                    startColumn: 2,
+                    endRow: 3,
+                    endColumn: 23,
+                    line: 42,
+                    column: 7
+                )
+            ]
         )
         let response = PTYDaemonResponse(id: "frame-1", ok: true, frame: frame)
         let data = try PTYDaemonLineCodec.encode(response)
 
         #expect(try PTYDaemonLineCodec.decode(PTYDaemonResponse.self, fromLine: data) == response)
+    }
+
+    @Test("semantic navigation response round-trips with absolute selection data")
+    func semanticNavigationResponseRoundTrips() throws {
+        let result = TerminalSemanticNavigationResult(
+            action: .selectCommandOutput,
+            viewportStartRow: 12,
+            selection: TerminalSemanticSelection(
+                blockID: 44,
+                startRow: 12,
+                startColumn: 0,
+                endRow: 15,
+                endColumn: 79,
+                text: "complete output"
+            )
+        )
+        let response = PTYDaemonResponse(
+            id: "semantic-1",
+            ok: true,
+            semanticNavigation: result
+        )
+
+        let data = try PTYDaemonLineCodec.encode(response)
+
+        #expect(try PTYDaemonLineCodec.decode(PTYDaemonResponse.self, fromLine: data) == response)
+    }
+
+    @Test("responses from older daemons decode without semantic navigation data")
+    func olderResponsesDecodeWithoutSemanticNavigation() throws {
+        let data = Data(#"{"id":"legacy","ok":true}"#.utf8)
+
+        let response = try JSONDecoder().decode(PTYDaemonResponse.self, from: data)
+
+        #expect(response.id == "legacy")
+        #expect(response.ok)
+        #expect(response.semanticNavigation == nil)
+    }
+
+    @Test("surface frames from older daemons default new routing fields")
+    func olderSurfaceFramesDefaultNewRoutingFields() throws {
+        let current = PTYDaemonSurfaceFrame(
+            surfaceID: "11111111-1111-1111-1111-111111111111",
+            revision: 8,
+            timestamp: 1_776_000_001,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            scrollbackTop: 4,
+            historyMaxVisibleStart: 20,
+            mouseTrackingMode: 6,
+            mouseEncodingMode: 3,
+            isAltScreen: true,
+            alternateScrollMode: false
+        )
+        let encoded = try JSONEncoder().encode(current)
+        var legacyObject = try #require(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        legacyObject.removeValue(forKey: "historyMaxVisibleStart")
+        legacyObject.removeValue(forKey: "wrappedRows")
+        legacyObject.removeValue(forKey: "mouseEncodingMode")
+        legacyObject.removeValue(forKey: "isAltScreen")
+        legacyObject.removeValue(forKey: "bracketedPasteMode")
+        legacyObject.removeValue(forKey: "alternateScrollMode")
+        legacyObject.removeValue(forKey: "synchronizedOutput")
+        legacyObject.removeValue(forKey: "detectedContents")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
+
+        let decoded = try JSONDecoder().decode(PTYDaemonSurfaceFrame.self, from: legacyData)
+
+        #expect(decoded.historyMaxVisibleStart == 0)
+        #expect(decoded.wrappedRows.isEmpty)
+        #expect(decoded.mouseTrackingMode == 6)
+        #expect(decoded.mouseEncodingMode == nil)
+        #expect(decoded.isAltScreen == false)
+        #expect(decoded.bracketedPasteMode == false)
+        #expect(decoded.alternateScrollMode == true)
+        #expect(decoded.synchronizedOutput == false)
+        #expect(decoded.detectedContents.isEmpty)
     }
 
     @Test("process registration omits daemon-local file descriptors")
@@ -157,5 +269,46 @@ struct PTYDaemonProtocolSwiftTestingTests {
         let data = try PTYDaemonLineCodec.encode(request)
 
         #expect(try PTYDaemonLineCodec.decode(PTYDaemonRequest.self, fromLine: data) == request)
+    }
+
+    @Test("modern surface commands remain JSONL round-trippable")
+    func modernSurfaceCommandsRoundTrip() throws {
+        let fontRequest = PTYDaemonRequest(
+            id: "font-1",
+            command: .surfaceFont,
+            payload: ["family": "Menlo", "size": "14", "dpiScale": "2"]
+        )
+        let semanticRequest = PTYDaemonRequest(
+            id: "semantic-1",
+            command: .surfaceSemanticNavigation,
+            payload: ["surfaceID": "surface-1", "action": "previous_prompt"]
+        )
+
+        let fontData = try PTYDaemonLineCodec.encode(fontRequest)
+        let semanticData = try PTYDaemonLineCodec.encode(semanticRequest)
+
+        #expect(try PTYDaemonLineCodec.decode(PTYDaemonRequest.self, fromLine: fontData) == fontRequest)
+        #expect(
+            try PTYDaemonLineCodec.decode(PTYDaemonRequest.self, fromLine: semanticData)
+                == semanticRequest
+        )
+    }
+
+    @Test("shared macOS key mapping covers progressive keyboard identities")
+    func sharedMacKeyMappingCoversProgressiveKeyboardIdentities() {
+        #expect(TerminalKeyMapping.specialKey(forMacKeyCode: 126) == 0)
+        #expect(TerminalKeyMapping.specialKey(forMacKeyCode: 82) == 26)
+        #expect(TerminalKeyMapping.specialKey(forMacKeyCode: 105) == 43)
+        #expect(TerminalKeyMapping.specialKey(forMacKeyCode: 55) == 76)
+        #expect(TerminalKeyMapping.specialKey(forMacKeyCode: 74) == 108)
+        #expect(TerminalKeyMapping.specialKey(forMacKeyCode: 10) == nil)
+        #expect(TerminalKeyMapping.carriesAssociatedText(26))
+        #expect(TerminalKeyMapping.carriesAssociatedText(42))
+        #expect(TerminalKeyMapping.carriesAssociatedText(72))
+        #expect(TerminalKeyMapping.carriesAssociatedText(43) == false)
+        #expect(TerminalKeyMapping.baseLayoutCodepoint(forMacKeyCode: 12) == 113)
+        #expect(TerminalKeyMapping.shiftedBaseLayoutCodepoint(forMacKeyCode: 12) == 81)
+        #expect(TerminalKeyMapping.baseLayoutCodepoint(forMacKeyCode: 50) == 96)
+        #expect(TerminalKeyMapping.shiftedBaseLayoutCodepoint(forMacKeyCode: 50) == 126)
     }
 }

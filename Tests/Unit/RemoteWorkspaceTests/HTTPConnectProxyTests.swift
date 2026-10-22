@@ -331,7 +331,7 @@ private func httpTestConnectionObservedClosure(_ connection: NWConnection) async
 /// assertion keeps failing when the effect never happens.
 @MainActor
 private func waitForHTTPProxyEffect(
-    within timeout: Duration = .seconds(5),
+    within timeout: Duration = .seconds(15),
     _ condition: @MainActor () -> Bool
 ) async {
     let deadline = ContinuousClock.now.advanced(by: timeout)
@@ -765,7 +765,7 @@ struct HTTPConnectProxyTests {
 
         proxy.stop()
         client.cancel()
-
+        await waitForHTTPProxyEffect { forwarder.lastTransport == nil }
         #expect(forwarder.lastTransport == nil)
     }
 }

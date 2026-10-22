@@ -173,4 +173,44 @@ struct KeybindingActionCatalogTests {
         #expect(KeybindingActionCatalog.voiceInput.defaultShortcut.canonical == "cmd+shift+space")
         #expect(KeybindingActionCatalog.voiceInput.category == .editor)
     }
+
+    @Test func terminalHistoryActionsUseDedicatedNavigationShortcuts() {
+        #expect(KeybindingActionCatalog.terminalScrollPageUp.defaultShortcut.canonical == "shift+pageup")
+        #expect(KeybindingActionCatalog.terminalScrollPageDown.defaultShortcut.canonical == "shift+pagedown")
+        #expect(KeybindingActionCatalog.terminalScrollToTop.defaultShortcut.canonical == "cmd+home")
+        #expect(KeybindingActionCatalog.terminalScrollToBottom.defaultShortcut.canonical == "cmd+end")
+        #expect(KeybindingActionCatalog.terminalPreviousPrompt.defaultShortcut.canonical == "cmd+up")
+        #expect(KeybindingActionCatalog.terminalNextPrompt.defaultShortcut.canonical == "cmd+down")
+        #expect(
+            KeybindingActionCatalog.terminalSelectCommandOutput.defaultShortcut.canonical
+                == "cmd+shift+a"
+        )
+        #expect(
+            KeybindingActionCatalog.terminalShowDetectedContentHints.defaultShortcut.canonical
+                == "cmd+shift+l"
+        )
+        #expect(KeybindingActionCatalog.all.count == 55)
+    }
+
+    @Test func terminalHostRoutesSemanticShortcutsLocally() {
+        #expect(TerminalHostKeybindingRouting.actionIDs.contains(
+            KeybindingActionCatalog.terminalPreviousPrompt.id
+        ))
+        #expect(TerminalHostKeybindingRouting.actionIDs.contains(
+            KeybindingActionCatalog.terminalNextPrompt.id
+        ))
+        #expect(TerminalHostKeybindingRouting.actionIDs.contains(
+            KeybindingActionCatalog.terminalSelectCommandOutput.id
+        ))
+    }
+
+    @Test func commandBlockAndBrowserActionsUseDistinctShortcuts() {
+        #expect(
+            KeybindingActionCatalog.terminalHideCommandBlocks.defaultShortcut.canonical
+                == "cmd+shift+b"
+        )
+        #expect(KeybindingActionCatalog.markdownBrowser.defaultShortcut.canonical == "cmd+alt+b")
+        let defaults = KeybindingActionCatalog.all.map(\.defaultShortcut.canonical)
+        #expect(Set(defaults).count == defaults.count)
+    }
 }

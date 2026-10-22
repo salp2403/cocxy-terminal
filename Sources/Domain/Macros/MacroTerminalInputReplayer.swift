@@ -5,13 +5,14 @@ import Foundation
 
 enum MacroTerminalInputReplayError: Error, Equatable, Sendable {
     case noTargetSurface
+    case deliveryFailed
     case unsupportedKey(String)
     case unsupportedDelay(Int)
 }
 
 @MainActor
 struct MacroTerminalInputReplayer {
-    let sendText: (String) -> Void
+    let sendText: (String) -> Bool
 
     @discardableResult
     func replay(_ plan: MacroPlaybackPlan) throws -> Int {
@@ -24,16 +25,22 @@ struct MacroTerminalInputReplayer {
     private func replay(_ event: MacroEvent) throws {
         switch event {
         case .text(let value):
-            sendText(value)
+            try deliver(value)
         case .command(let value):
-            sendText(value + "\r")
+            try deliver(value + "\r")
         case .key(let value):
             guard let sequence = Self.sequence(forKey: value) else {
                 throw MacroTerminalInputReplayError.unsupportedKey(value)
             }
-            sendText(sequence)
+            try deliver(sequence)
         case .delay(let milliseconds):
             throw MacroTerminalInputReplayError.unsupportedDelay(milliseconds)
+        }
+    }
+
+    private func deliver(_ text: String) throws {
+        guard sendText(text) else {
+            throw MacroTerminalInputReplayError.deliveryFailed
         }
     }
 

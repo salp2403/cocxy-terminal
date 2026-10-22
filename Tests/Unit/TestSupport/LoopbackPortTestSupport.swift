@@ -4,6 +4,8 @@ import Darwin
 import Foundation
 
 enum LoopbackTestPortAllocator {
+    private static let candidatePorts = 20_000..<49_152
+
     private final class PortHistory: @unchecked Sendable {
         private let lock = NSLock()
         private var claimed: Set<Int> = []
@@ -16,10 +18,14 @@ enum LoopbackTestPortAllocator {
     private static let history = PortHistory()
 
     static func freshPort() throws -> Int {
-        for _ in 0..<128 {
+        let start = Int.random(in: candidatePorts)
+        for offset in 0..<128 {
+            let candidate = candidatePorts.lowerBound
+                + ((start - candidatePorts.lowerBound + offset) % candidatePorts.count)
+            guard history.claim(candidate) else { continue }
             do {
-                let port = try availableDualStackPort()
-                if history.claim(port) { return port }
+                try verifyDualStackAvailability(port: candidate)
+                return candidate
             } catch let error as POSIXError where error.code == .EADDRINUSE {
                 continue
             }
@@ -27,7 +33,7 @@ enum LoopbackTestPortAllocator {
         throw POSIXError(.EADDRNOTAVAIL)
     }
 
-    private static func availableDualStackPort() throws -> Int {
+    private static func verifyDualStackAvailability(port: Int) throws {
         let ipv4Descriptor = Darwin.socket(AF_INET, SOCK_STREAM, 0)
         guard ipv4Descriptor >= 0 else { throw currentPOSIXError() }
         defer { Darwin.close(ipv4Descriptor) }
@@ -35,7 +41,7 @@ enum LoopbackTestPortAllocator {
         var ipv4Address = sockaddr_in(
             sin_len: UInt8(MemoryLayout<sockaddr_in>.size),
             sin_family: sa_family_t(AF_INET),
-            sin_port: 0,
+            sin_port: UInt16(port).bigEndian,
             sin_addr: in_addr(s_addr: inet_addr("127.0.0.1")),
             sin_zero: (0, 0, 0, 0, 0, 0, 0, 0)
         )
@@ -49,16 +55,6 @@ enum LoopbackTestPortAllocator {
             }
         }
         guard ipv4Bound == 0 else { throw currentPOSIXError() }
-
-        var boundAddress = sockaddr_in()
-        var boundLength = socklen_t(MemoryLayout<sockaddr_in>.size)
-        let named = withUnsafeMutablePointer(to: &boundAddress) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.getsockname(ipv4Descriptor, $0, &boundLength)
-            }
-        }
-        guard named == 0 else { throw currentPOSIXError() }
-        let port = Int(UInt16(bigEndian: boundAddress.sin_port))
 
         let ipv6Descriptor = Darwin.socket(AF_INET6, SOCK_STREAM, 0)
         guard ipv6Descriptor >= 0 else { throw currentPOSIXError() }
@@ -91,7 +87,6 @@ enum LoopbackTestPortAllocator {
             }
         }
         guard ipv6Bound == 0 else { throw currentPOSIXError() }
-        return port
     }
 
     private static func currentPOSIXError() -> POSIXError {

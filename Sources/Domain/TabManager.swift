@@ -30,6 +30,8 @@ import CocxyShared
 @MainActor
 final class TabManager: ObservableObject, TabActivating {
 
+    private let gitInfoProvider: any GitInfoProviding
+
     // MARK: - Published State
 
     /// The ordered list of open tabs.
@@ -53,7 +55,8 @@ final class TabManager: ObservableObject, TabActivating {
     /// The initial tab uses the current working directory (falling back to
     /// the user's home directory) and detects the git branch if available.
     /// The tab is activated immediately.
-    init() {
+    init(gitInfoProvider: any GitInfoProviding = GitInfoProviderImpl()) {
+        self.gitInfoProvider = gitInfoProvider
         // When launched from the Dock, currentDirectoryPath is "/" (root).
         // Fall back to the home directory for a useful default tab title.
         let cwd = FileManager.default.currentDirectoryPath
@@ -63,8 +66,7 @@ final class TabManager: ObservableObject, TabActivating {
         } else {
             currentDirectoryURL = URL(fileURLWithPath: cwd)
         }
-        let gitProvider = GitInfoProviderImpl()
-        let branch = gitProvider.currentBranch(at: currentDirectoryURL)
+        let branch = gitInfoProvider.currentBranch(at: currentDirectoryURL)
 
         var initialTab = Tab(
             workingDirectory: currentDirectoryURL,
@@ -93,8 +95,7 @@ final class TabManager: ObservableObject, TabActivating {
         // Deactivate the current active tab.
         deactivateCurrentTab()
 
-        let gitProvider = GitInfoProviderImpl()
-        let branch = gitProvider.currentBranch(at: workingDirectory)
+        let branch = gitInfoProvider.currentBranch(at: workingDirectory)
 
         var newTab = Tab(
             workingDirectory: workingDirectory,

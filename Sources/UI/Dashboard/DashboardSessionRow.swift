@@ -21,49 +21,143 @@ struct DashboardSessionRow: View {
     let session: AgentSessionInfo
     let onNavigate: () -> Void
     var onSetPriority: ((AgentPriority) -> Void)?
+    var onOpenFileImpact: ((String) -> Void)?
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     @State private var isPulsing = false
+    @State private var areFileImpactsExpanded = false
 
     // MARK: - Body
 
     var body: some View {
-        Button(action: onNavigate) {
-            HStack(alignment: .top, spacing: 10) {
-                stateIndicator
-                VStack(alignment: .leading, spacing: 3) {
-                    headerLine
-                    if let activity = session.lastActivity, !activity.isEmpty {
-                        activityLine(activity)
+        VStack(alignment: .leading, spacing: 6) {
+            Button(action: onNavigate) {
+                HStack(alignment: .top, spacing: 10) {
+                    stateIndicator
+                    VStack(alignment: .leading, spacing: 3) {
+                        headerLine
+                        if let activity = session.lastActivity, !activity.isEmpty {
+                            activityLine(activity)
+                        }
+                        sessionStatsLine
+                        if !session.fileConflicts.isEmpty {
+                            conflictWarning
+                        }
+                        if !session.subagents.isEmpty {
+                            subagentSection
+                        }
                     }
-                    sessionStatsLine
-                    if !session.fileConflicts.isEmpty {
-                        conflictWarning
-                    }
-                    if !session.subagents.isEmpty {
-                        subagentSection
-                    }
+                    Spacer(minLength: 4)
+                    timeLabel
                 }
-                Spacer(minLength: 4)
-                timeLabel
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityDescription)
+            .accessibilityHint(
+                localized(
+                    "agentDashboard.row.activateHint",
+                    fallback: "Activate to switch to this tab"
+                )
+            )
+
+            fileImpactSection
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .onAppear {
             isPulsing = session.state == .working
         }
         .onChange(of: session.state) {
             isPulsing = session.state == .working
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityDescription)
-        .accessibilityHint(localized("agentDashboard.row.activateHint", fallback: "Activate to switch to this tab"))
+        .accessibilityElement(children: .contain)
         .contextMenu {
             priorityMenu
         }
+    }
+
+    @ViewBuilder
+    private var fileImpactSection: some View {
+        if !session.filesTouched.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Self.visibleFileImpacts(
+                    session.filesTouched,
+                    expanded: areFileImpactsExpanded
+                ), id: \.path) { impact in
+                    Button {
+                        onOpenFileImpact?(impact.path)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "doc.text")
+                                .font(.system(size: 8, weight: .medium))
+                                .foregroundColor(CocxyColors.swiftUI(CocxyColors.blue))
+                            Text(impact.fileName)
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(CocxyColors.swiftUI(CocxyColors.subtext0))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 4)
+                            Text(operationSummary(impact.operations))
+                                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                                .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
+                            Image(systemName: "chevron.forward")
+                                .font(.system(size: 7, weight: .semibold))
+                                .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(
+                        String(
+                            format: localized(
+                                "agentDashboard.fileImpact.open",
+                                fallback: "Review %@, %@"
+                            ),
+                            impact.fileName,
+                            operationSummary(impact.operations)
+                        )
+                    )
+                }
+
+                if session.filesTouched.count > 4 {
+                    Button {
+                        areFileImpactsExpanded.toggle()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Spacer()
+                            Text(fileImpactDisclosureTitle)
+                                .font(.system(size: 8, design: .monospaced))
+                            Image(systemName: areFileImpactsExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 7, weight: .semibold))
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
+                    .accessibilityLabel(fileImpactDisclosureTitle)
+                }
+            }
+            .padding(.leading, 18)
+        }
+    }
+
+    static func visibleFileImpacts(
+        _ impacts: [FileImpact],
+        expanded: Bool
+    ) -> ArraySlice<FileImpact> {
+        impacts.prefix(expanded ? impacts.count : 4)
+    }
+
+    private var fileImpactDisclosureTitle: String {
+        if areFileImpactsExpanded {
+            return localized("agentDashboard.fileImpact.less", fallback: "Show fewer")
+        }
+        return String(
+            format: localized("agentDashboard.fileImpact.more", fallback: "%d more"),
+            session.filesTouched.count - 4
+        )
     }
 
     // MARK: - Priority Context Menu
@@ -92,7 +186,7 @@ struct DashboardSessionRow: View {
         Divider()
 
         Button(action: onNavigate) {
-            Label(localized("agentDashboard.goToTab", fallback: "Go to Tab"), systemImage: "arrow.right.square")
+            Label(localized("agentDashboard.goToTab", fallback: "Go to Tab"), systemImage: "arrow.forward.square")
         }
     }
 
@@ -128,10 +222,20 @@ struct DashboardSessionRow: View {
                     .foregroundColor(CocxyColors.swiftUI(CocxyColors.peach))
             }
 
-            Text(session.projectName)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.primary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(session.projectName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                if let location = session.projectLocationLabel {
+                    Text(location)
+                        .font(.system(size: 8.5, design: .monospaced))
+                        .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .help(session.projectIdentity?.rawValue ?? session.projectName)
 
             if let agent = session.agentName, !agent.isEmpty {
                 Text(agent)
@@ -406,8 +510,13 @@ struct DashboardSessionRow: View {
         return "wrench"
     }
 
+    private func operationSummary(_ operations: Set<FileImpact.FileOperation>) -> String {
+        operations.map(\.rawValue).sorted().joined(separator: ",")
+    }
+
     private var accessibilityDescription: String {
         var parts = [session.projectName]
+        if let identity = session.projectIdentity { parts.append(identity.rawValue) }
         if let windowLabel = session.windowLabel { parts.append(windowLabel) }
         if let agent = session.agentName { parts.append(agent) }
         if let branch = session.gitBranch {

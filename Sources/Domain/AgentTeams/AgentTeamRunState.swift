@@ -134,6 +134,13 @@ struct AgentTeamRunState: Codable, Sendable, Equatable {
         case .taskCompleted, .sessionEnd, .stop:
             if let teammateID = event.teammateID {
                 try ensureNode(id: teammateID, name: event.teammateName, status: .finished, event: event)
+                if config.teammates.contains(where: { $0.id == teammateID }) {
+                    try coordinator.updateStatus(
+                        teammateID: teammateID,
+                        status: .finished,
+                        now: event.timestamp
+                    )
+                }
                 _ = try feed.record(
                     teammateID: teammateID,
                     kind: .completion,
@@ -163,6 +170,27 @@ struct AgentTeamRunState: Codable, Sendable, Equatable {
             launchSpecs: launchSpecs,
             createdAt: createdAt,
             updatedAt: updatedAt
+        )
+    }
+
+    mutating func markTeammateTerminated(
+        teammateID: String,
+        status: AgentTeamStatus,
+        message: String,
+        now: Date = Date()
+    ) throws {
+        guard status == .finished || status == .error,
+              config.teammates.contains(where: { $0.id == teammateID }) else {
+            throw AgentTeamError.unknownTeammate(teammateID)
+        }
+        updatedAt = now
+        try coordinator.updateStatus(teammateID: teammateID, status: status, now: now)
+        try graph.updateStatus(nodeID: teammateID, status: status, now: now)
+        _ = try feed.record(
+            teammateID: teammateID,
+            kind: status == .finished ? .completion : .error,
+            message: message,
+            createdAt: now
         )
     }
 

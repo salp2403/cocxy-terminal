@@ -26,21 +26,24 @@ private enum AgentScrollFallback {
     }
 }
 
+struct SurfaceAgentSemanticVerdictCacheEntry: Equatable {
+    static let lifetime: TimeInterval = 0.25
+
+    let verdict: Bool
+    let expiresAt: Date
+
+    func isValid(at date: Date) -> Bool {
+        date < expiresAt
+    }
+}
+
 // MARK: - Surface Lifecycle
 
-/// Extension that manages the lifecycle of terminal surfaces:
-/// creation, destruction, handler wiring, and OSC notification processing.
-///
-/// Extracted from MainWindowController to isolate terminal engine
-/// interactions from window layout and UI concerns.
+/// Terminal surface lifecycle and OSC notification handling.
 extension MainWindowController {
-
     // MARK: - Surface Creation
 
-    /// Creates a terminal surface in the view and spawns the shell.
-    ///
-    /// Called after the window is displayed and the view has a valid
-    /// frame for Metal rendering.
+    /// Creates the first surface after the window has a renderable frame.
     func createTerminalSurface() {
         guard let surfaceView = terminalSurfaceView else { return }
         let firstTabWorkingDirectory = tabManager.tabs.first.flatMap { tab in
@@ -57,8 +60,7 @@ extension MainWindowController {
             surfaceView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
             surfaceView.syncSizeWithTerminal()
 
-            // Register the first tab's surface in all tracking dictionaries.
-            // This ensures destroyAllSurfaces can find it without special-casing.
+            // Register every owner map before installing event handlers.
             if let firstTabID = tabManager.tabs.first?.id {
                 tabSurfaceMap[firstTabID] = surfaceID
                 tabSurfaceViews[firstTabID] = surfaceView
@@ -112,9 +114,15 @@ extension MainWindowController {
         in surfaceView: TerminalHostView,
         initialWorkingDirectory: URL?
     ) {
+        invalidateSurfaceAgentSemanticVerdict(for: surfaceID)
+
         if let initialWorkingDirectory {
             surfaceWorkingDirectories[surfaceID] = initialWorkingDirectory
         }
+        surfaceView.updateCursorClickToMoveEnabled(
+            configService?.current.terminal.cursorClickToMove
+                ?? TerminalConfig.defaults.cursorClickToMove
+        )
 
         let capturedTabID = tabID
         let capturedSurfaceID = surfaceID
@@ -146,10 +154,17 @@ extension MainWindowController {
 
         let engine = injectedAgentDetectionEngine
         let commandTracker = commandTracker(for: tabID)
+        let cursorLifecycleDetector = BlockOSCDetector { [weak self] event in
+            guard case .commandExecuted = event else { return }
+            Task { @MainActor [weak self] in
+                self?.surfaceView(for: capturedSurfaceID)?.handleCommandExecuted()
+            }
+        }
         let imageDetector = imageDetector(for: surfaceID, tabID: tabID)
         let outputDispatcher = outputDispatcher(
             for: surfaceID,
             commandTracker: commandTracker,
+            cursorLifecycleDetector: cursorLifecycleDetector,
             imageDetector: imageDetector,
             engine: engine
         )
@@ -195,8 +210,17 @@ extension MainWindowController {
                 guard let self else { return }
                 self.applyFocusToSurface(surfaceID: capturedSurfaceID)
             }
+            cocxyView.onActivateDetectedContent = { [weak self] content in
+                self?.activateTerminalDetectedContent(
+                    content,
+                    for: capturedSurfaceID
+                ) ?? false
+            }
             cocxyView.prefersLocalScrollInMouseTrackingMode = { [weak self] in
                 self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
+            }
+            cocxyView.onTerminalInteractionStateChanged = { [weak self] in
+                self?.refreshStatusBar()
             }
             cocxyView.prefersPacedDeleteRepeat = { [weak self] in
                 self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
@@ -229,25 +253,57 @@ extension MainWindowController {
                 in: cocxyView
             )
         } else if let daemonView = surfaceView as? PTYDaemonHostView {
+            daemonView.onFocusRequested = { [weak self] in
+                guard let self else { return }
+                self.applyFocusToSurface(surfaceID: capturedSurfaceID)
+            }
+            daemonView.onActivateDetectedContent = { [weak self] content in
+                self?.activateTerminalDetectedContent(
+                    content,
+                    for: capturedSurfaceID
+                ) ?? false
+            }
             daemonView.prefersLocalScrollInMouseTrackingMode = { [weak self] in
                 self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
+            }
+            daemonView.onTerminalInteractionStateChanged = { [weak self] in
+                self?.refreshStatusBar()
             }
         }
     }
 
     func surfaceLooksLikeActiveAgent(_ surfaceID: SurfaceID) -> Bool {
         let surfaceState = injectedPerSurfaceStore?.state(for: surfaceID)
+        if surfaceState?.isActive == true || surfaceState?.hasAgent == true {
+            return true
+        }
+        if foregroundProcessLooksLikeActiveAgent(surfaceID) {
+            return true
+        }
+
+        let now = surfaceAgentSemanticVerdictNow()
+        if let cached = surfaceAgentSemanticVerdictCache[surfaceID],
+           cached.isValid(at: now) {
+            return cached.verdict
+        }
+
         let bridge = cocxyCoreBridge(forSurface: surfaceID)
         let semantic = bridge?.semanticDiagnostics(for: surfaceID)
-        return surfaceState?.isActive == true
-            || surfaceState?.hasAgent == true
-            || semantic?.state == CocxyCoreSemanticState.agentActive
-            || foregroundProcessLooksLikeActiveAgent(surfaceID)
+        let verdict = semantic?.state == CocxyCoreSemanticState.agentActive
             || semanticCommandInputLooksLikeActiveAgent(
                 bridge: bridge,
                 surfaceID: surfaceID,
                 semantic: semantic
             )
+        surfaceAgentSemanticVerdictCache[surfaceID] = SurfaceAgentSemanticVerdictCacheEntry(
+            verdict: verdict,
+            expiresAt: now.addingTimeInterval(SurfaceAgentSemanticVerdictCacheEntry.lifetime)
+        )
+        return verdict
+    }
+
+    func invalidateSurfaceAgentSemanticVerdict(for surfaceID: SurfaceID) {
+        surfaceAgentSemanticVerdictCache.removeValue(forKey: surfaceID)
     }
 
     private func foregroundProcessLooksLikeActiveAgent(_ surfaceID: SurfaceID) -> Bool {
@@ -326,6 +382,7 @@ extension MainWindowController {
     private func outputDispatcher(
         for surfaceID: SurfaceID,
         commandTracker: CommandDurationTracker,
+        cursorLifecycleDetector: BlockOSCDetector,
         imageDetector: InlineImageOSCDetector,
         engine: AgentDetectionEngineImpl?
     ) -> SurfaceOutputBackgroundDispatcher {
@@ -333,14 +390,16 @@ extension MainWindowController {
             return existing
         }
 
-        // Capture the detectors weakly so the dispatcher does not extend
-        // their lifetimes past `clearSurfaceTracking`. If a chunk reaches
-        // the queue after the surface was torn down both closures collapse
-        // to no-ops and the data is dropped, exactly as it would be if
-        // the bridge had detached the output handler in the same moment.
+        // Shared detectors stay weak because their owner dictionaries define
+        // their lifetime. The cursor lifecycle detector is surface-local, so
+        // this dispatcher owns it until `clearSurfaceTracking` drops the
+        // dispatcher and its queued processors together.
         var processors: [SurfaceOutputBackgroundDispatcher.Processor] = [
             { [weak commandTracker] data in
                 commandTracker?.processBytes(data)
+            },
+            { [cursorLifecycleDetector] data in
+                cursorLifecycleDetector.processBytes(data)
             },
             { [weak imageDetector] data in
                 imageDetector?.processBytes(data)
@@ -383,6 +442,7 @@ extension MainWindowController {
 
     func clearSurfaceTracking(for surfaceID: SurfaceID) {
         if let surfaceView = surfaceView(for: surfaceID) {
+            (surfaceView as? CocxyCoreView)?.resetCommandBlockOverlayForSurfaceTeardown()
             let key = ObjectIdentifier(surfaceView)
             inlineImageRenderers[key]?.clearAllImages()
             inlineImageRenderers.removeValue(forKey: key)
@@ -390,6 +450,7 @@ extension MainWindowController {
         surfaceImageDetectors.removeValue(forKey: surfaceID)
         surfaceOutputDispatchers.removeValue(forKey: surfaceID)
         surfaceWorkingDirectories.removeValue(forKey: surfaceID)
+        invalidateSurfaceAgentSemanticVerdict(for: surfaceID)
     }
 
     // MARK: - Surface Destruction
@@ -512,6 +573,7 @@ extension MainWindowController {
         deferredRestoredTabLoader = nil
         surfaceImageDetectors.removeAll()
         surfaceOutputDispatchers.removeAll()
+        surfaceAgentSemanticVerdictCache.removeAll()
         revokeBrowserAuthorizations(in: Array(panelContentViews.values))
         panelContentViews.removeAll()
 
@@ -707,7 +769,7 @@ extension MainWindowController {
                 surfaceID: sourceSurfaceID
             )
 
-        case .shellPrompt:
+        case .shellPrompt(let position):
             guard let tabID = targetTabID else { break }
             tabManager.updateTab(id: tabID) { tab in
                 tab.lastActivityAt = Date()
@@ -737,22 +799,13 @@ extension MainWindowController {
             updateAgentProgressOverlay()
             auroraChromeController?.refreshSources()
 
-            // Notify the IDE cursor controller of the real prompt row/col
-            // from the backing CocxyCore terminal. Only the active tab's
-            // surface is notified because pattern detection on background
-            // tabs would otherwise race with the user's focused surface.
-            //
-            // The previous implementation used `viewHeight / cellHeight - 1`
-            // (i.e. the last visible row) as the prompt row, which is
-            // always wrong and produced the v0.1.52 "stray blinking line
-            // near the status bar" bug. The real cursor row is the only
-            // reliable source.
-            if (sourceTabID == nil || sourceTabID == visibleTabID),
+            // CocxyCore captures this position synchronously while it handles
+            // OSC 133;A. Never re-read the cursor from this main-queue callback:
+            // output may already have advanced it by then.
+            if let position,
                let surfaceView = sourceSurfaceID.flatMap(surfaceView(for:))
                     ?? activeTerminalSurfaceView {
-                if let cocxyView = surfaceView as? CocxyCoreView {
-                    cocxyView.handleShellPromptAtCurrentCursor()
-                }
+                surfaceView.handleShellPrompt(position: position)
             }
 
             feedDetectionEngine(
@@ -764,60 +817,7 @@ extension MainWindowController {
 
         case .currentDirectory(let directoryURL):
             guard let tabID = targetTabID else { break }
-            let previousDirectory = tabManager.tab(for: tabID)?.workingDirectory.standardizedFileURL
-            let standardizedDirectory = directoryURL.standardizedFileURL
-            if let sourceSurfaceID {
-                surfaceWorkingDirectories[sourceSurfaceID] = directoryURL
-            }
-            let gitProvider = GitInfoProviderImpl()
-            let branch = gitProvider.currentBranch(at: directoryURL)
-            tabManager.updateTab(id: tabID) { tab in
-                tab.workingDirectory = directoryURL
-                tab.gitBranch = branch
-                tab.lastActivityAt = Date()
-            }
-            tabBarViewModel?.syncWithManager()
-            refreshStatusBar()
-            refreshTabStrip()
-            sessionRegistry?.updateWorkingDirectory(
-                sessionIDForTab(tabID),
-                directory: directoryURL
-            )
-            if previousDirectory != standardizedDirectory {
-                var metadata = ["source": "osc7"]
-                if let sourceSurfaceID {
-                    metadata["surface_id"] = sourceSurfaceID.rawValue.uuidString
-                }
-                recordLocalActivity(
-                    kind: .projectSwitched,
-                    summary: projectSwitchActivitySummary(standardizedDirectory),
-                    workingDirectory: directoryURL,
-                    sessionID: sessionIDForTab(tabID).rawValue.uuidString,
-                    metadata: metadata
-                )
-            }
-
-            // Reload project config for the new working directory.
-            //
-            // When the tab belongs to a cocxy-managed worktree and the
-            // user has `inherit-project-config = true` (default), allow
-            // the service to fall back to the origin repo's
-            // `.cocxy.toml` if the walk from the current CWD yields
-            // nothing. Tabs without a worktree hit the legacy single
-            // walk because `worktreeOriginRepo` is nil.
-            let projectService = ProjectConfigService()
-            let tabSnapshot = tabManager.tab(for: tabID)
-            let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
-            let originRepo = inheritProjectConfig ? tabSnapshot?.worktreeOriginRepo : nil
-            let newProjectConfig = projectService.loadConfig(
-                for: directoryURL,
-                originRepo: originRepo
-            )
-            tabManager.updateTab(id: tabID) { tab in
-                tab.projectConfig = newProjectConfig
-            }
-            applyProjectConfig(for: tabID)
-
+            handleCurrentDirectoryChange(directoryURL, tabID: tabID, surfaceID: sourceSurfaceID)
             feedDetectionEngine(
                 oscCode: 7,
                 payload: directoryURL.standardizedFileURL.absoluteString,
@@ -825,8 +825,12 @@ extension MainWindowController {
                 surfaceID: sourceSurfaceID
             )
 
-        case .commandStarted:
+        case .commandStarted(let inputPosition):
             guard let tabID = targetTabID else { break }
+            if let inputPosition,
+               let surfaceView = sourceSurfaceID.flatMap(surfaceView(for:)) {
+                surfaceView.handleCommandInputStarted(at: inputPosition)
+            }
             tabManager.updateTab(id: tabID) { tab in
                 tab.markCommandStarted()
                 tab.lastActivityAt = Date()
@@ -856,7 +860,7 @@ extension MainWindowController {
             let position = surfaceView.bounds.height - 20
             renderer.renderImage(imageData, at: position)
 
-        case .processExited:
+        case .processExited(let exitCode):
             // Shell process exited. Run the same teardown we'd run on
             // surface destroy, but in-place because the surface object
             // can outlive its backing shell (e.g. user keeps the pane
@@ -899,6 +903,15 @@ extension MainWindowController {
             updateAgentProgressOverlay()
             updateNotificationRing(for: tabID, agentState: .idle)
             auroraChromeController?.refreshSources()
+            let isPrimarySurface = sourceSurfaceID == nil || tabSurfaceMap[tabID] == sourceSurfaceID
+            if isPrimarySurface,
+               let terminalEnd = unregisterAgentTeamTab(
+                   tabID,
+                   reason: .processExited,
+                   exitCode: exitCode
+               ) {
+                notifyAgentTeamTerminalEnded(terminalEnd)
+            }
         }
     }
 
@@ -908,7 +921,7 @@ extension MainWindowController {
         in surfaceView: TerminalHostView
     ) {
         let sessionID = sessionIDForTab(tabID).rawValue.uuidString
-        let restored = (try? TerminalBlockStore().load(sessionID: sessionID)) ?? []
+        let restored = (try? commandBlockStore.load(sessionID: sessionID)) ?? []
         let blocks = TerminalBlockRestoration.blocksForDisplay(
             live: [],
             restored: restored,
@@ -917,7 +930,7 @@ extension MainWindowController {
         guard !blocks.isEmpty else { return }
 
         restoredCommandBlocksBySurfaceID[surfaceID] = blocks
-        (surfaceView as? CocxyCoreView)?.refreshCommandBlockOverlay()
+        (surfaceView as? CocxyCoreView)?.invalidateCommandBlockOverlayData()
     }
 
     func availableCommandBlocks(
@@ -951,11 +964,18 @@ extension MainWindowController {
             return
         }
 
-        let liveBlocks = cocxyBridge.commandBlocks(for: surfaceID, limit: 32)
-        guard let block = liveBlocks.last else { return }
+        let liveBlocks = cocxyBridge.commandBlocks(
+            for: surfaceID,
+            limit: 32,
+            includeOutput: false,
+            includeVisibleMapping: false
+        )
+        guard let blockID = liveBlocks.last?.id,
+              let block = cocxyBridge.commandBlock(for: surfaceID, blockID: blockID) else {
+            return
+        }
 
-        preserveCommandBlockMetadata(for: surfaceID, liveBlocks: liveBlocks)
-        (surfaceView(for: surfaceID) as? CocxyCoreView)?.refreshCommandBlockOverlay()
+        (surfaceView(for: surfaceID) as? CocxyCoreView)?.invalidateCommandBlockOverlayData()
         updateCommandCorrectionSuggestion(for: block, tabID: tabID, surfaceID: surfaceID)
 
         let key = "\(surfaceID.rawValue.uuidString)#\(block.id)"
@@ -964,8 +984,9 @@ extension MainWindowController {
         let sessionID = sessionIDForTab(tabID).rawValue.uuidString
         recordCommandBlockActivity(block, tabID: tabID, surfaceID: surfaceID)
         let spotlightConfig = configService?.current.spotlight ?? .defaults
+        let commandBlockStore = commandBlockStore
         Task.detached(priority: .utility) {
-            try? TerminalBlockStore().append(block, sessionID: sessionID)
+            try? commandBlockStore.append(block, sessionID: sessionID)
             if spotlightConfig.enabled {
                 _ = try? await SpotlightIncrementalIndexer.indexCommandBlock(
                     block,
@@ -1023,27 +1044,6 @@ extension MainWindowController {
         }
     }
 
-    private func preserveCommandBlockMetadata(
-        for surfaceID: SurfaceID,
-        liveBlocks: [TerminalCommandBlock]
-    ) {
-        guard let restored = restoredCommandBlocksBySurfaceID[surfaceID],
-              !restored.isEmpty else { return }
-
-        let liveIDs = Set(liveBlocks.map(\.id))
-        let metadata = TerminalBlockRestoration.blocksForDisplay(
-            live: [],
-            restored: restored.filter { liveIDs.contains($0.id) },
-            limit: 256
-        )
-
-        if metadata.isEmpty {
-            restoredCommandBlocksBySurfaceID.removeValue(forKey: surfaceID)
-        } else {
-            restoredCommandBlocksBySurfaceID[surfaceID] = metadata
-        }
-    }
-
     private func configureCommandBlockOverlayIntegration(
         for tabID: TabID,
         surfaceID: SurfaceID,
@@ -1052,11 +1052,13 @@ extension MainWindowController {
         coreView.restoredCommandBlocksProvider = { [weak self] in
             self?.restoredCommandBlocksBySurfaceID[surfaceID] ?? []
         }
+        coreView.updateCommandBlockOverlayConfiguration(
+            configService?.current.commandBlocks ?? .defaults
+        )
         coreView.onToggleCommandBlockBookmark = { [weak self] block in
             self?.toggleCommandBlockBookmark(block, tabID: tabID, surfaceID: surfaceID)
         }
     }
-
     private func toggleCommandBlockBookmark(
         _ block: TerminalCommandBlock,
         tabID: TabID,
@@ -1070,13 +1072,12 @@ extension MainWindowController {
             restored: restored,
             limit: 256
         )
-
-        (surfaceView(for: surfaceID) as? CocxyCoreView)?.refreshCommandBlockOverlay()
-
+        (surfaceView(for: surfaceID) as? CocxyCoreView)?.invalidateCommandBlockOverlayData()
         let sessionID = sessionIDForTab(tabID).rawValue.uuidString
         let spotlightConfig = configService?.current.spotlight ?? .defaults
+        let commandBlockStore = commandBlockStore
         Task.detached(priority: .utility) {
-            try? TerminalBlockStore().append(updated, sessionID: sessionID)
+            try? commandBlockStore.append(updated, sessionID: sessionID)
             if spotlightConfig.enabled {
                 _ = try? await SpotlightIncrementalIndexer.indexCommandBlock(
                     updated,

@@ -6,74 +6,32 @@ import Combine
 import CocxyShared
 import UserNotifications
 
-/// Main application delegate for Cocxy Terminal.
-///
-/// Responsibilities:
-/// - Initialize the terminal engine at launch.
-/// - Create and manage the main window via `MainWindowController`.
-/// - Coordinate app lifecycle events (launch, terminate, activate).
-/// - Trigger session save/restore at appropriate lifecycle points.
-///
-/// ## Extensions
-///
-/// Responsibilities are distributed across focused extension files:
-/// - `+MenuSetup.swift` — Application menu bar construction.
-/// - `+SessionManagement.swift` — Session persistence and restoration.
-/// - `+AgentWiring.swift` — Agent detection engine setup and event wiring.
-/// - `+RemoteWorkspace.swift` — Remote workspace service initialization.
-/// - `+BrowserPro.swift` — Browser Pro service initialization.
-///
-/// This delegate is intentionally thin. Business logic belongs in services
-/// and view models, not here.
-///
-/// ## Lifecycle
-///
-/// ```
-/// applicationDidFinishLaunching
-///   -> Create CocxyCoreBridge
-///   -> Initialize bridge with config
-///   -> Initialize agent detection engine (before window!)
-///   -> Create MainWindowController
-///   -> Show window
-///   -> Create terminal surface (engine already available)
-///   -> Wire agent detection to window
-///
-/// applicationWillTerminate
-///   -> Destroy terminal surface
-///   -> MainWindowController = nil
-///   -> Bridge = nil (deinit frees terminal resources)
-/// ```
+/// Coordinates app lifecycle and app-scoped services. Focused extension
+/// files own menu, session, agent, remote, and browser wiring.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Properties
 
-    /// The terminal engine. Created during app launch.
     private(set) var bridge: (any TerminalEngine)?
-
-    /// The main window controller. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var windowController: MainWindowController?
-
     /// The configuration service. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var configService: ConfigService?
-
+    let voiceConsentCoordinator = VoiceConsentCoordinator()
     /// The macOS notification adapter. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var notificationAdapter: MacOSNotificationAdapter?
-
     /// The notification manager. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var notificationManager: NotificationManagerImpl?
 
     /// Shared cross-window tab router used by notifications and the dashboard.
     var windowTabRouter: WindowControllerTabRouter?
-
     /// The dock badge controller. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var dockBadgeController: DockBadgeController?
-
     /// The quick switch controller. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var quickSwitchController: QuickSwitchController?
@@ -82,17 +40,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Manages the global dropdown terminal panel and hotkey.
     /// Exposed for testing purposes.
     private(set) var quickTerminalController: QuickTerminalController?
-
-    /// The shared theme engine. Created once and injected where needed
-    /// to avoid redundant file system scanning.
     private(set) var themeEngine: ThemeEngineImpl?
+    let gitInfoProvider = GitInfoProviderImpl()
+    private let projectIdentityServices: ProjectIdentityServices
+    var projectRegistry: ProjectRegistry { projectIdentityServices.registry }
+    var projectResolver: CachedProjectResolver { projectIdentityServices.resolver }
+    let projectConfigWatcherRegistry = ProjectConfigWatcherRegistry()
+    let tabConfigProjectContextStore = TabConfigProjectContextStore()
+    let terminalBlockStore = TerminalBlockStore()
+    var projectRegistryChangeCancellable: AnyCancellable?
+    lazy var taskInboxStore = TaskInboxStore(projectResolver: projectResolver)
+    let projectFanOutCoordinator = ProjectFanOutCoordinator()
+    lazy var sharedWorktreeService: WorktreeService = {
+        let gitInfoProvider = self.gitInfoProvider
+        let projectResolver = self.projectResolver
+        return WorktreeService(
+            gitInfoProvider: gitInfoProvider,
+            mutationObserver: { directories in
+                for directory in directories {
+                    gitInfoProvider.invalidateCache(for: directory)
+                }
+                await MainActor.run {
+                    for directory in directories {
+                        projectResolver.invalidate(directory: directory)
+                    }
+                }
+            }
+        )
+    }()
 
-    /// The session manager for persistence and restoration.
-    /// Internal setter: extensions (+SessionManagement) assign during init.
+    /// Workspace aliases are app-scoped so concurrent windows never persist
+    /// divergent snapshots of the same identity map.
+    let auroraWorkspaceTitleStore = AuroraWorkspaceTitleStore()
+    let relayAuditLog = RelayAuditLog(writer: DiskAuditLogWriter())
+    let applicationLayoutDirectionCoordinator = ApplicationLayoutDirectionCoordinator()
+    var mobileMirrorCoordinator: MobileMirrorCoordinator?
+    var mobileMirrorWindowController: MobileMirrorWindowController?
+    /// Session persistence owner, assigned during initialization.
     var sessionManager: SessionManagerImpl?
-
-    /// Restorable launch snapshot loaded by the deferred restore preflight.
-    /// Keeps launch restore from decoding `last.json` more than once.
+    /// Restorable launch snapshot decoded once by deferred restore preflight.
     var pendingRestorableLaunchSession: Session?
 
     /// Subscription for hot-reloading the periodic session auto-save timer
@@ -106,10 +92,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// `setupMainMenu()` so menu shortcuts stay in sync with the editor
     /// without requiring an app restart.
     private var menuKeybindingsCancellable: AnyCancellable?
-
     /// Services-provider bridge for Finder contextual actions.
     var finderServiceProvider: FinderServiceProvider?
-
+    init(projectIdentityServices: ProjectIdentityServices = ProjectIdentityServices()) {
+        self.projectIdentityServices = projectIdentityServices
+        super.init()
+    }
     /// The quick terminal view model for state management.
     /// Internal setter: extensions (+SessionManagement) assign during init.
     var quickTerminalViewModel: QuickTerminalViewModel?
@@ -118,9 +106,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Exposed for testing purposes.
     private(set) var socketServer: SocketServerImpl?
 
-    /// Serializes visible approval for sensitive local-socket operations.
-    let privilegedSocketCommandAuthorizationCoordinator =
-        SocketPrivilegedCommandAuthorizationCoordinator()
+    /// Serializes visible approval and app-scoped mobile approval producers.
+    let mobileMirrorApprovalRegistry = MobileMirrorApprovalRegistry()
+    lazy var privilegedSocketCommandAuthorizationCoordinator = SocketPrivilegedCommandAuthorizationCoordinator(approvalRegistry: mobileMirrorApprovalRegistry)
     var activePrivilegedSocketCommandContext: SocketPrivilegedCommandContext?
 
     /// Timer that periodically checks if the socket file still exists.
@@ -131,6 +119,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// The hook event receiver for Claude Code integration.
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var hookEventReceiver: HookEventReceiverImpl?
+
+    /// Native file monitor scoped to hook sessions that passed exact tab/CWD
+    /// authorization. Protocol-backed so lifecycle routing is testable.
+    var agentWorkspaceFileMonitor: AgentWorkspaceFileMonitoring?
 
     /// Tracks git snapshots and touched files per agent hook session for the code review panel.
     var sessionDiffTracker: SessionDiffTrackerImpl?
@@ -159,13 +151,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Menu bar status item showing agent count.
     private(set) var menuBarItem: MenuBarStatusItem?
 
-    /// Central session registry for multi-window synchronization.
-    /// Tracks all terminal sessions across all windows, enabling
-    /// cross-window tab drag, synchronized badges, and shared agent state.
     private(set) var sessionRegistry: SessionRegistryImpl?
 
-    /// Event bus for cross-window communication (theme sync, config
-    /// reload, focus session). Created alongside the session registry.
     private(set) var windowEventBus: WindowEventBusImpl?
 
     /// Aggregates notification unread counts across all windows.
@@ -200,19 +187,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Cancellables for hook-to-engine wiring and agent-to-tab wiring.
     var hookCancellables = Set<AnyCancellable>()
 
-    /// The timeline store for agent events. Created alongside the engine.
-    /// Internal setter: extensions (+AgentWiring) assign during engine init.
+    /// App-wide timeline store, assigned during agent engine initialization.
     var agentTimelineStore: AgentTimelineStoreImpl?
-
-    /// The dashboard ViewModel for agent sessions. Created alongside the engine.
-    /// Internal setter: extensions (+AgentWiring) assign during engine init.
+    /// App-wide owner for the local activity database used by every window.
+    let activityStoreCoordinator = ActivityStoreCoordinator()
+    lazy var activityWorkingDirectoryProvider = ActivityWorkingDirectoryProvider { [weak self] in
+        self?.activityWorkingDirectoriesSnapshot() ?? []
+    }
+    /// App-wide dashboard model, assigned during agent engine initialization.
     var agentDashboardViewModel: AgentDashboardViewModel?
-
     /// Active local agent-team coordinators keyed by team ID.
     var activeAgentTeamCoordinators: [String: AgentTeamCoordinator] = [:]
 
+    /// Provider resolution used to build and later revalidate exact team launch plans.
+    var agentTeamProviderAdapterRegistry = AgentTeamProviderAdapterRegistry()
+
+    /// Persistence endpoint for resumable team runs. Injectable so handoff
+    /// exclusion and storage behavior can be verified without user data.
+    var agentTeamSessionSnapshotStore = AgentTeamSessionSnapshotStore()
+
     /// Runtime Agent Team hook projections keyed by team ID.
     var activeAgentTeamRuns: [String: AgentTeamRunState] = [:]
+
+    /// Parallel task runs retained for comparison and winner promotion.
+    var activeTaskRuns: [String: TaskRun] = [:]
+    let taskRunPromotionReservationStore = TaskRunPromotionReservationStore()
+    let taskFileCatalogService = TaskFileCatalogService()
+
+    /// App-wide durable storage for parallel task runs.
+    var taskRunStore = TaskRunStore()
+    var taskRunPersistenceCoordinator: TaskRunPersistenceCoordinator?
+    var taskRunRestorationTask: Task<Void, Never>?
+    var taskRunPersistenceIssues: [String: String] = [:]
+
+    /// Reverse lookup used to fold provider hook events into one TaskRun row.
+    var taskRunIDByTeamID: [String: String] = [:]
+
+    /// In-memory, HMAC-bound authorization sessions for directed TaskRun input.
+    var taskOrchestrationSessionManager = TaskOrchestrationSessionManager()
+
+    /// Persistent scheduled agent pipelines and their runtime rendezvous state.
+    var taskQueue: TaskQueue?
+    var taskQueueIsReady = false
+    var taskQueueTimer: Timer?
+    let agentPipelineCompletionBroker = AgentPipelineCompletionBroker()
+    var taskQueueAgentTeamContexts: [String: TaskQueueAgentTeamContext] = [:]
 
     /// The agent config service for agents.toml hot-reload.
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
@@ -242,6 +261,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// SSH tunnel manager shared across all windows.
     /// Internal setter: extensions (+RemoteWorkspace) assign during setup.
     var tunnelManager: SSHTunnelManager?
+
+    /// Relay manager shared by remote channels and the local mobile bridge.
+    var relayManager: RelayManagerImpl?
 
     /// SSH key manager shared across all windows.
     /// Internal setter: extensions (+RemoteWorkspace) assign during setup.
@@ -297,6 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             themeEngine = ThemeEngineImpl()
         }
         AppLaunchSignposts.measure(.configService) { initializeConfigService() }
+        applicationLayoutDirectionCoordinator.start(localizer: appLocalizer())
         AppLaunchSignposts.measure(.sessionManager) { initializeSessionManager() }
         AppLaunchSignposts.measure(.bridge) { initializeBridge() }
         AppLaunchSignposts.measure(.agentDetectionEngine) { initializeAgentDetectionEngine() }
@@ -415,6 +438,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        shutdownMobileMirror()
         crashRecoveryOfferWindowController?.close()
         crashRecoveryOfferWindowController = nil
         stopCrashRecoverySnapshots()
@@ -424,6 +448,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sessionAutoSaveConfigCancellable = nil
         menuKeybindingsCancellable?.cancel()
         menuKeybindingsCancellable = nil
+        applicationLayoutDirectionCoordinator.stop()
         if NSApp.servicesProvider as AnyObject? === finderServiceProvider {
             NSApp.servicesProvider = nil
         }
@@ -436,18 +461,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         appearanceObserver?.stopObserving()
         appearanceObserver = nil
 
-        // Remove menu bar item.
         menuBarItem?.uninstall()
         menuBarItem = nil
+
+        shutdownTaskRuntimesForTermination()
 
         // Release plugins, remote workspace, browser, and update services.
         pluginManager = nil
         remotePortScanner?.stopScanning()
         remotePortScanner = nil
         remoteConnectionManager?.shutdownForApplicationTermination()
+        relayManager?.stopExpirationTimer()
         cocxydRemoteSSHBootstrapper = nil
         daemonDeployAdapter = nil
         remoteConnectionManager = nil
+        relayManager = nil
         remoteProfileStore = nil
         browserProfileManager = nil
         browserHistoryStore = nil
@@ -472,6 +500,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         socketServer?.stop()
         socketServer = nil
 
+        agentWorkspaceFileMonitor?.stopAll()
+        agentWorkspaceFileMonitor = nil
+
         // Tear down the quick terminal before the bridge is deallocated.
         quickTerminalController?.tearDown()
         quickTerminalController = nil
@@ -484,6 +515,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         additionalWindowControllers.removeAll()
         windowController?.destroyAllSurfaces()
         windowController = nil
+        projectRegistryChangeCancellable?.cancel()
+        projectRegistryChangeCancellable = nil
         agentStateAggregator = nil
         notificationAggregator = nil
         windowEventBus = nil
@@ -616,7 +649,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .sink { [weak self] config in
                 guard let self else { return }
                 if config.appearance.appLanguage != lastLanguage {
+                    let localizer = AppLocalizer(
+                        languagePreference: config.appearance.appLanguage
+                    )
                     setupMainMenu()
+                    updateMobileMirrorLocalization(localizer)
+                    applicationLayoutDirectionCoordinator.update(localizer: localizer)
                     lastLanguage = config.appearance.appLanguage
                 }
                 guard let mainMenu = NSApplication.shared.mainMenu else { return }
@@ -635,6 +673,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let registry = SessionRegistryImpl()
         sessionRegistry = registry
         windowEventBus = WindowEventBusImpl()
+        startProjectChangeBroadcasting()
         notificationAggregator = GlobalNotificationAggregatorImpl(registry: registry)
         agentStateAggregator = AgentStateAggregatorImpl(registry: registry)
     }
@@ -1021,7 +1060,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         if fontChanged || paddingChanged {
-            refreshTerminalHostMetrics(using: newConfig)
+            refreshTerminalHostMetrics(
+                using: newConfig,
+                fontChanged: fontChanged,
+                paddingChanged: paddingChanged
+            )
         }
     }
 
@@ -1138,12 +1181,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let viewModel = TerminalViewModel(engine: engine)
             let configuredFontSize = configService?.current.appearance.fontSize
                 ?? AppearanceConfig.defaults.fontSize
+            let configuredFontFamily = configService?.current.appearance.fontFamily
+                ?? AppearanceConfig.defaults.fontFamily
             viewModel.setDefaultFontSize(configuredFontSize)
             let surfaceView = TerminalHostViewFactory.make(
                 viewModel: viewModel,
                 engine: engine,
                 localizer: appLocalizer()
             )
+            surfaceView.applyFont(family: configuredFontFamily, size: configuredFontSize)
 
             wc.tabViewModels[tab.id] = viewModel
             wc.tabSurfaceViews[tab.id] = surfaceView
@@ -1190,28 +1236,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func refreshTerminalHostMetrics(using config: CocxyConfig) {
+    private func refreshTerminalHostMetrics(
+        using config: CocxyConfig,
+        fontChanged: Bool,
+        paddingChanged: Bool
+    ) {
         let allControllers = [windowController].compactMap { $0 } + additionalWindowControllers
         for controller in allControllers {
-            controller.terminalViewModel.setDefaultFontSize(config.appearance.fontSize)
-            for viewModel in controller.tabViewModels.values {
-                viewModel.setDefaultFontSize(config.appearance.fontSize)
+            if fontChanged {
+                controller.applyEffectiveTerminalFonts(
+                    from: config,
+                    defaultEngineAlreadyUpdated: true
+                )
             }
-            for viewModel in controller.splitViewModels.values {
-                viewModel.setDefaultFontSize(config.appearance.fontSize)
-            }
-            for storedViewModels in controller.savedTabSplitViewModels.values {
-                for viewModel in storedViewModels.values {
-                    viewModel.setDefaultFontSize(config.appearance.fontSize)
+
+            if paddingChanged {
+                for surfaceView in controller.tabSurfaceViews.values {
+                    surfaceView.updateInteractionMetrics()
+                    surfaceView.requestImmediateRedraw()
                 }
-            }
-            for surfaceView in controller.tabSurfaceViews.values {
-                surfaceView.updateInteractionMetrics()
-                surfaceView.requestImmediateRedraw()
-            }
-            for surfaceView in controller.splitSurfaceViews.values {
-                surfaceView.updateInteractionMetrics()
-                surfaceView.requestImmediateRedraw()
+                for surfaceView in controller.splitSurfaceViews.values {
+                    surfaceView.updateInteractionMetrics()
+                    surfaceView.requestImmediateRedraw()
+                }
             }
         }
 
@@ -1336,8 +1383,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func unbindHookSession(_ sessionID: String) {
+        agentWorkspaceFileMonitor?.stop(sessionId: sessionID)
         hookSessionTabBindings.removeValue(forKey: sessionID)
         hookSessionSurfaceBindings.removeValue(forKey: sessionID)
+    }
+
+    func unbindHookSessions(for tabID: TabID) {
+        let sessionIDs = hookSessionTabBindings.compactMap { sessionID, boundTabID in
+            boundTabID == tabID ? sessionID : nil
+        }
+        for sessionID in sessionIDs {
+            unbindHookSession(sessionID)
+        }
     }
 
     func boundSurfaceIDForHookSession(_ sessionID: String?) -> SurfaceID? {
@@ -1482,7 +1539,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return HookPathNormalizer.normalize(surfacePath) == normalizedPath
         }
     }
-
     func configureSharedServices(
         for controller: MainWindowController,
         registerWindow: Bool = true
@@ -1491,8 +1547,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.injectedPerSurfaceStore = agentStatePerSurfaceStore
         controller.injectedSessionDiffTracker = sessionDiffTracker
         controller.injectedDashboardViewModel = agentDashboardViewModel
+        controller.injectedTaskInboxStore = taskInboxStore
+        controller.injectedProjectFanOutCoordinator = projectFanOutCoordinator
         controller.injectedTimelineStore = agentTimelineStore
+        controller.injectedActivityStore = configuredActivityStore()
+        controller.activityWorkingDirectoryProvider = activityWorkingDirectoryProvider
         controller.injectedNotificationManager = notificationManager
+        controller.onAgentTabClosed = { [weak self] tabID in
+            self?.unbindHookSessions(for: tabID)
+            self?.handleTaskRunTabClosed(tabID)
+        }
+        controller.onAgentTeamTerminalEnded = { [weak self, weak controller] terminalEnd in
+            guard let self, let controller else { return }
+            self.handleAgentTeamTerminalEnd(terminalEnd, in: controller)
+        }
+        controller.projectActivationHandler = { [weak self] projectID in
+            self?.activateProjectForUser(projectID)
+        }
+        controller.projectLiveIDsProvider = { [weak self] in self?.liveProjectIDs() ?? [] }
+        controller.projectAliasHandler = { [weak self] projectID, title in
+            self?.setProjectAlias(title, for: projectID)
+        }
         controller.windowEventBus = windowEventBus
         controller.notificationAggregator = notificationAggregator
         controller.portScanner = portScanner
@@ -1505,7 +1580,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.browserHistoryStore = browserHistoryStore
         controller.browserBookmarkStore = browserBookmarkStore
         controller.sparkleUpdater = sparkleUpdater
-
+        controller.mobileMirrorApprovalRegistry = mobileMirrorApprovalRegistry
         if let registry = sessionRegistry {
             controller.sessionRegistry = registry
             if registerWindow {
@@ -1574,14 +1649,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let controller = MainWindowController(
             bridge: bridge,
             configService: configService,
+            appStores: mainWindowAppStores,
+            gitInfoProvider: gitInfoProvider,
+            projectResolver: projectResolver,
             terminalEngineFactory: { [weak self] preference in
                 self?.makeInitializedTerminalEngine(preference: preference)
             },
+            voiceConsentCoordinator: voiceConsentCoordinator,
             deferContentSetup: deferContentSetup
         )
         configureSharedServices(for: controller, registerWindow: true)
 
         if registerInitialSession, let initialTab = controller.tabManager.tabs.first {
+            controller.observeProjectDirectory(initialTab.workingDirectory)
             registerSession(for: initialTab, in: controller)
         }
 
@@ -1632,6 +1712,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ])
 
         window.contentView = errorView
+        ApplicationLayoutDirectionCoordinator.markAsApplicationManaged(window)
+        applicationLayoutDirectionCoordinator.apply(to: window)
         window.makeKeyAndOrderFront(nil)
     }
 
@@ -1865,6 +1947,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let manager = PluginManager()
         manager.scanPlugins()
         self.pluginManager = manager
+        setupTaskQueueRuntime()
     }
 
     // MARK: - Socket Server Initialization
@@ -1876,6 +1959,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let delegateRef = WeakReference(self)
         let configServiceRef = WeakReference(configService)
         let sessionManagerRef = WeakReference(self.sessionManager)
+        let agentTeamProviderRegistry = agentTeamProviderAdapterRegistry
         let coldStartStatusTimeout: DispatchTimeInterval = .milliseconds(25)
         let liveConfigProvider: (@Sendable () -> CocxyConfig)?
         if configService != nil {
@@ -1896,11 +1980,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let handler = AppSocketCommandHandler(
             privilegedCommandAuthorizationProvider: { request in
                 guard !Thread.isMainThread else { return nil }
+                let providerToPreflight = Self.agentTeamProviderForPreflight(
+                    command: request.command,
+                    params: request.params
+                )
+                if let providerToPreflight {
+                    let preflightFinished = DispatchSemaphore(value: 0)
+                    let executableResolved = LockedBox(false)
+                    Task.detached(priority: .userInitiated) {
+                        let executable = await agentTeamProviderRegistry
+                            .prepareExecutableForLaunch(for: providerToPreflight)
+                        executableResolved.withValue { $0 = executable != nil }
+                        preflightFinished.signal()
+                    }
+                    let timeout = min(
+                        max(0.1, request.expiresAt.timeIntervalSinceNow),
+                        5
+                    )
+                    guard preflightFinished.wait(timeout: .now() + timeout) == .success,
+                          executableResolved.withValue({ $0 }) else {
+                        return nil
+                    }
+                }
                 let semaphore = DispatchSemaphore(value: 0)
                 let result = LockedBox<SocketPrivilegedCommandAuthorizationGrant?>(nil)
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
                         guard let delegate = delegateRef.value else {
+                            semaphore.signal()
+                            return
+                        }
+                        if request.params["orchestration-session"] != nil {
+                            result.withValue {
+                                $0 = delegate.preauthorizedTaskOrchestrationGrant(for: request)
+                            }
                             semaphore.signal()
                             return
                         }
@@ -2542,12 +2655,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
                 return syncOnMainActor {
                     guard let delegate = delegateRef.value,
-                          let target = delegate.privilegedSocketTerminalTarget(for: context) else {
+                          let context,
+                          let target = delegate.privilegedSocketTerminalTarget(for: context),
+                          delegate.auditTaskOrchestrationWriteIfNeeded(
+                              context: context,
+                              command: .send,
+                              payloadBytes: text.utf8.count
+                          ) else {
                         return false
                     }
-                    target.controller.terminalEngine(for: target.surfaceID)
+                    return target.controller.terminalEngine(for: target.surfaceID)
                         .sendText(text, to: target.surfaceID)
-                    return true
                 }
             },
             // V4: Send key — send a named key to the active terminal.
@@ -2555,14 +2673,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
                 return syncOnMainActor {
                     guard let delegate = delegateRef.value,
+                          let context,
                           let target = delegate.privilegedSocketTerminalTarget(for: context) else {
                         return false
                     }
                     let sequence = SocketTerminalKeySequence.sequence(for: keyName)
-                    guard let seq = sequence else { return false }
-                    target.controller.terminalEngine(for: target.surfaceID)
+                    guard let seq = sequence,
+                          delegate.auditTaskOrchestrationWriteIfNeeded(
+                              context: context,
+                              command: .sendKey,
+                              payloadBytes: seq.utf8.count
+                          ) else {
+                        return false
+                    }
+                    return target.controller.terminalEngine(for: target.surfaceID)
                         .sendText(seq, to: target.surfaceID)
-                    return true
                 }
             },
             vaultOpenProvider: {
@@ -2868,13 +2993,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             },
             worktreeCLIProvider: { kind, params in
-                // Socket queue thread → detached task → semaphore wait.
-                // The inner bridge lives in AppDelegate+WorktreeCLI so
-                // this closure stays a one-liner.
-                let fallback: (Bool, [String: String]) = (
-                    false,
-                    ["error": "Cocxy process has shut down"]
-                )
+                let fallback = (false, ["error": "Cocxy process has shut down"])
                 guard let delegate = delegateRef.value else {
                     return fallback
                 }
@@ -2883,15 +3002,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     params: params
                 )
             },
-            githubCLIProvider: { kind, params in
-                // Mirror of the worktree provider: route every
-                // `github-*` verb through the AppDelegate-side
-                // GitHub bridge which wraps the `GitHubService`
-                // actor in the same semaphore idiom.
-                let fallback: (Bool, [String: String]) = (
-                    false,
-                    ["error": "Cocxy process has shut down"]
+            projectCLIProvider: { kind, params in
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                guard let delegate = delegateRef.value else {
+                    return (false, ["error": "Cocxy process has shut down"])
+                }
+                return delegate.handleProjectCLIRequest(
+                    kind: kind,
+                    params: params,
+                    approvedContext: context
                 )
+            },
+            githubCLIProvider: { kind, params in
+                let fallback = (false, ["error": "Cocxy process has shut down"])
                 guard let delegate = delegateRef.value else {
                     return fallback
                 }
@@ -2928,6 +3051,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     return fallback
                 }
                 return delegate.handleAgentTeamCLIRequest(
+                    kind: kind,
+                    params: params,
+                    approvedContext: context
+                )
+            },
+            taskRunCLIProvider: { kind, params in
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                let fallback: (Bool, [String: String]) = (
+                    false,
+                    ["error": "Cocxy process has shut down"]
+                )
+                guard let delegate = delegateRef.value else {
+                    return fallback
+                }
+                return delegate.handleTaskRunCLIRequest(
+                    kind: kind,
+                    params: params,
+                    approvedContext: context
+                )
+            },
+            taskQueueCLIProvider: { kind, params in
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                let fallback: (Bool, [String: String]) = (
+                    false,
+                    ["error": "Cocxy process has shut down"]
+                )
+                guard let delegate = delegateRef.value else {
+                    return fallback
+                }
+                return delegate.handleTaskQueueCLIRequest(
+                    kind: kind,
+                    params: params,
+                    approvedContext: context
+                )
+            },
+            taskHandoffCLIProvider: { kind, params in
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                let fallback: (Bool, [String: String]) = (
+                    false,
+                    ["error": "Cocxy process has shut down"]
+                )
+                guard let delegate = delegateRef.value,
+                      let context else {
+                    return fallback
+                }
+                return delegate.handleTaskHandoffCLIRequest(
                     kind: kind,
                     params: params,
                     approvedContext: context
@@ -3005,36 +3174,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSApp.activate(ignoringOtherApps: true)
             self?.windowController?.toggleDashboard()
         }
+        item.onNavigateToSession = { [weak self] sessionID in
+            NSApp.activate(ignoringOtherApps: true)
+            self?.agentDashboardViewModel?.navigateToSession(sessionID)
+        }
+        item.onRequestAgentSummary = { [weak self] in
+            guard let self else { return .empty }
+            return MenuBarAgentSummary.summarize(
+                self.agentDashboardViewModel?.sessions ?? [],
+                surfaceIDForHookSession: { [weak self] sessionID in
+                    self?.boundSurfaceIDForHookSession(sessionID)
+                }
+            )
+        }
         self.menuBarItem = item
 
-        // Wire dashboard ViewModel to update menu bar when sessions change.
-        agentDashboardViewModel?.sessionsPublisher
-            .receive(on: DispatchQueue.main)
-            .sink { [weak item] sessions in
-                let working = sessions.filter { $0.state == .working }.count
-                let waiting = sessions.filter { $0.state == .waitingForInput }.count
-                let errors = sessions.filter { $0.state == .error }.count
-                // Only show active sessions (working/waiting) in the menu bar.
-                // Error and finished sessions clutter the dropdown and make
-                // "Show Dashboard" hard to reach.
-                let activeSessions = sessions.filter {
-                    $0.state == .working || $0.state == .waitingForInput
+        if let sessionsPublisher = agentDashboardViewModel?.sessionsPublisher {
+            item.bindAgentSessions(
+                sessionsPublisher,
+                surfaceIDForHookSession: { [weak self] sessionID in
+                    self?.boundSurfaceIDForHookSession(sessionID)
                 }
-                let summaries = activeSessions.prefix(5).map { session in
-                    (
-                        name: session.projectName,
-                        state: session.state.rawValue,
-                        activity: session.lastActivity
-                    )
-                }
-                item?.updateAgentCount(
-                    working: working,
-                    waiting: waiting,
-                    errors: errors,
-                    sessions: summaries
-                )
-            }
+            )
             .store(in: &hookCancellables)
+        }
 
         configService?.configChangedPublisher
             .map(\.appearance.appLanguage)
@@ -3110,6 +3273,7 @@ final class WindowControllerTabRouter: NotificationTabRouting, DashboardTabNavig
     func activateTab(id: TabID) {
         guard let controller = appDelegate?.controllerContainingTab(id) else { return }
         controller.tabManager.setActive(id: id)
+        controller.handleTabSwitch(to: id)
         NSApp.activate(ignoringOtherApps: true)
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)

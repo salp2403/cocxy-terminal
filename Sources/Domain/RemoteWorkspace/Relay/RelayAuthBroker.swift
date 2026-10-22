@@ -36,155 +36,6 @@ protocol RelayAuthBrokering: AnyObject {
     func stop()
 }
 
-// MARK: - Relay Handshake
-
-/// Implements the binary wire protocol for relay authentication.
-///
-/// ## Wire Format
-///
-/// ```
-/// Bytes 0-3:    Payload length (big-endian uint32) — always 40
-/// Bytes 4-19:   Channel UUID (16 bytes, big-endian)
-/// Bytes 20-27:  Timestamp (8 bytes, Unix epoch, big-endian)
-/// Bytes 28-43:  Random nonce (16 bytes)
-/// Bytes 44-75:  HMAC-SHA256(bytes 4-43, channel_secret)
-/// ```
-///
-/// ## Validation Steps
-///
-/// 1. Check data length (minimum 76 bytes).
-/// 2. Read and verify payload length field.
-/// 3. Extract channel UUID and verify it matches.
-/// 4. Extract timestamp and verify it's within ±60 seconds.
-/// 5. Compute HMAC over payload and verify against signature.
-/// 6. Check replay tracker for duplicate nonces.
-enum RelayHandshake {
-
-    // MARK: - Constants
-
-    static let nonceSize = 16
-
-    /// Expected payload size: 16 (UUID) + 8 (timestamp) + 16 (nonce) = 40 bytes.
-    static let payloadSize = 40
-
-    /// Total handshake size: 4 (length) + 40 (payload) + 32 (HMAC) = 76 bytes.
-    static let totalSize = 76
-
-    /// Maximum clock skew tolerance in seconds.
-    static let timestampTolerance: UInt64 = 60
-
-    // MARK: - Validation Result
-
-    enum ValidationResult: Equatable, Sendable {
-        case accepted
-        case rejected(RejectionReason)
-    }
-
-    enum RejectionReason: Equatable, Sendable {
-        case malformed
-        case channelMismatch
-        case timestampExpired
-        case invalidSignature
-        case replayDetected
-    }
-
-    // MARK: - Build Handshake
-
-    /// Constructs a binary handshake for sending to the relay.
-    ///
-    /// - Parameters:
-    ///   - channelID: The UUID of the relay channel.
-    ///   - timestamp: Unix epoch seconds (current time).
-    ///   - token: The channel's authentication token.
-    /// - Returns: The complete 76-byte handshake data.
-    static func build(channelID: UUID, timestamp: UInt64, token: RelayToken) -> Data {
-        var data = Data()
-
-        // Payload length (big-endian uint32).
-        var payloadLen = UInt32(payloadSize).bigEndian
-        data.append(Data(bytes: &payloadLen, count: 4))
-
-        // Channel UUID (16 bytes).
-        let uuidBytes = withUnsafeBytes(of: channelID.uuid) { Data($0) }
-        data.append(uuidBytes)
-
-        // Timestamp (big-endian uint64).
-        var tsBigEndian = timestamp.bigEndian
-        data.append(Data(bytes: &tsBigEndian, count: 8))
-
-        var generator = SystemRandomNumberGenerator()
-        let nonce = Data((0..<nonceSize).map { _ in
-            UInt8.random(in: UInt8.min...UInt8.max, using: &generator)
-        })
-        data.append(nonce)
-
-        // HMAC-SHA256 over the payload (bytes 4-43).
-        let payload = data[4..<44]
-        let signature = token.sign(payload)
-        data.append(signature)
-
-        return data
-    }
-
-    // MARK: - Validate Handshake
-
-    /// Validates an incoming handshake.
-    ///
-    /// - Parameters:
-    ///   - data: The raw bytes received from the connection.
-    ///   - expectedChannelID: The UUID this relay expects.
-    ///   - token: The channel's authentication token.
-    ///   - replayTracker: Optional tracker for replay prevention.
-    /// - Returns: `.accepted` or `.rejected(reason)`.
-    static func validate(
-        data: Data,
-        expectedChannelID: UUID,
-        token: RelayToken,
-        replayTracker: UnsafeMutablePointer<ReplayTracker>?
-    ) -> ValidationResult {
-        // Check minimum size.
-        guard data.count >= totalSize else { return .rejected(.malformed) }
-
-        // Read payload length.
-        let payloadLen = Data(data[0..<4]).withUnsafeBytes {
-            $0.loadUnaligned(as: UInt32.self).bigEndian
-        }
-        guard payloadLen == UInt32(payloadSize) else { return .rejected(.malformed) }
-
-        // Extract channel UUID.
-        let receivedUUID = Data(data[4..<20]).withUnsafeBytes { buf -> UUID in
-            let raw = buf.loadUnaligned(as: uuid_t.self)
-            return UUID(uuid: raw)
-        }
-        guard receivedUUID == expectedChannelID else { return .rejected(.channelMismatch) }
-
-        // Extract timestamp.
-        let timestamp = Data(data[20..<28]).withUnsafeBytes {
-            $0.loadUnaligned(as: UInt64.self).bigEndian
-        }
-        let now = UInt64(Date().timeIntervalSince1970)
-        let diff = timestamp > now ? timestamp - now : now - timestamp
-        guard diff <= timestampTolerance else { return .rejected(.timestampExpired) }
-
-        // Verify HMAC.
-        let payload = Data(data[4..<44])
-        let nonce = Data(data[28..<44])
-        let receivedSignature = Data(data[44..<76])
-        guard token.validate(payload: payload, signature: receivedSignature) else {
-            return .rejected(.invalidSignature)
-        }
-
-        // Replay check.
-        if let tracker = replayTracker {
-            guard tracker.pointee.isAllowed(timestamp: timestamp, nonce: nonce) else {
-                return .rejected(.replayDetected)
-            }
-        }
-
-        return .accepted
-    }
-}
-
 // MARK: - Failed-Port Quarantine
 
 /// Owns a loopback TCP port synchronously so a failed broker port cannot be
@@ -518,7 +369,7 @@ final class RelayAuthBroker: RelayAuthBrokering {
         }
         let connectionID = ObjectIdentifier(connection)
         guard pendingHandshakes.count < maxPendingHandshakes else {
-            auditLog?.log(.connectionRejected(
+            _ = recordAudit(.connectionRejected(
                 channelID: channelID,
                 remoteHost: extractRemoteHost(from: connection),
                 reason: "Pending handshake limit exceeded"
@@ -551,7 +402,7 @@ final class RelayAuthBroker: RelayAuthBrokering {
                 let earlyRemoteHost = self.extractRemoteHost(from: connection)
 
                 guard let data, data.count >= RelayHandshake.totalSize else {
-                    self.auditLog?.log(.connectionRejected(
+                    _ = self.recordAudit(.connectionRejected(
                         channelID: self.channelID,
                         remoteHost: earlyRemoteHost,
                         reason: "Incomplete handshake"
@@ -575,7 +426,7 @@ final class RelayAuthBroker: RelayAuthBrokering {
                     // SSH does not preserve the remote process or host identity at this hop.
                     // Enforce only policy backed by observable broker state.
                     guard self.acl.canAcceptConnection(currentCount: self.activeConnections) else {
-                        self.auditLog?.log(.connectionRejected(
+                        _ = self.recordAudit(.connectionRejected(
                             channelID: self.channelID,
                             remoteHost: remoteHost,
                             reason: "Max connections exceeded"
@@ -583,14 +434,17 @@ final class RelayAuthBroker: RelayAuthBrokering {
                         self.cancelAndForget(connection)
                         return
                     }
-                    self.auditLog?.log(.connectionAccepted(
+                    guard self.recordAudit(.connectionAccepted(
                         channelID: self.channelID,
                         remoteHost: remoteHost
-                    ))
+                    )) else {
+                        self.cancelAndForget(connection)
+                        return
+                    }
                     self.relayToTarget(clientConnection: connection)
 
                 case .rejected(let reason):
-                    self.auditLog?.log(.connectionRejected(
+                    _ = self.recordAudit(.connectionRejected(
                         channelID: self.channelID,
                         remoteHost: remoteHost,
                         reason: "\(reason)"
@@ -812,12 +666,25 @@ final class RelayAuthBroker: RelayAuthBrokering {
                 return
             }
             guard let self, self.pendingHandshakes.contains(id) else { return }
-            self.auditLog?.log(.connectionRejected(
+            _ = self.recordAudit(.connectionRejected(
                 channelID: self.channelID,
                 remoteHost: self.extractRemoteHost(from: connection),
                 reason: "Handshake timed out"
             ))
             self.cancelAndForget(connection)
+        }
+    }
+
+    private func recordAudit(_ event: RelayAuditEvent) -> Bool {
+        guard let auditLog else { return true }
+        do {
+            try auditLog.log(event)
+            return true
+        } catch {
+            acceptsConnections = false
+            revokeAllConnections()
+            failureHandler?(error)
+            return false
         }
     }
 

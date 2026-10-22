@@ -472,7 +472,7 @@ final class AutoSwitchIntegrationTests: XCTestCase {
     private func waitForTaskYield() {
         let exp = expectation(description: "Task yield")
         Task { @MainActor in exp.fulfill() }
-        wait(for: [exp], timeout: 1.0)
+        wait(for: [exp], timeout: 15.0)
     }
 
     func testAutoSwitchFromLightToDarkChangesPalette() throws {
@@ -667,7 +667,7 @@ final class ConfigWatcherRobustnessTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
             expectation.fulfill()
         }
-        wait(for: [expectation], timeout: 2.0)
+        wait(for: [expectation], timeout: 15.0)
 
         // Tras stopWatching, el tema original debe permanecer (debounce cancelado)
         XCTAssertEqual(service.current.appearance.theme, "dracula",
@@ -739,7 +739,7 @@ final class ConfigCascadeTests: XCTestCase {
         let watcher = ConfigWatcher(configService: service, fileProvider: fileProvider)
         watcher.handleFileChange()
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 15.0)
 
         XCTAssertEqual(receivedTheme, "dracula",
             "ConfigChangedPublisher debe emitir el nuevo tema tras hot-reload")

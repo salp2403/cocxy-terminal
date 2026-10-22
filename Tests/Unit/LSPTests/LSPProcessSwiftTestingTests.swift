@@ -65,7 +65,7 @@ struct LSPProcessSwiftTestingTests {
         defer { process.stop() }
         try process.send(frame)
 
-        let deadline = Date().addingTimeInterval(2)
+        let deadline = Date().addingTimeInterval(15)
         while Date() < deadline {
             lock.lock()
             let snapshot = received

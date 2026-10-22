@@ -51,7 +51,29 @@ struct WorktreeCLIIntegrationHelperTests {
 
     @Test("tab project config overrides enable worktree CLI for the active project")
     func projectConfigOverridesEnableWorktreeCLI() {
-        let global = CocxyConfig.defaults
+        let defaults = CocxyConfig.defaults
+        let disabledWorktree = WorktreeConfig(
+            enabled: false,
+            basePath: defaults.worktree.basePath,
+            branchTemplate: defaults.worktree.branchTemplate,
+            baseRef: defaults.worktree.baseRef,
+            onClose: defaults.worktree.onClose,
+            openInNewTab: defaults.worktree.openInNewTab,
+            idLength: defaults.worktree.idLength,
+            inheritProjectConfig: defaults.worktree.inheritProjectConfig,
+            showBadge: defaults.worktree.showBadge
+        )
+        let global = CocxyConfig(
+            general: defaults.general,
+            appearance: defaults.appearance,
+            terminal: defaults.terminal,
+            agentDetection: defaults.agentDetection,
+            notifications: defaults.notifications,
+            quickTerminal: defaults.quickTerminal,
+            keybindings: defaults.keybindings,
+            sessions: defaults.sessions,
+            worktree: disabledWorktree
+        )
         let project = ProjectConfig(
             worktreeEnabled: true,
             worktreeBaseRef: "main",

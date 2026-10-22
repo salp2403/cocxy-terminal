@@ -6,7 +6,7 @@
 // this primitive so a single file owns the material stack:
 //
 //   macOS 26+  -> Apple Liquid Glass (`.glassEffect` / `NSGlassEffectView`).
-//   macOS 14/15 -> `NSVisualEffectView` with the design-reference blur
+//   macOS 15 -> `NSVisualEffectView` with the design-reference blur
 //                  radius (~28pt) and an OKLCH tint overlay.
 //   Reduce Transparency -> opaque fallback using the theme's
 //                          `backgroundTertiary` surface so contrast
@@ -40,7 +40,7 @@ extension Design {
         /// Real Liquid Glass — available starting macOS 26.
         case liquid
         /// Traditional `NSVisualEffectView` fallback with an overlay
-        /// tint. Used on macOS 14 / 15 when Liquid Glass is not yet
+        /// tint. Used on macOS 15 when Liquid Glass is not yet
         /// available. Reduce Transparency explicitly short-circuits to
         /// `.opaque` instead; see `resolveGlassRenderMode` for the
         /// decision table.

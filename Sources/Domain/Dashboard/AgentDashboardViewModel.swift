@@ -4,32 +4,14 @@
 import Foundation
 import Combine
 
+enum DashboardHookConnectionIssue: Equatable, Sendable {
+    case noEvents(tabId: UUID, detectedAt: Date)
+    case cwdMismatch(DroppedHookEventContext)
+}
+
 // MARK: - Agent Dashboard ViewModel
 
-/// ViewModel that aggregates agent sessions from hook events and detection signals.
-///
-/// Subscribes to:
-/// - `HookEventReceiver.eventPublisher` for Claude Code lifecycle events.
-/// - `AgentDetectionEngine.stateChanged` for pattern-based agent detection.
-///
-/// Maintains a sorted list of `AgentSessionInfo` instances and publishes
-/// changes via Combine for reactive UI binding.
-///
-/// ## Sorting
-///
-/// Sessions are sorted by:
-/// 1. Priority (focus > priority > standard)
-/// 2. State urgency (error > blocked > waitingForInput > working > launching > idle > finished)
-/// 3. Last activity time (oldest first within the same group)
-///
-/// ## Thread Safety
-///
-/// All state mutations happen on the main thread via `@MainActor`.
-/// The `HookEventReceiver` publishes from background threads; this ViewModel
-/// uses `receive(on: DispatchQueue.main)` to ensure thread safety.
-///
-/// - SeeAlso: ADR-008 Section 5.1 (Dashboard)
-/// - SeeAlso: `AgentDashboardProviding` protocol
+/// Aggregates hook and pattern sessions into the main-actor dashboard model.
 @MainActor
 final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
@@ -44,6 +26,15 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
     /// Whether the dashboard panel is visible.
     @Published var isVisible: Bool = false
+
+    /// Actionable hook-delivery issue shown without hiding live session rows.
+    @Published private(set) var hookConnectionIssue: DashboardHookConnectionIssue?
+
+    /// Result of the most recent explicit repair action.
+    @Published private(set) var hookRepairSucceeded: Bool?
+
+    /// Total events rejected because their CWD matched no open tab.
+    @Published private(set) var droppedByCwdCount: Int
 
     // MARK: - Publishers
 
@@ -79,6 +70,12 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// with the tab UUID to broadcast a focusSession event.
     var onCrossWindowNavigate: ((UUID) -> Void)?
 
+    /// Opens one touched file in Code Review after routing to its owning tab.
+    var onOpenFileImpact: ((_ sessionId: String, _ filePath: String) -> Void)?
+
+    var onReinstallHooks: (() -> Bool)?
+    var onBindDroppedSession: ((DroppedHookEventContext) -> Bool)?
+
     /// Reference to the hook event receiver for accessing session context
     /// (cwd, session_id) when auto-creating sessions from tool use events.
     private weak var hookEventReceiver: HookEventReceiverImpl?
@@ -95,6 +92,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// tab that currently owns the session. Used for multi-window routing
     /// when multiple tabs may share the same working directory.
     var tabIdResolver: ((String, String?) -> UUID?)?
+
+    /// Resolves hook-native sessions to their exact terminal surface. This
+    /// lets the dashboard suppress the synthetic pattern mirror for the same
+    /// tab and surface without collapsing unrelated sessions in one tab.
+    var surfaceIDForHookSessionProvider: ((String) -> SurfaceID?)?
 
     /// Resolves a tab UUID to the window that currently owns it.
     /// Injected by AppDelegate for cross-window dashboard presentation.
@@ -115,6 +117,18 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// agents in the same tab do not collapse into one dashboard session.
     var patternContextProvider: ((SurfaceID?) -> (tabId: UUID, surfaceID: SurfaceID?, workingDirectory: String?)?)?
 
+    private let hookSilenceInterval: TimeInterval
+    private let projectResolver: (any ProjectResolving)?
+    private var hookSilenceTasks: [UUID: Task<Void, Never>] = [:]
+    private var tabsWithObservedHooks = Set<UUID>()
+
+    static let maxFileImpactsPerSession = 512
+    static let retainedPendingFileChangesPerSession = maxFileImpactsPerSession * 2
+    static let pendingFileChangeCompactionThreshold = maxFileImpactsPerSession * 4
+    var pendingFileChangesBySession: [String: [String: PendingDashboardFileChange]] = [:]
+    var fileChangeFlushTimer: DispatchSourceTimer?
+    var fileChangeDebounceInterval: TimeInterval = 0.25
+
     // MARK: - Initialization
 
     /// Creates a dashboard ViewModel and subscribes to event sources.
@@ -124,10 +138,18 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     ///   - detectionEngine: Optional detection engine for non-hook agents.
     init(
         hookEventReceiver: HookEventReceiving? = nil,
-        detectionEngine: AgentDetectionEngineImpl? = nil
+        detectionEngine: AgentDetectionEngineImpl? = nil,
+        projectResolver: (any ProjectResolving)? = nil,
+        hookSilenceInterval: TimeInterval = 20
     ) {
+        self.hookSilenceInterval = hookSilenceInterval
+        self.projectResolver = projectResolver
+        self.hookConnectionIssue = nil
+        self.hookRepairSucceeded = nil
+        self.droppedByCwdCount = 0
         self.hookEventReceiver = hookEventReceiver as? HookEventReceiverImpl
         subscribeToHookEvents(hookEventReceiver)
+        subscribeToHookDiagnostics(hookEventReceiver as? HookEventReceiverImpl)
         subscribeToDetectionEngine(detectionEngine)
     }
 
@@ -180,6 +202,24 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         onCrossWindowNavigate?(data.tabId)
     }
 
+    func openFileImpact(_ filePath: String, for sessionId: String) {
+        guard sessionDataStore[sessionId]?.fileImpacts[filePath] != nil else { return }
+        onOpenFileImpact?(sessionId, filePath)
+    }
+
+    func reinstallHooks() {
+        hookRepairSucceeded = onReinstallHooks?() ?? false
+    }
+
+    func bindDroppedSession() {
+        guard case .cwdMismatch(let context) = hookConnectionIssue else { return }
+        let succeeded = onBindDroppedSession?(context) ?? false
+        hookRepairSucceeded = succeeded
+        if succeeded {
+            hookConnectionIssue = nil
+        }
+    }
+
     /// Returns whether a concrete subagent is already tracked under a parent session.
     func hasSubagent(id subagentId: String, in sessionId: String) -> Bool {
         sessionDataStore[sessionId]?.subagents.contains(where: { $0.id == subagentId }) == true
@@ -216,9 +256,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             handleTeammateIdle(event)
         case .taskCompleted:
             handleTaskCompleted(event)
-        case .notification, .userPromptSubmit:
+        case .notification:
             // Informational events -- no dashboard state change.
             break
+        case .userPromptSubmit:
+            handleUserPromptSubmit(event)
         case .richInputDraftSubmitted:
             // Rich Input submissions are exposed to plugin/hook observers and
             // timeline metadata; they do not imply an agent state transition.
@@ -294,13 +336,14 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             liveSurfaceSessionIDs.insert(sessionID)
 
             let dashboardState = mapAgentState(surfaceState.agentState)
-            let projectName = extractProjectName(from: context.workingDirectory)
+            let project = resolveProject(from: context.workingDirectory, fallbackName: agentName)
             let activity = surfaceState.agentActivity
 
             if sessionDataStore[sessionID] == nil {
                 sessionDataStore[sessionID] = MutableSessionData(
                     id: sessionID,
-                    projectName: projectName != "Unknown" ? projectName : agentName,
+                    projectName: project.name,
+                    projectIdentity: project.identity,
                     tabId: context.tabId,
                     state: dashboardState,
                     agentName: agentName,
@@ -311,6 +354,8 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
                 )
             } else {
                 sessionDataStore[sessionID]?.state = dashboardState
+                sessionDataStore[sessionID]?.projectName = project.name
+                sessionDataStore[sessionID]?.projectIdentity = project.identity
                 sessionDataStore[sessionID]?.agentName = agentName
                 sessionDataStore[sessionID]?.lastActivity = activity
                 sessionDataStore[sessionID]?.lastActivityTime = Date()
@@ -345,7 +390,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
                 type: teammate.name,
                 state: mapAgentTeamStatus(teammateStates[teammate.id] ?? .working),
                 startTime: run.createdAt,
-                lastActivity: "Provider handoff ready",
+                lastActivity: "Provider process started",
                 lastActivityTime: run.updatedAt
             )
         }
@@ -354,13 +399,15 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         let state = aggregateAgentTeamState(subagents.map(\.state))
         let teammateNames = run.config.teammates.map(\.name).joined(separator: ", ")
 
+        let project = resolveProject(from: resolvedWorkingDirectory)
         sessionDataStore[run.config.id] = MutableSessionData(
             id: run.config.id,
-            projectName: extractProjectName(from: resolvedWorkingDirectory),
+            projectName: project.name,
+            projectIdentity: project.identity,
             tabId: tabId,
             state: state,
             agentName: run.config.provider.displayName,
-            lastActivity: teammateNames.isEmpty ? "Agent team launched" : "Agent team launched: \(teammateNames)",
+            lastActivity: teammateNames.isEmpty ? "Agent team running" : "Agent team running: \(teammateNames)",
             lastActivityTime: run.updatedAt,
             subagents: subagents
         )
@@ -369,6 +416,21 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
     func removeAgentTeamRun(teamID: String) {
         sessionDataStore.removeValue(forKey: AgentTeamConfig.slug(teamID))
+        rebuildSessions()
+    }
+
+    /// Removes every dashboard row owned by a tab that has actually closed.
+    func removeSessions(forTabID tabID: UUID) {
+        let sessionIDs = sessionDataStore.compactMap { sessionID, data in
+            data.tabId == tabID ? sessionID : nil
+        }
+        guard !sessionIDs.isEmpty else { return }
+
+        for sessionID in sessionIDs {
+            discardPendingFileChanges(for: sessionID)
+            sessionDataStore.removeValue(forKey: sessionID)
+        }
+        cancelHookSilenceWatch(for: tabID, clearObservation: true)
         rebuildSessions()
     }
 
@@ -455,12 +517,14 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     ) {
         let syntheticSessionId = patternSessionID(tabId: tabId, surfaceID: surfaceID)
         let dashboardState = mapStateMachineState(state)
+        let previousState = sessionDataStore[syntheticSessionId]?.state
+        let project = resolveProject(from: workingDirectory, fallbackName: agentName)
 
         if sessionDataStore[syntheticSessionId] == nil {
-            let projectName = extractProjectName(from: workingDirectory)
             let data = MutableSessionData(
                 id: syntheticSessionId,
-                projectName: projectName != "Unknown" ? projectName : agentName,
+                projectName: project.name,
+                projectIdentity: project.identity,
                 tabId: tabId,
                 state: dashboardState,
                 agentName: agentName
@@ -468,9 +532,17 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             sessionDataStore[syntheticSessionId] = data
         } else {
             sessionDataStore[syntheticSessionId]?.state = dashboardState
+            sessionDataStore[syntheticSessionId]?.projectName = project.name
+            sessionDataStore[syntheticSessionId]?.projectIdentity = project.identity
             sessionDataStore[syntheticSessionId]?.lastActivityTime = Date()
             sessionDataStore[syntheticSessionId]?.agentName = agentName
         }
+        updateHookSilenceWatch(
+            agentName: agentName,
+            state: dashboardState,
+            previousState: previousState,
+            tabId: tabId
+        )
     }
 
     private func patternSessionID(tabId: UUID, surfaceID: SurfaceID?) -> String {
@@ -493,14 +565,15 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             workingDirectory = startData.workingDirectory
         }
 
-        let projectName = extractProjectName(from: workingDirectory)
+        let project = resolveProject(from: workingDirectory)
         let resolvedTabId = tabIdResolver?(event.sessionId, workingDirectory)
             ?? workingDirectory.flatMap { tabIdForCwdProvider?($0) }
             ?? UUID()
 
         let data = MutableSessionData(
             id: event.sessionId,
-            projectName: projectName,
+            projectName: project.name,
+            projectIdentity: project.identity,
             tabId: resolvedTabId,
             state: .launching,
             agentName: agentType,
@@ -511,6 +584,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     }
 
     private func handleSessionEnd(_ event: HookEvent) {
+        discardPendingFileChanges(for: event.sessionId)
         sessionDataStore.removeValue(forKey: event.sessionId)
         rebuildSessions()
     }
@@ -530,17 +604,25 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         rebuildSessions()
     }
 
+    private func handleUserPromptSubmit(_ event: HookEvent) {
+        guard sessionDataStore[event.sessionId] != nil else { return }
+        sessionDataStore[event.sessionId]?.state = .working
+        sessionDataStore[event.sessionId]?.lastActivityTime = event.timestamp
+        rebuildSessions()
+    }
+
     private func handleToolUse(_ event: HookEvent) {
         // Auto-create session if it doesn't exist. Claude Code may not always
         // send SessionStart before tool use events (e.g., hooks installed mid-session).
         if sessionDataStore[event.sessionId] == nil {
-            let projectName = extractProjectName(from: event.cwd)
+            let project = resolveProject(from: event.cwd)
             let resolvedTabId = tabIdResolver?(event.sessionId, event.cwd)
                 ?? event.cwd.flatMap { tabIdForCwdProvider?($0) }
                 ?? UUID()
             let data = MutableSessionData(
                 id: event.sessionId,
-                projectName: projectName,
+                projectName: project.name,
+                projectIdentity: project.identity,
                 tabId: resolvedTabId,
                 state: .working,
                 agentName: "Claude Code"
@@ -556,7 +638,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             sessionDataStore[event.sessionId]?.totalToolCalls += 1
 
             // Track file impact.
-            trackFileImpact(sessionId: event.sessionId, toolData: toolData)
+            trackFileImpact(
+                sessionId: event.sessionId,
+                toolData: toolData,
+                timestamp: event.timestamp
+            )
 
             // Attribute tool use to single active subagent when unambiguous.
             let filePath = toolData.toolInput?["file_path"] ?? toolData.toolInput?["path"]
@@ -586,7 +672,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             sessionDataStore[event.sessionId]?.totalErrors += 1
 
             // Track file impact even on failure.
-            trackFileImpact(sessionId: event.sessionId, toolData: toolData)
+            trackFileImpact(
+                sessionId: event.sessionId,
+                toolData: toolData,
+                timestamp: event.timestamp
+            )
 
             // Attribute error to single active subagent when unambiguous.
             attributeErrorToSubagent(
@@ -603,13 +693,14 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
     private func handleSubagentStart(_ event: HookEvent) {
         if sessionDataStore[event.sessionId] == nil {
-            let projectName = extractProjectName(from: event.cwd)
+            let project = resolveProject(from: event.cwd)
             let resolvedTabId = tabIdResolver?(event.sessionId, event.cwd)
                 ?? event.cwd.flatMap { tabIdForCwdProvider?($0) }
                 ?? UUID()
             let data = MutableSessionData(
                 id: event.sessionId,
-                projectName: projectName,
+                projectName: project.name,
+                projectIdentity: project.identity,
                 tabId: resolvedTabId,
                 state: .working,
                 agentName: "Claude Code"
@@ -704,7 +795,8 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         sessionDataStore[sessionId]?.subagents[idx].toolUseCount += 1
 
         // Track file path for conflict detection.
-        if let path = filePath {
+        if let path = filePath,
+           sessionDataStore[sessionId]?.fileImpacts[path] != nil {
             sessionDataStore[sessionId]?.subagents[idx].touchedFilePaths.insert(path)
         }
 
@@ -743,7 +835,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     }
 
     /// Tracks which files a tool call touches and what operations are performed.
-    private func trackFileImpact(sessionId: String, toolData: ToolUseData) {
+    private func trackFileImpact(
+        sessionId: String,
+        toolData: ToolUseData,
+        timestamp: Date
+    ) {
         guard let filePath = toolData.toolInput?["file_path"] ?? toolData.toolInput?["path"] else {
             return
         }
@@ -755,7 +851,52 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         case "bash":  operation = .bash
         default:      operation = .read
         }
-        sessionDataStore[sessionId]?.fileImpacts[filePath, default: []].insert(operation)
+        recordFileImpact(
+            sessionId: sessionId,
+            filePath: filePath,
+            operation: operation,
+            timestamp: timestamp
+        )
+    }
+
+    func recordFileImpact(
+        sessionId: String,
+        filePath: String,
+        operation: FileImpact.FileOperation,
+        timestamp: Date
+    ) {
+        guard var sessionData = sessionDataStore[sessionId] else { return }
+        var impact = sessionData.fileImpacts[filePath]
+            ?? FileImpact(path: filePath, lastChangedAt: timestamp)
+        impact.operations.insert(operation)
+        impact.lastChangedAt = max(impact.lastChangedAt, timestamp)
+        sessionData.fileImpacts[filePath] = impact
+        Self.pruneFileTracking(&sessionData)
+        sessionDataStore[sessionId] = sessionData
+    }
+
+    static func pruneFileTracking(_ sessionData: inout MutableSessionData) {
+        pruneFileImpacts(&sessionData.fileImpacts)
+        let retainedPaths = Set(sessionData.fileImpacts.keys)
+        for index in sessionData.subagents.indices {
+            sessionData.subagents[index].touchedFilePaths.formIntersection(retainedPaths)
+        }
+    }
+
+    static func pruneFileImpacts(_ impacts: inout [String: FileImpact]) {
+        let overflow = impacts.count - maxFileImpactsPerSession
+        guard overflow > 0 else { return }
+        let keysToRemove = impacts.sorted { lhs, rhs in
+                if lhs.value.lastChangedAt != rhs.value.lastChangedAt {
+                    return lhs.value.lastChangedAt < rhs.value.lastChangedAt
+                }
+                return lhs.key.localizedStandardCompare(rhs.key) == .orderedAscending
+            }
+            .prefix(overflow)
+            .map(\.key)
+        for key in keysToRemove {
+            impacts.removeValue(forKey: key)
+        }
     }
 
     // MARK: - Private: Subscriptions
@@ -767,20 +908,106 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
                 guard let self else { return }
-                // Only process events from sessions running inside Cocxy tabs.
-                // Events without CWD are dropped when the provider is available,
-                // preventing cross-terminal leakage.
-                if let tabCwds = self.tabCwdProvider?() {
+                // CwdChanged has no dashboard effect and is authorized solely
+                // by AppDelegate's exact old_cwd resolver. Do not independently
+                // treat a pre-existing session binding as acceptance here.
+                guard event.type != .cwdChanged else { return }
+                let resolvedTabId: UUID?
+                resolvedTabId = self.tabIdResolver?(event.sessionId, event.cwd)
+
+                if self.tabCwdProvider != nil, resolvedTabId == nil {
                     guard let cwd = event.cwd else { return }
-                    let cwdStd = URL(fileURLWithPath: cwd).standardized.path
-                    let matches = tabCwds.contains { tabCwd in
-                        URL(fileURLWithPath: tabCwd).standardized.path == cwdStd
-                    }
+                    let cwdStd = HookPathNormalizer.normalize(cwd)
+                    let matches = self.tabCwdProvider?().contains { tabCwd in
+                        HookPathNormalizer.normalize(tabCwd) == cwdStd
+                    } == true
                     guard matches else { return }
+                }
+                if let resolvedTabId {
+                    self.markHookObserved(tabId: resolvedTabId, sessionId: event.sessionId)
                 }
                 self.processHookEvent(event)
             }
             .store(in: &cancellables)
+    }
+
+    private func subscribeToHookDiagnostics(_ receiver: HookEventReceiverImpl?) {
+        receiver?.diagnosticsPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] diagnostics in
+                guard let self else { return }
+                self.droppedByCwdCount = diagnostics.droppedByCwdCount
+                if let context = diagnostics.lastDroppedByCwd {
+                    self.hookRepairSucceeded = nil
+                    self.hookConnectionIssue = .cwdMismatch(context)
+                } else if case .cwdMismatch = self.hookConnectionIssue {
+                    self.hookConnectionIssue = nil
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func updateHookSilenceWatch(
+        agentName: String,
+        state: AgentDashboardState,
+        previousState: AgentDashboardState?,
+        tabId: UUID
+    ) {
+        let isClaude = agentName.localizedCaseInsensitiveContains("claude")
+        guard isClaude, state != .idle else {
+            cancelHookSilenceWatch(for: tabId, clearObservation: state == .idle)
+            return
+        }
+
+        if state == .launching, previousState != .launching {
+            tabsWithObservedHooks.remove(tabId)
+        }
+        guard !tabsWithObservedHooks.contains(tabId), hookSilenceTasks[tabId] == nil else {
+            return
+        }
+
+        let detectedAt = Date()
+        let nanoseconds = UInt64(max(0, hookSilenceInterval) * 1_000_000_000)
+        hookSilenceTasks[tabId] = Task { @MainActor [weak self] in
+            if nanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: nanoseconds)
+            }
+            guard !Task.isCancelled, let self,
+                  !self.tabsWithObservedHooks.contains(tabId) else {
+                return
+            }
+            self.hookSilenceTasks.removeValue(forKey: tabId)
+            if case .cwdMismatch = self.hookConnectionIssue {
+                return
+            }
+            self.hookRepairSucceeded = nil
+            self.hookConnectionIssue = .noEvents(tabId: tabId, detectedAt: detectedAt)
+        }
+    }
+
+    private func markHookObserved(tabId: UUID, sessionId: String) {
+        tabsWithObservedHooks.insert(tabId)
+        hookSilenceTasks.removeValue(forKey: tabId)?.cancel()
+        hookRepairSucceeded = nil
+        if case .noEvents(let affectedTabId, _) = hookConnectionIssue,
+           affectedTabId == tabId {
+            hookConnectionIssue = nil
+        }
+        if case .cwdMismatch(let context) = hookConnectionIssue,
+           context.sessionId == sessionId {
+            hookConnectionIssue = nil
+        }
+    }
+
+    private func cancelHookSilenceWatch(for tabId: UUID, clearObservation: Bool) {
+        hookSilenceTasks.removeValue(forKey: tabId)?.cancel()
+        if clearObservation {
+            tabsWithObservedHooks.remove(tabId)
+        }
+        if case .noEvents(let affectedTabId, _) = hookConnectionIssue,
+           affectedTabId == tabId {
+            hookConnectionIssue = nil
+        }
     }
 
     private func subscribeToDetectionEngine(_ engine: AgentDetectionEngineImpl?) {
@@ -845,12 +1072,19 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// mutating `sessionDataStore`. External code observes via the
     /// `@Published var sessions` property.
     func rebuildSessions() {
-        sessions = sessionDataStore.values
+        let rebuiltSessions = sessionDataStore.values
             .map { data in
                 let windowID = windowIDForTabProvider?(data.tabId)
                 let windowLabel = windowLabelProvider?(windowID)
                 return data.toAgentSessionInfo(windowID: windowID, windowLabel: windowLabel)
             }
+
+        let surfaceProvider = surfaceIDForHookSessionProvider ?? { _ in nil }
+        sessions = AgentDashboardSessionDeduplicator
+            .deduplicate(
+                rebuiltSessions,
+                surfaceIDForHookSession: surfaceProvider
+            )
             .sorted { lhs, rhs in
                 if lhs.priority != rhs.priority {
                     return lhs.priority < rhs.priority
@@ -866,10 +1100,15 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
     // MARK: - Private: Helpers
 
-    /// Extracts the project name from a working directory path.
-    private func extractProjectName(from path: String?) -> String {
-        guard let path = path else { return "Unknown" }
-        return URL(fileURLWithPath: path).lastPathComponent
+    func resolveProject(from path: String?, fallbackName: String = "Unknown")
+        -> (name: String, identity: ProjectID?) {
+        guard let path else { return (fallbackName, nil) }
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        guard let projectResolver else {
+            return (ProjectDescriptor.automaticName(for: directory), ProjectID(rootURL: directory))
+        }
+        let project = projectResolver.resolveProject(for: directory)
+        return (project.groupingAutomaticName, project.groupingID)
     }
 
     /// Formats a tool use event into a human-readable activity string.
@@ -942,7 +1181,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         }
     }
 
-    private func aggregateAgentTeamState(_ states: [AgentDashboardState]) -> AgentDashboardState {
+    func aggregateAgentTeamState(_ states: [AgentDashboardState]) -> AgentDashboardState {
         if states.contains(.error) { return .error }
         if states.contains(.blocked) { return .blocked }
         if states.contains(.waitingForInput) { return .waitingForInput }
@@ -951,6 +1190,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         if !states.isEmpty, states.allSatisfy({ $0 == .finished }) { return .finished }
         return .working
     }
+
 }
 
 // MARK: - Mutable Session Data
@@ -961,7 +1201,8 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 /// the mutable state that gets rebuilt into `AgentSessionInfo` on every change.
 struct MutableSessionData {
     let id: String
-    let projectName: String
+    var projectName: String
+    var projectIdentity: ProjectID? = nil
     let tabId: UUID
     var state: AgentDashboardState
     var agentName: String?
@@ -972,16 +1213,19 @@ struct MutableSessionData {
     var subagents: [SubagentInfo] = []
     var priority: AgentPriority = .standard
     /// Files touched during this session. Key is full path, value is set of operations.
-    var fileImpacts: [String: Set<FileImpact.FileOperation>] = [:]
+    var fileImpacts: [String: FileImpact] = [:]
     /// Total tool calls across the session (including subagent-attributed ones).
     var totalToolCalls: Int = 0
     /// Total errors across the session.
     var totalErrors: Int = 0
 
     func toAgentSessionInfo(windowID: WindowID?, windowLabel: String?) -> AgentSessionInfo {
-        // Build file impact list sorted by path.
-        let impacts = fileImpacts.map { FileImpact(path: $0.key, operations: $0.value) }
-            .sorted { $0.fileName < $1.fileName }
+        let impacts = fileImpacts.values.sorted { lhs, rhs in
+            if lhs.lastChangedAt != rhs.lastChangedAt {
+                return lhs.lastChangedAt > rhs.lastChangedAt
+            }
+            return lhs.path.localizedStandardCompare(rhs.path) == .orderedAscending
+        }
 
         // Detect file conflicts: files touched by multiple subagents.
         let conflicts = detectFileConflicts()
@@ -989,6 +1233,7 @@ struct MutableSessionData {
         return AgentSessionInfo(
             id: id,
             projectName: projectName,
+            projectIdentity: projectIdentity,
             windowID: windowID,
             windowLabel: windowLabel,
             gitBranch: gitBranch,

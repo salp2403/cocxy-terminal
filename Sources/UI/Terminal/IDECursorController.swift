@@ -33,13 +33,6 @@ import AppKit
 /// - Terminal font must be monospaced (all columns have equal width).
 /// - Only works on the current command line (not scrollback).
 ///
-/// ## Limitations
-///
-/// - Multi-line commands: only handles the current visible line.
-/// - Wide characters (CJK): each wide char occupies 2 columns.
-/// - Tab characters: assumed to be 8-column aligned.
-///
-/// - SeeAlso: `TextSelectionManager` for the broader selection system.
 /// - SeeAlso: `CocxyCoreView` for event integration.
 @MainActor
 final class IDECursorController {
@@ -52,15 +45,11 @@ final class IDECursorController {
     /// Returns the current terminal font size.
     private let fontSizeProvider: () -> CGFloat
 
-    /// Returns the **real** terminal cursor position `(row, col)` for the
-    /// backing surface, read directly from CocxyCore. Falls back to `nil`
-    /// when no terminal is attached.
-    ///
-    /// Used by `arrowKeysForClick` to compute click-to-position deltas from
-    /// the authoritative shell cursor column instead of an internally
-    /// tracked value that drifts against prompts rendered with escape
-    /// sequences, colors, and wide characters.
-    private let cursorPositionProvider: () -> (row: Int, col: Int)?
+    /// Returns one atomic snapshot of the core state needed to validate and
+    /// calculate a click. Reading these fields under one terminal lock avoids
+    /// mixing a cursor from one frame with semantic or viewport state from
+    /// another.
+    private let terminalStateProvider: (UInt32) -> TerminalCursorClickSnapshot?
 
     /// Sends the requested arrow-key movement to the active terminal engine.
     private let arrowKeySender: ([ArrowDirection]) -> Void
@@ -79,15 +68,22 @@ final class IDECursorController {
     /// This is the column where the prompt text ends and user input begins.
     private(set) var promptColumn: Int = 0
 
-    /// The last known cursor column (0-based, within the line).
-    /// Updated via cursor position reports or estimated from input.
+    /// The last estimated cursor column (0-based, within the line).
+    /// Kept for diagnostics and view-layer bookkeeping; click deltas always use
+    /// the atomic terminal snapshot instead of this estimate.
     private(set) var cursorColumn: Int = 0
 
     /// Whether the cursor is currently on the prompt line.
-    private(set) var isOnPromptLine: Bool = false
+    var isOnPromptLine: Bool { inputStartPosition != nil }
 
     /// The last known prompt row (0-based from top of visible area).
     private(set) var promptRow: Int = 0
+
+    /// OSC 133;A position captured synchronously by the core callback.
+    private(set) var promptPosition: TerminalGridPosition?
+
+    /// OSC 133;B position where editable command input begins.
+    private(set) var inputStartPosition: TerminalGridPosition?
 
     /// Padding from the left edge of the terminal view to the first column.
     var leftPadding: CGFloat = 0
@@ -100,12 +96,12 @@ final class IDECursorController {
     init(
         hostView: NSView,
         fontSizeProvider: @escaping () -> CGFloat,
-        cursorPositionProvider: @escaping () -> (row: Int, col: Int)? = { nil },
+        terminalStateProvider: @escaping (UInt32) -> TerminalCursorClickSnapshot?,
         arrowKeySender: @escaping ([ArrowDirection]) -> Void
     ) {
         self.hostView = hostView
         self.fontSizeProvider = fontSizeProvider
-        self.cursorPositionProvider = cursorPositionProvider
+        self.terminalStateProvider = terminalStateProvider
         self.arrowKeySender = arrowKeySender
         updateCellDimensions()
     }
@@ -128,28 +124,30 @@ final class IDECursorController {
 
     // MARK: - Prompt Tracking
 
-    /// Called when a shell prompt is detected (OSC 133 ;A).
-    ///
-    /// Records the prompt row and column so subsequent click-to-position
-    /// operations can validate that the click lands on the current prompt
-    /// line. No visual indicator is installed — the real shell cursor drawn
-    /// by CocxyCore is the only on-screen cursor marker.
-    ///
-    /// The row and column must come from the real terminal cursor position,
-    /// not from a geometric heuristic over the view bounds, otherwise the
-    /// click-to-position row comparison will never match.
-    func shellPromptDetected(row: Int, column: Int) {
-        promptRow = row
-        promptColumn = column
-        cursorColumn = column
-        isOnPromptLine = true
+    /// Records OSC 133;A and clears any editable range left by the preceding
+    /// command. Clicks remain disabled until OSC 133;B supplies the real input
+    /// start position.
+    func shellPromptDetected(at position: TerminalGridPosition) {
+        promptPosition = position
+        inputStartPosition = nil
+        promptRow = Int(position.screenRow)
+        promptColumn = Int(position.column)
+        cursorColumn = Int(position.column)
+    }
+
+    /// Records the first editable cell reported by OSC 133;B.
+    func commandInputStarted(at position: TerminalGridPosition) {
+        inputStartPosition = position
+        promptRow = Int(position.screenRow)
+        promptColumn = Int(position.column)
+        cursorColumn = Int(position.column)
     }
 
     /// Called when user input changes the cursor position.
     ///
-    /// Tracks the cursor column so the next click-to-position uses an
-    /// accurate baseline. This is called from the view layer after arrow
-    /// keys and printable characters are delivered to the terminal.
+    /// Tracks the view layer's latest cursor estimate after arrow keys and
+    /// printable characters are delivered to the terminal. The estimate is
+    /// never used to authorize or calculate a click-to-position movement.
     func cursorMoved(toColumn column: Int) {
         cursorColumn = column
     }
@@ -159,7 +157,7 @@ final class IDECursorController {
     /// Clears the `isOnPromptLine` flag so future clicks (before a new
     /// prompt arrives) are not handled as cursor positioning.
     func commandExecuted() {
-        isOnPromptLine = false
+        inputStartPosition = nil
     }
 
     // MARK: - Click-to-Position
@@ -167,12 +165,10 @@ final class IDECursorController {
     /// Handles a click at the given location and returns the arrow keys
     /// needed to move the cursor to that position.
     ///
-    /// The cursor column used for the delta is read from the **real**
-    /// terminal state via `cursorPositionProvider` so that prompts with
-    /// invisible escape sequences, colors, emojis or wide characters do
-    /// not cause drift. The internally-tracked `cursorColumn` is kept in
-    /// sync as a fallback for tests that inject the controller with no
-    /// terminal backing.
+    /// The cursor, viewport, semantic state, selection state and row cell
+    /// widths are read together from the **real** terminal through
+    /// `terminalStateProvider`. This prevents drift from invisible escape
+    /// sequences, colors, emojis, wide characters or mixed-frame reads.
     ///
     /// - Parameters:
     ///   - location: The click point in the terminal view's coordinate space.
@@ -181,34 +177,112 @@ final class IDECursorController {
     ///   click is not on the prompt line or cursor positioning is not
     ///   possible.
     func arrowKeysForClick(at location: CGPoint, viewBounds: NSRect) -> [ArrowDirection]? {
-        guard isEnabled, isOnPromptLine else { return nil }
+        guard isEnabled,
+              let inputStartPosition,
+              let terminalState = terminalStateProvider(inputStartPosition.absoluteRow),
+              Self.clickableSemanticStates.contains(terminalState.semanticState),
+              !terminalState.isAltScreen,
+              terminalState.mouseTrackingMode == 0,
+              !terminalState.selectionActive,
+              terminalState.visibleStartRow == terminalState.historyMaxVisibleStart else {
+            return nil
+        }
 
         // Convert click location to grid coordinates.
-        let targetColumn = columnForX(location.x)
-        let targetRow = rowForY(location.y)
+        guard viewBounds.contains(location) else { return nil }
+        let targetScreenRow = rowForY(location.y)
+        guard let targetScreenRowValue = UInt32(exactly: targetScreenRow) else { return nil }
+        let (targetAbsoluteRow, targetOverflowed) = terminalState.visibleStartRow
+            .addingReportingOverflow(targetScreenRowValue)
+        guard !targetOverflowed else { return nil }
+        let cursorAbsoluteRow = terminalState.cursorAbsoluteRow
+        let inputStartAbsoluteRow = inputStartPosition.absoluteRow
 
-        // Prefer the live terminal cursor position over the tracked
-        // value. On prompts rendered by Prezto / Powerlevel10k / YADR the
-        // tracked `cursorColumn` drifts by several columns because escape
-        // sequences and emoji runs are counted differently by CocxyCore's
-        // grid. Reading the real row/col eliminates that drift entirely.
-        let liveCursor = cursorPositionProvider()
-        let referenceRow = liveCursor?.row ?? promptRow
-        let referenceCol = liveCursor?.col ?? cursorColumn
+        let inputStartColumn = Int(inputStartPosition.column)
+        let cursorColumn = Int(terminalState.cursorColumn)
+        guard inputStartAbsoluteRow <= targetAbsoluteRow,
+              targetAbsoluteRow <= cursorAbsoluteRow,
+              inputStartAbsoluteRow <= cursorAbsoluteRow else {
+            return nil
+        }
 
-        // Only reposition if clicking on the current cursor row.
-        guard targetRow == referenceRow else { return nil }
+        switch terminalState.shellClickMode {
+        case 1:
+            guard inputStartAbsoluteRow == cursorAbsoluteRow,
+                  targetAbsoluteRow == cursorAbsoluteRow else { return nil }
+        case 2:
+            break
+        default:
+            return nil
+        }
 
-        // Ensure target is within the editable area (after prompt).
-        let effectiveTarget = max(targetColumn, promptColumn)
+        let expectedRowCount = UInt64(cursorAbsoluteRow) - UInt64(inputStartAbsoluteRow) + 1
+        guard expectedRowCount == terminalState.rows.count else { return nil }
 
-        // Calculate the difference from the authoritative reference.
-        let delta = effectiveTarget - referenceCol
+        var rowInputColumns: [[Int]] = []
+        var rowInputOffsets: [Int] = []
+        var inputCellCount = 0
+        rowInputColumns.reserveCapacity(terminalState.rows.count)
+        rowInputOffsets.reserveCapacity(terminalState.rows.count)
 
-        if delta == 0 { return [] }
+        for (index, row) in terminalState.rows.enumerated() {
+            let expectedAbsoluteRow = inputStartAbsoluteRow + UInt32(index)
+            guard row.absoluteRow == expectedAbsoluteRow,
+                  row.cellWidths.count == row.cellSemantics.count else { return nil }
+            if index < terminalState.rows.count - 1, !row.wrapped {
+                return nil
+            }
 
-        let direction: ArrowDirection = delta > 0 ? .right : .left
-        return Array(repeating: direction, count: abs(delta))
+            let minimumColumn = index == 0 ? inputStartColumn : 0
+            guard minimumColumn <= row.cellWidths.count else { return nil }
+            let columns = Self.inputColumns(in: row, minimum: minimumColumn)
+            if index < terminalState.rows.count - 1, columns.isEmpty {
+                return nil
+            }
+            rowInputOffsets.append(inputCellCount)
+            rowInputColumns.append(columns)
+            inputCellCount += columns.count
+        }
+
+        guard let cursorRow = terminalState.rows.last,
+              cursorColumn <= cursorRow.cellWidths.count,
+              !(cursorAbsoluteRow == inputStartAbsoluteRow && cursorColumn < inputStartColumn),
+              !Self.isContinuationCell(at: cursorColumn, in: cursorRow.cellWidths) else {
+            return nil
+        }
+
+        let cursorRowIndex = terminalState.rows.count - 1
+        let cursorLogicalOffset = rowInputOffsets[cursorRowIndex]
+            + rowInputColumns[cursorRowIndex].count { $0 < cursorColumn }
+
+        let targetRowIndex = Int(targetAbsoluteRow - inputStartAbsoluteRow)
+        let targetRow = terminalState.rows[targetRowIndex]
+        let targetMinimumColumn = targetRowIndex == 0 ? inputStartColumn : 0
+        var targetColumn = min(columnForX(location.x), targetRow.cellWidths.count)
+        targetColumn = max(targetColumn, targetMinimumColumn)
+        targetColumn = Self.leadingColumn(
+            for: targetColumn,
+            cellWidths: targetRow.cellWidths,
+            minimum: targetMinimumColumn
+        )
+
+        let targetColumns = rowInputColumns[targetRowIndex]
+        let targetLogicalOffset: Int
+        if targetColumns.isEmpty {
+            guard targetRowIndex == 0 else { return nil }
+            targetLogicalOffset = 0
+        } else {
+            targetLogicalOffset = rowInputOffsets[targetRowIndex]
+                + targetColumns.count { $0 < targetColumn }
+        }
+
+        guard targetLogicalOffset != cursorLogicalOffset else { return [] }
+
+        let movementCount = abs(targetLogicalOffset - cursorLogicalOffset)
+        guard movementCount > 0 else { return [] }
+
+        let direction: ArrowDirection = targetLogicalOffset > cursorLogicalOffset ? .right : .left
+        return Array(repeating: direction, count: movementCount)
     }
 
     /// Sends arrow keys to the terminal to reposition the cursor.
@@ -237,13 +311,38 @@ final class IDECursorController {
 
         arrowKeySender(arrows)
 
-        // Update our tracked cursor position to match the new shell cursor.
-        // The live provider supersedes this value on the next click, but
-        // maintaining it keeps the legacy fallback path consistent.
-        let delta = arrows.count * (arrows[0] == .right ? 1 : -1)
-        cursorColumn += delta
-
         return true
+    }
+
+    private static let clickableSemanticStates: Set<UInt8> = [1, 2]
+    private static let inputSemantic: UInt8 = 2
+
+    private static func inputColumns(
+        in row: TerminalCursorClickRow,
+        minimum: Int
+    ) -> [Int] {
+        row.cellSemantics.indices.compactMap { column in
+            guard column >= minimum,
+                  row.cellSemantics[column] == inputSemantic,
+                  row.cellWidths[column] != 2 else { return nil }
+            return column
+        }
+    }
+
+    private static func isContinuationCell(at column: Int, in cellWidths: [UInt8]) -> Bool {
+        column < cellWidths.count && cellWidths[column] == 2
+    }
+
+    private static func leadingColumn(
+        for column: Int,
+        cellWidths: [UInt8],
+        minimum: Int
+    ) -> Int {
+        var result = column
+        while result > minimum, isContinuationCell(at: result, in: cellWidths) {
+            result -= 1
+        }
+        return result
     }
 
     // MARK: - Coordinate Conversion

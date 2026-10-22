@@ -24,8 +24,7 @@ extension AppDelegate {
                 ?? controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID else {
             return false
         }
-        controller.terminalEngine(for: surfaceID).sendText(payload, to: surfaceID)
-        return true
+        return controller.terminalEngine(for: surfaceID).sendText(payload, to: surfaceID)
     }
 
     @MainActor

@@ -185,6 +185,36 @@ final class MainWindowDelegateTests: XCTestCase {
         XCTAssertNil(controller.remoteBrowserOpeningID)
         XCTAssertNil(controller.remoteBrowserOpeningViewModel)
     }
+
+    func testWindowWillClosePrunesAgentSessionsAndBindingsForEveryTab() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        controller.newTabAction(nil)
+        let tabIDs = controller.tabManager.tabs.map(\.id)
+        XCTAssertEqual(tabIDs.count, 2)
+
+        let dashboard = AgentDashboardViewModel()
+        controller.injectedDashboardViewModel = dashboard
+        let sessionTabs = Dictionary(uniqueKeysWithValues: tabIDs.enumerated().map {
+            ("window-close-\($0.offset)", $0.element.rawValue)
+        })
+        dashboard.tabIdResolver = { sessionID, _ in sessionTabs[sessionID] }
+        for sessionID in sessionTabs.keys {
+            dashboard.processHookEvent(HookEvent(
+                type: .sessionStart,
+                sessionId: sessionID,
+                data: .sessionStart(SessionStartData())
+            ))
+        }
+        XCTAssertEqual(dashboard.sessions.count, 2)
+
+        var closedTabIDs: [TabID] = []
+        controller.onAgentTabClosed = { closedTabIDs.append($0) }
+        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+
+        XCTAssertTrue(dashboard.sessions.isEmpty)
+        XCTAssertEqual(Set(closedTabIDs), Set(tabIDs))
+        XCTAssertEqual(closedTabIDs.count, tabIDs.count)
+    }
 }
 
 // MARK: - Window Background Color Tests
@@ -536,6 +566,8 @@ final class MainWindowConfigIntegrationTests: XCTestCase {
             durationNs: 1,
             startRow: 4,
             endRow: 5,
+            visibleStartRow: 4,
+            visibleEndRow: 5,
             streamID: 1,
             blockType: 3
         )

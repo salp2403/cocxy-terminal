@@ -16,10 +16,22 @@ enum ActivityEventKind: String, Codable, Sendable, CaseIterable, Equatable {
 struct ActivityProjectRef: Codable, Sendable, Equatable, Hashable {
     let id: String
     let name: String
+    let legacyID: String?
+    let legacyIDs: [String]
+    let projectIdentity: ProjectID?
 
-    init(id: String, name: String) {
+    init(
+        id: String,
+        name: String,
+        legacyID: String? = nil,
+        legacyIDs: [String] = [],
+        projectIdentity: ProjectID? = nil
+    ) {
         self.id = id
         self.name = name
+        self.legacyID = legacyID
+        self.legacyIDs = Array(Set(legacyIDs.filter { !$0.isEmpty })).sorted()
+        self.projectIdentity = projectIdentity
     }
 
     static func workingDirectory(_ url: URL) -> ActivityProjectRef {
@@ -31,6 +43,43 @@ struct ActivityProjectRef: Codable, Sendable, Equatable, Hashable {
             id: "local-\(StableActivityHash.hexDigest(for: standardized.path))",
             name: name
         )
+    }
+
+    static func resolvedProject(
+        _ descriptor: ProjectDescriptor,
+        workingDirectory: URL,
+        knownWorkingDirectories: [URL] = []
+    ) -> ActivityProjectRef {
+        let groupingID = descriptor.groupingID
+        let legacy = ActivityProjectRef.workingDirectory(workingDirectory)
+        let aliases = (knownWorkingDirectories + [workingDirectory])
+            .map { ActivityProjectRef.workingDirectory($0).id }
+        return ActivityProjectRef(
+            id: groupingID.rawValue,
+            name: descriptor.parent == nil
+                ? descriptor.displayName
+                : descriptor.groupingAutomaticName,
+            legacyID: legacy.id,
+            legacyIDs: aliases,
+            projectIdentity: groupingID
+        )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case legacyID
+        case legacyIDs
+        case projectIdentity
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        legacyID = try container.decodeIfPresent(String.self, forKey: .legacyID)
+        legacyIDs = try container.decodeIfPresent([String].self, forKey: .legacyIDs) ?? []
+        projectIdentity = try container.decodeIfPresent(ProjectID.self, forKey: .projectIdentity)
     }
 }
 
@@ -158,6 +207,23 @@ struct CostBreakdown: Sendable, Equatable {
 struct ProjectTimeBreakdown: Sendable, Equatable {
     let project: ActivityProjectRef
     let durationMilliseconds: Int64
+}
+
+struct ProjectActivityMetrics: Sendable, Equatable {
+    let durationMilliseconds: Int64
+    let totalTokens: Int
+    let totalCostMicros: Int64
+
+    static let zero = ProjectActivityMetrics(
+        durationMilliseconds: 0,
+        totalTokens: 0,
+        totalCostMicros: 0
+    )
+}
+
+struct ProjectActivitySummary: Sendable, Equatable {
+    let week: ProjectActivityMetrics
+    let month: ProjectActivityMetrics
 }
 
 struct ProductivityInsights: Sendable, Equatable {

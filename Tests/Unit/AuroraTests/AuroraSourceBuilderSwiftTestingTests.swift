@@ -233,7 +233,8 @@ struct AuroraSourceBuilderSwiftTestingTests {
             store: makeStore(),
             workspaceRootResolver: resolver
         )
-        #expect(result.first?.workspaceGroup == "proj")
+        #expect(result.first?.workspaceGroup == "/Users/user/proj")
+        #expect(result.first?.workspaceDefaultName == "proj")
     }
 
     @Test
@@ -247,7 +248,8 @@ struct AuroraSourceBuilderSwiftTestingTests {
             store: makeStore(),
             workspaceRootResolver: Self.alwaysNilResolver
         )
-        #expect(result.first?.workspaceGroup == "orphan")
+        #expect(result.first?.workspaceGroup == "/Users/user/orphan")
+        #expect(result.first?.workspaceDefaultName == "orphan")
     }
 
     // MARK: - Invariant 5: branch passes through verbatim
@@ -302,6 +304,22 @@ struct AuroraSourceBuilderSwiftTestingTests {
         #expect(result.first?.foregroundProcessName == "claude")
         #expect(result.first?.lastCommandSummary == "Command: running")
         #expect(result.first?.isPinned == true)
+    }
+
+    @Test
+    func centralWorkspaceTitleResetOverridesLegacyPerTabTitle() {
+        let tab = makeTab(workspaceCustomTitle: "Legacy Project")
+
+        let result = AuroraSourceBuilder.buildSources(
+            tabs: [tab],
+            surfaceIDsByTab: [:],
+            store: makeStore(),
+            workspaceRootResolver: Self.alwaysNilResolver,
+            workspaceTitlesByIdentity: ["/Users/user/proj": ""]
+        )
+
+        #expect(result.first?.workspaceTitle == nil)
+        #expect(result.first?.workspaceDefaultName == "proj")
     }
 
     @Test
@@ -430,7 +448,8 @@ struct AuroraSourceBuilderSwiftTestingTests {
         // `displayTitle` derives its label from `workingDirectory.lastPathComponent`,
         // not `title`. CWD is `/Users/user/alpha/src`, so the label becomes `src (main)`.
         #expect(a.name == "src (main)")
-        #expect(a.workspaceGroup == "alpha")
+        #expect(a.workspaceGroup == "/Users/user/alpha")
+        #expect(a.workspaceDefaultName == "alpha")
         #expect(a.branch == "main")
         #expect(a.surfaces.count == 2)
         #expect(a.surfaces[0].agent == .claude)
@@ -440,7 +459,8 @@ struct AuroraSourceBuilderSwiftTestingTests {
 
         let b = result[1]
         #expect(b.name == "ephemeral")
-        #expect(b.workspaceGroup == "ephemeral")
+        #expect(b.workspaceGroup == "/private/tmp/ephemeral")
+        #expect(b.workspaceDefaultName == "ephemeral")
         #expect(b.branch == nil)
         #expect(b.surfaces.count == 1)
         #expect(b.surfaces[0].agent == .shell)

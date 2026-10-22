@@ -75,7 +75,6 @@ final class KeychainICloudSyncSecretStore: ICloudSyncSecretStoring {
             kSecAttrService as String: Self.service,
             kSecAttrAccount as String: account,
             kSecValueData as String: Data(secret.utf8),
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)

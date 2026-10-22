@@ -1,22 +1,15 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // IDECursorProviderDriftTests.swift
 //
-// Covers the cursorPositionProvider path of IDECursorController, which is
-// the production-facing route wired up by CocxyCoreView. The legacy
-// IDECursorControllerTests cover the fallback path (where no provider is
-// supplied), so without these tests the new path was only validated via
-// manual smoke tests. They exist specifically to protect against the
-// drift bug the user reported in v0.1.53, where the tracked column
-// desynchronised from the real shell cursor on prompts with escape
-// sequences and emojis, causing click-to-position to land in the wrong
-// place and firing spurious "terminal bell" notifications.
+// Covers the atomic terminal-state provider used by CocxyCoreView. These tests
+// protect against cursor drift from escape sequences and wide prompt glyphs.
 
 import AppKit
 import Testing
 @testable import CocxyTerminal
 
 @MainActor
-@Suite("IDECursorController cursorPositionProvider")
+@Suite("IDECursorController terminalStateProvider")
 struct IDECursorProviderDriftTests {
 
     // MARK: - Helpers
@@ -26,10 +19,10 @@ struct IDECursorProviderDriftTests {
     /// with a mutable closure that the test can use to drive the
     /// cursorPositionProvider from the outside.
     private final class ProviderBox {
-        var cursor: (row: Int, col: Int)?
+        var snapshot: TerminalCursorClickSnapshot?
     }
 
-    private func makeController(initialCursor: (row: Int, col: Int)? = nil)
+    private func makeController(initialCursor: (row: UInt16, col: UInt16)? = nil)
         -> (controller: IDECursorController, provider: ProviderBox, sentArrows: Captured)
     {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
@@ -37,14 +30,37 @@ struct IDECursorProviderDriftTests {
         _ = view.layer
 
         let provider = ProviderBox()
-        provider.cursor = initialCursor
+        provider.snapshot = initialCursor.map { cursor in
+            let cellWidths = Array(repeating: UInt8(0), count: 100)
+            let cellSemantics = Array(repeating: UInt8(2), count: 100)
+            let rows = (UInt32(0)...UInt32(cursor.row)).map { absoluteRow in
+                TerminalCursorClickRow(
+                    absoluteRow: absoluteRow,
+                    wrapped: absoluteRow < UInt32(cursor.row),
+                    cellWidths: cellWidths,
+                    cellSemantics: cellSemantics
+                )
+            }
+            return TerminalCursorClickSnapshot(
+                visibleStartRow: 0,
+                historyMaxVisibleStart: 0,
+                cursorScreenRow: cursor.row,
+                cursorColumn: cursor.col,
+                semanticState: 2,
+                isAltScreen: false,
+                mouseTrackingMode: 0,
+                selectionActive: false,
+                shellClickMode: 2,
+                rows: rows
+            )
+        }
 
         let captured = Captured()
 
         let controller = IDECursorController(
             hostView: view,
             fontSizeProvider: { 14.0 },
-            cursorPositionProvider: { [provider] in provider.cursor },
+            terminalStateProvider: { [provider] _ in provider.snapshot },
             arrowKeySender: { arrows in captured.arrows.append(contentsOf: arrows) }
         )
         controller.setCellDimensions(width: 8.0, height: 16.0)
@@ -68,7 +84,11 @@ struct IDECursorProviderDriftTests {
         // and ANSI escape sequences in the prompt inflated the real column
         // count).
         let (controller, provider, _) = makeController(initialCursor: (row: 0, col: 30))
-        controller.shellPromptDetected(row: 0, column: 10)
+        controller.commandInputStarted(at: TerminalGridPosition(
+            screenRow: 0,
+            absoluteRow: 0,
+            column: 10
+        ))
         // At this point the internal tracked cursorColumn is 10, but the
         // provider reports 30. The click-to-position math MUST use 30.
         _ = provider // keep alive
@@ -97,7 +117,11 @@ struct IDECursorProviderDriftTests {
         // must not generate any arrow keys — otherwise the shell beeps
         // because the arrows try to exit the editable region.
         let (controller, provider, captured) = makeController(initialCursor: (row: 0, col: 25))
-        controller.shellPromptDetected(row: 0, column: 5)
+        controller.commandInputStarted(at: TerminalGridPosition(
+            screenRow: 0,
+            absoluteRow: 0,
+            column: 5
+        ))
         _ = provider
 
         // Click at column 25 (x = 25*8 = 200).
@@ -110,15 +134,14 @@ struct IDECursorProviderDriftTests {
 
     // MARK: - Provider row gates click-to-position
 
-    @Test("click on a row that differs from the live cursor row is ignored")
-    func clickOffLiveRowIsIgnored() {
-        // The internal tracker thinks the prompt is on row 0, but the real
-        // cursor has wrapped down to row 2 because the user typed enough
-        // characters to overflow the column count. A click on row 0 must
-        // NOT be handled as click-to-position — it lands on output text,
-        // not the editable prompt.
+    @Test("click on a soft-wrapped input row uses the live multiline offset")
+    func clickOnWrappedInputRowUsesLiveOffset() {
         let (controller, provider, captured) = makeController(initialCursor: (row: 2, col: 5))
-        controller.shellPromptDetected(row: 0, column: 5)
+        controller.commandInputStarted(at: TerminalGridPosition(
+            screenRow: 0,
+            absoluteRow: 0,
+            column: 5
+        ))
         _ = provider
 
         let arrows = controller.arrowKeysForClick(
@@ -126,17 +149,21 @@ struct IDECursorProviderDriftTests {
             viewBounds: NSRect(x: 0, y: 0, width: 800, height: 600)
         )
 
-        #expect(arrows == nil,
-                "Click must use the live cursor row; a click off that row is not click-to-position")
+        #expect(arrows?.count == 193)
+        #expect(arrows?.first == .left)
         #expect(captured.arrows.isEmpty)
     }
 
-    // MARK: - Fallback when the provider returns nil
+    // MARK: - Missing state
 
-    @Test("nil provider falls back to the internally tracked column")
-    func nilProviderFallsBackToTrackedColumn() {
+    @Test("nil provider disables cursor synthesis")
+    func nilProviderDisablesCursorSynthesis() {
         let (controller, provider, _) = makeController(initialCursor: nil)
-        controller.shellPromptDetected(row: 0, column: 5)
+        controller.commandInputStarted(at: TerminalGridPosition(
+            screenRow: 0,
+            absoluteRow: 0,
+            column: 5
+        ))
         _ = provider
 
         let arrows = controller.arrowKeysForClick(
@@ -144,9 +171,6 @@ struct IDECursorProviderDriftTests {
             viewBounds: NSRect(x: 0, y: 0, width: 800, height: 600)
         )
 
-        // With no live cursor, the delta is computed from the tracked
-        // value (5) to the target (10), i.e. +5 rights.
-        #expect(arrows?.count == 5)
-        #expect(arrows?.first == .right)
+        #expect(arrows == nil)
     }
 }

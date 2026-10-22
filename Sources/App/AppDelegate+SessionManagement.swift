@@ -335,6 +335,7 @@ extension AppDelegate {
         }
 
         if let initialTab = controller.tabManager.tabs.first {
+            controller.observeProjectDirectory(initialTab.workingDirectory)
             registerSession(for: initialTab, in: controller)
         }
 
@@ -439,7 +440,6 @@ extension AppDelegate {
             self.restoreSurfaces(for: restoredTab, in: controller)
         }
 
-        let gitProvider = GitInfoProviderImpl()
         let projectConfigService = ProjectConfigService()
         let safeActiveIndex = min(max(result.activeTabIndex, 0), result.restoredTabs.count - 1)
         let activeTabID = result.restoredTabs[safeActiveIndex].tabID
@@ -447,7 +447,7 @@ extension AppDelegate {
         for restoredTab in result.restoredTabs {
             let isActiveRestoredTab = restoredTab.tabID == activeTabID
             let gitBranch = isActiveRestoredTab
-                ? gitProvider.currentBranch(at: restoredTab.workingDirectory)
+                ? gitInfoProvider.currentBranch(at: restoredTab.workingDirectory)
                 : nil
             let restoredModel = Tab(
                 id: restoredTab.tabID,
@@ -467,6 +467,7 @@ extension AppDelegate {
                 terminalEnginePreference: restoredTab.terminalEnginePreference
             )
             controller.tabManager.insertExternalTab(restoredModel, activate: false)
+            controller.observeProjectDirectory(restoredModel.workingDirectory)
             registerSession(
                 for: restoredModel,
                 in: controller,
@@ -474,10 +475,6 @@ extension AppDelegate {
                 titleOverride: restoredTab.title
             )
 
-            // Apply origin-repo fallback when the user opted in and the
-            // tab actually has a worktree origin. For tabs without a
-            // worktree the gate short-circuits to nil, preserving the
-            // legacy single-walk behaviour.
             let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
             let originRepo = inheritProjectConfig ? restoredTab.worktreeOriginRepo : nil
             if isActiveRestoredTab {
@@ -566,8 +563,7 @@ extension AppDelegate {
 
         let leafDirectories = leafWorkingDirectories(in: restoredTab.splitTreeState)
         let engine = controller.makeTerminalEngine(for: restoredTab.terminalEnginePreference)
-        let configuredFontSize = configService?.current.appearance.fontSize
-            ?? AppearanceConfig.defaults.fontSize
+        let configuredAppearance = configService?.current.appearance ?? .defaults
 
         var viewsByTerminalID: [UUID: NSView] = [:]
         var storedSplitSurfaces: [SurfaceID: TerminalHostView] = [:]
@@ -611,22 +607,30 @@ extension AppDelegate {
                controller.tabViewModels.isEmpty,
                controller.splitViewModels.isEmpty {
                 viewModel = controller.terminalViewModel
-                viewModel.setDefaultFontSize(configuredFontSize)
+                viewModel.setDefaultFontSize(configuredAppearance.fontSize)
                 let freshPrimarySurfaceView = TerminalHostViewFactory.make(
                     viewModel: viewModel,
                     engine: engine,
                     localizer: appLocalizer()
                 )
+                freshPrimarySurfaceView.applyFont(
+                    family: configuredAppearance.fontFamily,
+                    size: configuredAppearance.fontSize
+                )
                 controller.terminalSurfaceView = freshPrimarySurfaceView
                 surfaceView = freshPrimarySurfaceView
             } else {
                 let newViewModel = TerminalViewModel(engine: engine)
-                newViewModel.setDefaultFontSize(configuredFontSize)
+                newViewModel.setDefaultFontSize(configuredAppearance.fontSize)
                 viewModel = newViewModel
                 surfaceView = TerminalHostViewFactory.make(
                     viewModel: newViewModel,
                     engine: engine,
                     localizer: appLocalizer()
+                )
+                surfaceView.applyFont(
+                    family: configuredAppearance.fontFamily,
+                    size: configuredAppearance.fontSize
                 )
             }
 

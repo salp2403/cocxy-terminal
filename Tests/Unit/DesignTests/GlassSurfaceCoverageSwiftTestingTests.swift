@@ -78,7 +78,6 @@ struct GlassSurfaceCoverageSwiftTestingTests {
         "Sources/UI/Browser/BrowserDownloadsView.swift",
         "Sources/UI/Browser/BrowserHistoryView.swift",
         "Sources/UI/Browser/BrowserPanelView.swift",
-        "Sources/UI/Cells/CellsSidebarView.swift",
         "Sources/UI/CodeReview/CodeReviewPanelView.swift",
         "Sources/UI/CodeReview/CodeReviewAgentActivityView.swift",
         "Sources/UI/CodeReview/CodeReviewGitWorkflowPanel.swift",
@@ -99,6 +98,8 @@ struct GlassSurfaceCoverageSwiftTestingTests {
         "Sources/UI/Onboarding/OnboardingFlowView.swift",
         "Sources/UI/PluginMarketplace/PluginMarketplaceView.swift",
         "Sources/UI/Preferences/PreferencesView.swift",
+        "Sources/UI/ProjectHome/ProjectHomePanelView.swift",
+        "Sources/UI/ProjectHome/ProjectHomeUnavailablePanelView.swift",
         "Sources/UI/RemoteWorkspace/RemoteConnectionView.swift",
         "Sources/UI/RemoteWorkspace/RemoteProfileEditor.swift",
         "Sources/UI/RemoteWorkspace/SSHKeyManagerView.swift",
@@ -131,6 +132,8 @@ struct GlassSurfaceCoverageSwiftTestingTests {
             "NSPanel shell owns its translucent backgroundColor outside the SwiftUI glass primitive; the hosted RichInputComposerView renders the composer chrome.",
         "Sources/UI/Terminal/Block/TerminalBlockOverlayView.swift":
             "Transparent AppKit overlay drawn on top of terminal cells; per-row rails/buttons are not standalone panels.",
+        "Sources/UI/Terminal/TerminalDetectedContentOverlayView.swift":
+            "Non-interactive transparent AppKit overlay that draws underlines and compact hint badges directly over terminal cells; it is not a standalone panel surface.",
         "Sources/UI/UXPolish/ShortcutHintsOverlayView.swift":
             "Non-interactive shortcut-hint overlay that draws per-chip thin material pills; it is decorative (allowsHitTesting=false, accessibilityHidden) rather than a standalone panel surface.",
     ]

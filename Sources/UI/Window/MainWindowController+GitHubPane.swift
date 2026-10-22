@@ -3,12 +3,12 @@
 // overlay (Cmd+Option+G) introduced in v0.1.84.
 //
 // Mirrors the `+Overlays.swift` patterns for the Code Review panel so
-// both right-docked surfaces share a single mental model:
+// both trailing-edge surfaces share a single mental model:
 //   - toggle / show / dismiss trio with a matching @objc alias
 //   - preferred vs effective width (preferred wins the user intent,
 //     effective stays clamped by the container)
 //   - dependency wiring happens in `configureGitHubPaneViewModel`
-//   - layout cooperates with `layoutRightDockedAgentPanels` so the
+//   - layout cooperates with `layoutTrailingDockedPanels` so the
 //     pane dock with Dashboard / Code Review / Timeline cleanly.
 
 import AppKit
@@ -59,16 +59,16 @@ extension MainWindowController {
         gitHubPanePanelWidth = panelWidth
 
         let swiftUIView = makeGitHubPaneView(viewModel: viewModel, panelWidth: panelWidth)
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let panelY = statusBarHostingView?.frame.height ?? 24
         hostingView.frame = NSRect(
-            x: overlayContainer.bounds.width - panelWidth,
+            x: trailingPanelOrigin(containerWidth: overlayContainer.bounds.width, panelWidth: panelWidth),
             y: panelY,
             width: panelWidth,
             height: max(0, overlayContainer.bounds.height - panelY)
         )
-        hostingView.autoresizingMask = [.height, .minXMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
 
         gitHubPaneHostingView = hostingView
         overlayContainer.addSubview(hostingView)
@@ -80,10 +80,10 @@ extension MainWindowController {
         // overlapping refreshes via its `refreshGeneration` counter.
         viewModel.refresh()
 
-        layoutRightDockedAgentPanels()
+        layoutTrailingDockedPanels()
     }
 
-    /// Slides the pane off to the right and detaches it from the
+    /// Slides the pane off the trailing edge and detaches it from the
     /// container. Matches the animation profile used by the Code
     /// Review dismissal so the two docked panels leave the screen
     /// with the same timing.
@@ -100,7 +100,7 @@ extension MainWindowController {
         isGitHubPaneVisible = false
         gitHubPaneViewModel?.isVisible = false
 
-        let targetX = overlayContainer.bounds.width
+        let targetX = trailingPanelExitOrigin(containerWidth: overlayContainer.bounds.width, panelWidth: hostingView.frame.width)
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -109,7 +109,7 @@ extension MainWindowController {
             Task { @MainActor [weak self] in
                 self?.gitHubPaneHostingView?.removeFromSuperview()
                 self?.gitHubPaneHostingView = nil
-                self?.layoutRightDockedAgentPanels()
+                self?.layoutTrailingDockedPanels()
                 self?.focusActiveTerminalSurface()
             }
         })
@@ -129,7 +129,7 @@ extension MainWindowController {
     func setGitHubPanePanelWidth(_ proposed: CGFloat) {
         updatePreferredGitHubPanePanelWidth(proposed)
         if isGitHubPaneVisible {
-            layoutRightDockedAgentPanels()
+            layoutTrailingDockedPanels()
         } else {
             gitHubPanePanelWidth = preferredGitHubPanePanelWidth
         }
@@ -354,7 +354,7 @@ extension MainWindowController {
         }
     }
 
-    // MARK: Clamp + sync helpers (called from layoutRightDockedAgentPanels)
+    // MARK: Clamp + sync helpers (called from layoutTrailingDockedPanels)
 
     /// Computes the width the pane should render at given the current
     /// `overlayContainer` bounds. Never exceeds the container even if
@@ -477,12 +477,12 @@ extension MainWindowController {
         let tabID = createTab(workingDirectory: workingDirectory)
         guard let surfaceID = tabSurfaceMap[tabID] else { return false }
 
+        let authCommand = Self.gitHubAuthenticationCommand(browserOpenerPath: installGitHubAuthBrowserOpenerScript())
+        guard terminalEngine(for: surfaceID).sendText(authCommand, to: surfaceID) else {
+            performCloseTab(tabID)
+            return false
+        }
         openInternalBrowser(to: Self.gitHubDeviceLoginURLString)
-        let browserOpenerPath = installGitHubAuthBrowserOpenerScript()
-        terminalEngine(for: surfaceID).sendText(
-            Self.gitHubAuthenticationCommand(browserOpenerPath: browserOpenerPath),
-            to: surfaceID
-        )
         window?.makeKeyAndOrderFront(nil)
         focusActiveTerminalSurface()
         return true

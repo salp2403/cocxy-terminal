@@ -676,7 +676,7 @@ struct DOMNodeRow: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
                 if !node.children.isEmpty {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.forward")
                         .font(.system(size: 8, weight: .bold))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                         .frame(width: 12)

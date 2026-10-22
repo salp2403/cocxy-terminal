@@ -131,7 +131,7 @@ struct RelayControlView: View {
                 Text("\(channel.localHost):\(channel.localPort)")
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
-                Image(systemName: "arrow.right")
+                Image(systemName: "arrow.forward")
                     .font(.system(size: 8))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 Text(

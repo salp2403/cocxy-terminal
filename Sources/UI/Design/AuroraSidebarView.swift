@@ -1,66 +1,37 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// AuroraSidebarView.swift - Redesigned sidebar for the Aurora chrome.
-//
-// Renders the workspaces → sessions → panes tree that replaces the
-// current flat tab list. Consumes `Design.AuroraWorkspace` snapshots
-// so the view stays decoupled from the production `TabManager`
-// during the migration phase.
-//
-// Composition:
-//
-//     Design.GlassSurface
-//         VStack
-//             sidebarHeader (title + command palette + notification + new-tab buttons)
-//             searchField
-//             ScrollView { workspaceTree }
-//             sidebarFooter (palette kbd hint)
-//
-// In production this view is mounted by `AuroraChromeController` when
-// `appearance.aurora-enabled` is true. The controller supplies live
-// `TabManager` + `AgentStatePerSurfaceStore` snapshots through
-// `AuroraSourceBuilder` / `AuroraWorkspaceAdapter`.
+// AuroraSidebarView.swift - Project, session, and pane snapshots from AuroraChromeController.
 
 import SwiftUI
 import UniformTypeIdentifiers
 
 extension Design {
-
-    /// Redesigned sidebar view. Accepts a list of workspaces plus a
-    /// handful of callbacks the host wires to real actions.
-    ///
-    /// `paletteShortcutLabel` / `newTabShortcutLabel` are caller-supplied
-    /// so the header tray reflects the live keybindings. Defaults match
-    /// `KeybindingActionCatalog.windowCommandPalette.defaultShortcut`
-    /// (⌘⇧P) and `.tabNew.defaultShortcut` (⌘T) so previews / tests
-    /// render with the catalog baseline without booting the binder.
     struct AuroraSidebarView: View {
         let workspaces: [AuroraWorkspace]
-        /// Session id of the currently active tab. This is a plain
-        /// snapshot value instead of a child-owned binding because the
-        /// sidebar never mutates selection directly; it only renders the
-        /// active row that the controller resolved from the live tab
-        /// manager snapshot.
+        var projects: [ProjectPresentationItem] = []
+        var projectTaskCounts: [String: Int] = [:]
+        var projectRegistryAvailable: Bool = true
+        var projectRegistryRecoveryMessage: String?
         let activeSessionID: String?
-        /// Per-workspace notes summaries keyed by
-        /// `NoteWorkspaceID.rawValue`. Empty (`[:]`) hides every notes
-        /// section so the sidebar stays bit-for-bit identical to the
-        /// pre-notes layout when the feature is disabled, the provider
-        /// is unwired, or no workspace currently has notes.
         var notesByWorkspace: [String: AuroraWorkspaceNotesSummary] = [:]
         @State private var query: String = ""
         @State private var hoveredSession: HoveredSessionContext?
         @State private var hoveredWorkspaceID: String?
         @State private var sessionFrames: [String: CGRect] = [:]
-        @State private var workspaceDisclosure = AuroraWorkspaceDisclosureOverrides()
         @State private var notesExpansion: [String: Bool] = [:]
+        @State private var renameState = AuroraInlineRenameState()
+        @FocusState private var focusedWorkspaceRenameID: String?
 
         let onTogglePalette: () -> Void
         let onCreateTab: () -> Void
         let onActivateSession: (String) -> Void
         var onCloseSession: ((String) -> Void)? = nil
         var onTogglePinSession: ((String) -> Void)? = nil
-        var onRequestRenameSession: ((String) -> Void)? = nil
-        var onRequestRenameWorkspace: ((String, String) -> Void)? = nil
+        var onRenameSession: ((String, String?) -> Void)? = nil
+        var onRenameWorkspace: ((String, String?) -> Void)? = nil
+        var onSetWorkspaceCollapsed: ((String, Bool) -> Void)? = nil
+        var onActivateProject: ((String) -> Void)? = nil
+        var onSetProjectPinned: ((String, Bool) -> Void)? = nil
+        var renameRequest: AuroraSidebarRenameRequest? = nil
         var onCloseOtherSessions: ((String) -> Void)? = nil
         var onMoveSessionUp: ((String) -> Void)? = nil
         var onMoveSessionDown: ((String) -> Void)? = nil
@@ -123,6 +94,15 @@ extension Design {
 
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(alignment: .leading, spacing: Spacing.hairline) {
+                            AuroraProjectRegistrySection(
+                                projects: projects,
+                                projectTaskCounts: projectTaskCounts,
+                                registryAvailable: projectRegistryAvailable,
+                                recoveryMessage: projectRegistryRecoveryMessage,
+                                onActivate: onActivateProject,
+                                onSetPinned: onSetProjectPinned,
+                                localizer: localizer
+                            )
                             ForEach(workspaces) { workspace in
                                 workspaceBlock(for: workspace)
                             }
@@ -145,8 +125,15 @@ extension Design {
                 sessionFrames = frames
                 publishHoveredSessionIfPossible()
             }
-            .onChange(of: workspaces.map(\.id)) { _, workspaceIDs in
-                workspaceDisclosure.prune(validWorkspaceIDs: workspaceIDs)
+            .onChange(of: workspaces.map(\.id)) { _, _ in
+                cancelRenameIfTargetDisappeared()
+            }
+            .onChange(of: workspaces.flatMap { $0.sessions.map(\.id) }) { _, _ in
+                cancelRenameIfTargetDisappeared()
+            }
+            .onChange(of: renameRequest) { _, request in
+                guard let request else { return }
+                beginRename(target: request.target, currentName: request.currentName)
             }
         }
 
@@ -378,7 +365,7 @@ extension Design {
         @ViewBuilder
         private func workspaceBlock(for workspace: AuroraWorkspace) -> some View {
             let filtered = workspace.filteringSessions(by: query)
-            let isCollapsed = workspaceDisclosure.isCollapsed(workspace)
+            let isCollapsed = workspace.isCollapsed
             VStack(alignment: .leading, spacing: Spacing.hairline) {
                 workspaceRow(workspace, isCollapsed: isCollapsed)
                 if !isCollapsed {
@@ -398,9 +385,18 @@ extension Design {
                                 onTogglePin: onTogglePinSession.map { handler in
                                     { handler(session.id) }
                                 },
-                                onRename: onRequestRenameSession.map { handler in
-                                    { handler(session.id) }
+                                isRenaming: renameState.target == .session(session.id),
+                                renameText: renameBinding(for: .session(session.id)),
+                                onRequestRename: onRenameSession.map { _ in
+                                    {
+                                        beginRename(
+                                            target: .session(session.id),
+                                            currentName: session.name
+                                        )
+                                    }
                                 },
+                                onCommitRename: { commitRename(target: .session(session.id)) },
+                                onCancelRename: { cancelRename(target: .session(session.id)) },
                                 onCloseOthers: onCloseOtherSessions.map { handler in
                                     { handler(session.id) }
                                 },
@@ -425,7 +421,7 @@ extension Design {
                                         hoveredSession = HoveredSessionContext(
                                             session: session,
                                             workspaceName: workspace.name,
-                                            workspaceBranch: workspace.branch
+                                            workspaceBranch: session.branch ?? workspace.branch
                                         )
                                         publishHoveredSessionIfPossible()
                                     } else if hoveredSession?.session.id == session.id {
@@ -444,26 +440,21 @@ extension Design {
             }
         }
 
-        /// Renders the per-workspace notes section under the session
-        /// list when the workspace has both a resolvable
-        /// `notesWorkspaceID` and a non-empty summary published by the
-        /// chrome controller. The section stays hidden otherwise so
-        /// disabling notes (or hosts that never wire `onOpenNote`)
-        /// keeps the sidebar's classic layout untouched.
+        /// Renders one notes section for all session-level note roots in
+        /// the visual workspace. Rows retain their source workspace ID so
+        /// opening a note still focuses the owning tab.
         @ViewBuilder
-        private func notesSection(for workspace: AuroraWorkspace) -> some View {
-            if let workspaceID = workspace.notesWorkspaceID,
-               let summary = notesByWorkspace[workspaceID],
-               summary.count > 0,
+        func notesSection(for workspace: AuroraWorkspace) -> some View {
+            if let summary = workspace.aggregatedNotesSummary(from: notesByWorkspace),
                let onOpenNote {
                 NotesSectionView(
                     summary: summary,
-                    isExpanded: notesExpansion[workspaceID] ?? false,
+                    isExpanded: notesExpansion[workspace.id] ?? false,
                     onToggleExpansion: {
-                        let current = notesExpansion[workspaceID] ?? false
-                        notesExpansion[workspaceID] = !current
+                        let current = notesExpansion[workspace.id] ?? false
+                        notesExpansion[workspace.id] = !current
                     },
-                    onOpenNote: { noteID in
+                    onOpenNote: { workspaceID, noteID in
                         onOpenNote(workspaceID, noteID)
                     },
                     localizer: localizer
@@ -473,40 +464,42 @@ extension Design {
         }
 
         private func workspaceRow(_ workspace: AuroraWorkspace, isCollapsed: Bool) -> some View {
-            HStack(spacing: Spacing.xxSmall) {
-                Button(action: { toggleCollapsed(workspace) }) {
-                    HStack(spacing: Spacing.xSmall) {
-                        Text("▾")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(palette.textLow.resolvedColor())
-                            .rotationEffect(.degrees(isCollapsed ? -90 : 0))
-                            .animation(.easeInOut(duration: 0.18), value: isCollapsed)
-                        Text(workspace.name)
-                            .font(.system(size: 12.5, weight: .medium))
-                            .foregroundStyle(palette.textHigh.resolvedColor())
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Spacer()
-                        if let branch = workspace.branch {
-                            Text(branch)
-                                .font(.system(size: 10.5, design: .monospaced))
-                                .foregroundStyle(palette.textLow.resolvedColor())
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
+            let renameTarget = AuroraRenameTarget.workspace(workspace.id)
+            let isRenaming = renameState.target == renameTarget
+            return HStack(spacing: Spacing.xxSmall) {
+                if isRenaming {
+                    workspaceLeadingContent(
+                        workspace,
+                        isCollapsed: isCollapsed,
+                        isRenaming: true
+                    )
+                } else if onSetWorkspaceCollapsed != nil {
+                    Button(action: { toggleCollapsed(workspace) }) {
+                        workspaceLeadingContent(
+                            workspace,
+                            isCollapsed: isCollapsed,
+                            isRenaming: false
+                        )
                     }
-                    .padding(.horizontal, Spacing.xSmall)
-                    .padding(.vertical, Spacing.xxSmall)
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .buttonStyle(.plain)
+                } else {
+                    workspaceLeadingContent(
+                        workspace,
+                        isCollapsed: isCollapsed,
+                        isRenaming: false
+                    )
                 }
-                .buttonStyle(.plain)
 
-                if let onRequestRenameWorkspace {
-                    Button(action: { onRequestRenameWorkspace(workspace.id, workspace.name) }) {
+                if onRenameWorkspace != nil {
+                    Button(
+                        action: {
+                            beginRename(target: renameTarget, currentName: workspace.name)
+                        }
+                    ) {
                         Image(systemName: "pencil")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(palette.textLow.resolvedColor())
-                            .frame(width: 18, height: 18)
+                            .frame(width: 24, height: 24)
                             .background(
                                 Circle()
                                     .fill(palette.glassHighlight.resolvedColor())
@@ -522,30 +515,140 @@ extension Design {
             .onHover { hovering in
                 hoveredWorkspaceID = hovering ? workspace.id : nil
             }
-            .onTapGesture(count: 2) {
-                onRequestRenameWorkspace?(workspace.id, workspace.name)
-            }
             .contextMenu {
-                if let onRequestRenameWorkspace {
+                if onRenameWorkspace != nil {
                     Button(Self.localizedRenameWorkspace(using: localizer)) {
-                        onRequestRenameWorkspace(workspace.id, workspace.name)
+                        beginRename(target: renameTarget, currentName: workspace.name)
                     }
                 }
             }
         }
 
+        private func workspaceLeadingContent(
+            _ workspace: AuroraWorkspace,
+            isCollapsed: Bool,
+            isRenaming: Bool
+        ) -> some View {
+            HStack(spacing: Spacing.xSmall) {
+                Text("▾")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(palette.textLow.resolvedColor())
+                    .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                    .animation(.easeInOut(duration: 0.18), value: isCollapsed)
+                if isRenaming {
+                    TextField("", text: renameBinding(for: .workspace(workspace.id)))
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(palette.textHigh.resolvedColor())
+                        .focused($focusedWorkspaceRenameID, equals: workspace.id)
+                        .onSubmit {
+                            commitRename(target: .workspace(workspace.id))
+                        }
+                        .onExitCommand {
+                            cancelRename(target: .workspace(workspace.id))
+                        }
+                        .accessibilityLabel(
+                            Self.localizedRenameWorkspaceAccessibility(
+                                workspace.name,
+                                using: localizer
+                            )
+                        )
+                } else {
+                    Text(workspace.name)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(palette.textHigh.resolvedColor())
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer(minLength: Spacing.xxSmall)
+                if let branch = workspace.branch {
+                    Text(branch)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(palette.textLow.resolvedColor())
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Spacing.xSmall)
+            .padding(.vertical, Spacing.xxSmall)
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onChange(of: focusedWorkspaceRenameID) { previous, current in
+                guard previous == workspace.id,
+                      current != workspace.id,
+                      renameState.target == .workspace(workspace.id) else {
+                    return
+                }
+                commitRename(target: .workspace(workspace.id))
+            }
+        }
+
+        private func beginRename(target: AuroraRenameTarget, currentName: String) {
+            renameState.begin(target: target, currentName: currentName)
+            if case let .workspace(workspaceID) = target {
+                DispatchQueue.main.async {
+                    focusedWorkspaceRenameID = workspaceID
+                }
+            } else if case let .session(sessionID) = target {
+                query = ""
+                if let workspace = workspaces.first(where: { workspace in
+                    workspace.sessions.contains { $0.id == sessionID }
+                }) {
+                    onSetWorkspaceCollapsed?(workspace.id, false)
+                }
+            }
+        }
+
+        private func commitRename(target: AuroraRenameTarget) {
+            guard let commit = renameState.commit(target: target) else { return }
+            focusedWorkspaceRenameID = nil
+            switch commit.target {
+            case let .session(sessionID):
+                onRenameSession?(sessionID, commit.title)
+            case let .workspace(workspaceID):
+                onRenameWorkspace?(workspaceID, commit.title)
+            }
+        }
+
+        private func cancelRename(target: AuroraRenameTarget) {
+            renameState.cancel(target: target)
+            focusedWorkspaceRenameID = nil
+        }
+
+        private func renameBinding(for target: AuroraRenameTarget) -> Binding<String> {
+            Binding(
+                get: { renameState.target == target ? renameState.draft : "" },
+                set: { value in
+                    guard renameState.target == target else { return }
+                    renameState.draft = value
+                }
+            )
+        }
+
+        private func cancelRenameIfTargetDisappeared() {
+            guard let target = renameState.target else { return }
+            let stillExists: Bool
+            switch target {
+            case let .workspace(workspaceID):
+                stillExists = workspaces.contains { $0.id == workspaceID }
+            case let .session(sessionID):
+                stillExists = workspaces.contains { workspace in
+                    workspace.sessions.contains { $0.id == sessionID }
+                }
+            }
+            if !stillExists {
+                cancelRename(target: target)
+            }
+        }
+
         private func toggleCollapsed(_ workspace: AuroraWorkspace) {
-            workspaceDisclosure.toggle(workspace)
+            onSetWorkspaceCollapsed?(workspace.id, !workspace.isCollapsed)
         }
 
         // MARK: - Footer
 
-        /// Footer shown at the bottom of the sidebar. Originally carried
-        /// a second copy of the privacy badge that the Aurora
-        /// status bar already renders at the bottom of the window — one
-        /// badge per window is enough. The footer now only surfaces the
-        /// palette shortcut hint (live-resolved from the host so
-        /// rebindings propagate immediately).
+        /// Omits the privacy badge already rendered by the status bar and
+        /// surfaces only the live-resolved palette shortcut hint.
         private var sidebarFooter: some View {
             HStack(spacing: Spacing.small) {
                 Spacer()
@@ -598,7 +701,11 @@ extension Design {
         let onActivate: () -> Void
         var onClose: (() -> Void)? = nil
         var onTogglePin: (() -> Void)? = nil
-        var onRename: (() -> Void)? = nil
+        var isRenaming = false
+        var renameText: Binding<String> = .constant("")
+        var onRequestRename: (() -> Void)? = nil
+        var onCommitRename: (() -> Void)? = nil
+        var onCancelRename: (() -> Void)? = nil
         var onCloseOthers: (() -> Void)? = nil
         var onMoveUp: (() -> Void)? = nil
         var onMoveDown: (() -> Void)? = nil
@@ -610,6 +717,7 @@ extension Design {
         @Environment(\.designThemePalette) private var palette
         @State private var isHovered = false
         @State private var isDropTargeted = false
+        @FocusState private var isRenameFieldFocused: Bool
 
         var body: some View {
             let layout = VerticalTabCompactMode(mode: displayMode)
@@ -618,14 +726,143 @@ extension Design {
                 primaryInfo: primaryInfo,
                 localizer: localizer
             )
+            HStack(alignment: .top, spacing: Spacing.xSmall) {
+                if isRenaming {
+                    leadingContent(layout: layout, summary: summary)
+                } else {
+                    Button(action: onActivate) {
+                        leadingContent(layout: layout, summary: summary)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if layout.showsPaneMatrix {
+                    MiniMatrixView(panes: session.matrixPanes, localizer: localizer)
+                }
+                if !session.movablePanes.isEmpty {
+                    PaneTransferHandleView(panes: session.movablePanes, localizer: localizer)
+                }
+                if let onRequestRename, layout.showsRenameButton {
+                    Button(action: onRequestRename) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(palette.textLow.resolvedColor())
+                            .frame(width: 24, height: 24)
+                            .background(
+                                Circle()
+                                    .fill(palette.glassHighlight.resolvedColor())
+                            )
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(Self.localizedRenameTab(using: localizer))
+                    .accessibilityLabel(Self.localizedRenameTabAccessibility(session.name, using: localizer))
+                    .opacity(isActive || isHovered ? 0.95 : 0.82)
+                }
+                if let onClose, !session.isPinned, layout.showsCloseButton {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(palette.textLow.resolvedColor())
+                            .frame(width: 24, height: 24)
+                            .background(
+                                Circle()
+                                    .fill(palette.glassHighlight.resolvedColor())
+                            )
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(Self.localizedCloseTabHelp(using: localizer))
+                    .accessibilityLabel(Self.localizedCloseTabAccessibility(session.name, using: localizer))
+                    .opacity(isActive || isHovered ? 0.95 : 0.55)
+                }
+            }
+            .padding(.horizontal, Spacing.small)
+            .padding(.vertical, CGFloat(layout.verticalPadding))
+            .background(activationHitTarget)
+            .background(backgroundView)
+            .background(SessionFrameReporter(sessionID: session.id))
+            .overlay(borderView)
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .onDrag {
+                NSItemProvider(
+                    object: VerticalTabDragPayload.session(session.id).encodedValue as NSString
+                )
+            }
+            .onDrop(of: [UTType.text], isTargeted: $isDropTargeted) { providers in
+                handleSessionDrop(providers)
+            }
+            .onHover { hovering in
+                isHovered = hovering
+                onHoverChange(hovering)
+            }
+            .contextMenu { contextMenuContent }
+            .padding(.leading, 12)
+            .onAppear {
+                focusRenameFieldIfNeeded()
+            }
+            .onChange(of: isRenaming) { _, renaming in
+                if renaming {
+                    focusRenameFieldIfNeeded()
+                } else {
+                    isRenameFieldFocused = false
+                }
+            }
+            .onChange(of: isRenameFieldFocused) { wasFocused, isFocused in
+                if wasFocused, !isFocused, isRenaming {
+                    onCommitRename?()
+                }
+            }
+        }
+
+        private func focusRenameFieldIfNeeded() {
+            guard isRenaming else { return }
+            DispatchQueue.main.async {
+                isRenameFieldFocused = true
+            }
+        }
+
+        @ViewBuilder
+        private var activationHitTarget: some View {
+            if !isRenaming {
+                Button(action: onActivate) {
+                    Color.clear
+                        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityHidden(true)
+            }
+        }
+
+        private func leadingContent(
+            layout: VerticalTabCompactMode,
+            summary: VerticalTabSummaryMode
+        ) -> some View {
             VStack(alignment: .leading, spacing: CGFloat(layout.rowSpacing)) {
                 HStack(spacing: Spacing.xSmall) {
                     AgentChipView(agent: session.agent, state: session.state, size: 22, localizer: localizer)
-                    Text(session.name)
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(palette.textHigh.resolvedColor())
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    if isRenaming {
+                        TextField("", text: renameText)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(palette.textHigh.resolvedColor())
+                            .focused($isRenameFieldFocused)
+                            .onSubmit { onCommitRename?() }
+                            .onExitCommand { onCancelRename?() }
+                            .accessibilityLabel(
+                                Self.localizedRenameTabAccessibility(
+                                    session.name,
+                                    using: localizer
+                                )
+                            )
+                    } else {
+                        Text(session.name)
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(palette.textHigh.resolvedColor())
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                     if session.isPinned {
                         Image(systemName: "pin.fill")
                             .font(.system(size: 9.5, weight: .semibold))
@@ -639,47 +876,16 @@ extension Design {
                             .help(Self.localizedWorktreeHelp(using: localizer))
                             .accessibilityLabel(TabItemView.localizedWorktree(using: localizer))
                     }
-                    Spacer()
-                    if layout.showsPaneMatrix {
-                        MiniMatrixView(panes: session.matrixPanes, localizer: localizer)
+                    if let branch = session.branch,
+                       !branch.isEmpty,
+                       branch != workspaceBranch {
+                        Text(branch)
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(palette.textLow.resolvedColor())
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
-                    if !session.movablePanes.isEmpty {
-                        PaneTransferHandleView(panes: session.movablePanes, localizer: localizer)
-                    }
-                    if let onRename, layout.showsCloseButton {
-                        Button(action: onRename) {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(palette.textLow.resolvedColor())
-                                .frame(width: 18, height: 18)
-                                .background(
-                                    Circle()
-                                        .fill(palette.glassHighlight.resolvedColor())
-                                )
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(Self.localizedRenameTab(using: localizer))
-                        .accessibilityLabel(Self.localizedRenameTabAccessibility(session.name, using: localizer))
-                        .opacity(isActive || isHovered ? 0.95 : 0.82)
-                    }
-                    if let onClose, !session.isPinned, layout.showsCloseButton {
-                        Button(action: onClose) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(palette.textLow.resolvedColor())
-                                .frame(width: 18, height: 18)
-                                .background(
-                                    Circle()
-                                        .fill(palette.glassHighlight.resolvedColor())
-                                )
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(Self.localizedCloseTabHelp(using: localizer))
-                        .accessibilityLabel(Self.localizedCloseTabAccessibility(session.name, using: localizer))
-                        .opacity(isActive || isHovered ? 0.95 : 0.55)
-                    }
+                    Spacer(minLength: Spacing.xxSmall)
                 }
                 if layout.showsPrimaryMetadata {
                     HStack(spacing: Spacing.xxSmall) {
@@ -695,30 +901,8 @@ extension Design {
                     .padding(.leading, 30)
                 }
             }
-            .padding(.horizontal, Spacing.small)
-            .padding(.vertical, CGFloat(layout.verticalPadding))
-            .background(backgroundView)
-            .background(SessionFrameReporter(sessionID: session.id))
-            .overlay(borderView)
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .onDrag {
-                NSItemProvider(
-                    object: VerticalTabDragPayload.session(session.id).encodedValue as NSString
-                )
-            }
-            .onDrop(of: [UTType.text], isTargeted: $isDropTargeted) { providers in
-                handleSessionDrop(providers)
-            }
-            .onTapGesture(count: 2) {
-                onRename?()
-            }
-            .onTapGesture(perform: onActivate)
-            .onHover { hovering in
-                isHovered = hovering
-                onHoverChange(hovering)
-            }
-            .contextMenu { contextMenuContent }
-            .padding(.leading, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
         }
 
         @ViewBuilder
@@ -782,8 +966,8 @@ extension Design {
             if let onTogglePin {
                 Button(session.isPinned ? Self.localizedUnpinTab(using: localizer) : Self.localizedPinTab(using: localizer), action: onTogglePin)
             }
-            if let onRename {
-                Button(Self.localizedRenameTab(using: localizer), action: onRename)
+            if let onRequestRename {
+                Button(Self.localizedRenameTab(using: localizer), action: onRequestRename)
             }
             if let onClose {
                 Button(Self.localizedCloseTab(using: localizer), action: onClose)
@@ -1199,10 +1383,10 @@ extension Design {
         static let countBadgeMinimumWidth: CGFloat = 18
         static let noteRowMinimumHitHeight: CGFloat = 28
 
-        let summary: AuroraWorkspaceNotesSummary
+        let summary: AuroraNotesSectionSummary
         let isExpanded: Bool
         let onToggleExpansion: () -> Void
-        let onOpenNote: (String) -> Void
+        let onOpenNote: (String, String) -> Void
         var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
         @Environment(\.designThemePalette) private var palette
@@ -1235,7 +1419,7 @@ extension Design {
                         .foregroundStyle(palette.textLow.resolvedColor())
                     countBadge(summary.count)
                     Spacer()
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.forward")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(palette.textLow.resolvedColor())
                         .animation(.easeInOut(duration: 0.18), value: isExpanded)
@@ -1269,7 +1453,7 @@ extension Design {
 
         private func noteRow(_ row: AuroraNoteRow) -> some View {
             Button {
-                onOpenNote(row.id)
+                onOpenNote(row.workspaceID, row.id)
             } label: {
                 HStack(alignment: .center, spacing: 6) {
                     Image(systemName: "doc.text")
@@ -1419,58 +1603,4 @@ extension Design {
         }
     }
 
-    // MARK: - Local badge
-
-    /// Privacy status badge used by the Aurora status bar's leftmost
-    /// chip. Keep the copy scoped to telemetry, not execution locality:
-    /// Cocxy supports explicit remote sessions, so "100% local" would
-    /// overstate the runtime model whenever SSH features are active.
-    struct LocalBadgeView: View {
-        var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
-
-        @Environment(\.designThemePalette) private var palette
-
-        var body: some View {
-            let finished = AgentStateRole.finished.token.resolvedColor()
-            HStack(spacing: Spacing.xxSmall) {
-                Circle()
-                    .fill(finished)
-                    .frame(width: 6, height: 6)
-                    .shadow(color: finished.opacity(0.7), radius: 3)
-                Text(Self.localizedLabel(using: localizer))
-                    .font(.system(size: 10.5, weight: .regular, design: .monospaced))
-                    .foregroundStyle(finished)
-            }
-            .padding(.horizontal, Spacing.xSmall)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 999, style: .continuous)
-                    .fill(finished.opacity(0.15))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 999, style: .continuous)
-                            .strokeBorder(finished.opacity(0.35), lineWidth: 1)
-                    )
-            )
-            .help(Self.localizedHelp(using: localizer))
-            .accessibilityLabel(Self.localizedAccessibilityLabel(using: localizer))
-        }
-
-        static func localizedLabel(using localizer: AppLocalizer) -> String {
-            localizer.string("auroraStatus.localBadge.label", fallback: "no telemetry")
-        }
-
-        static func localizedHelp(using localizer: AppLocalizer) -> String {
-            localizer.string(
-                "auroraStatus.localBadge.help",
-                fallback: "No telemetry or tracking. Update checks only contact Cocxy's signed appcast."
-            )
-        }
-
-        static func localizedAccessibilityLabel(using localizer: AppLocalizer) -> String {
-            localizer.string(
-                "auroraStatus.localBadge.accessibility",
-                fallback: "No telemetry or tracking"
-            )
-        }
-    }
 }

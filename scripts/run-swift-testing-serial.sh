@@ -6,11 +6,16 @@ set -euo pipefail
 # Running each Swift Testing suite in its own process keeps coverage intact
 # while preventing AppKit/Dispatch-heavy suites from over-parallelizing.
 
+# Suites that drive real launchd containment pass or fail with machine load
+# and process churn, so they stay out of this gate and run in the Bounded
+# Process Containment CI lane through run-filtered-swift-testing.sh.
 common_args=(
   --disable-automatic-resolution
   --disable-xctest
   --skip PerformanceTests
   --skip CocxyCorePerformanceBenchmarks
+  --skip NotebookProcessRunnerSwiftTestingTests
+  --skip SocketLocalExecutionIntegrationSwiftTestingTests
 )
 
 # Tests that park a thread on a synchronous bridge starve the cooperative pool
@@ -30,13 +35,33 @@ for arg in "$@"; do
   list_extra_args+=("$arg")
 done
 
+source "$(dirname "${BASH_SOURCE[0]}")/test-home-sandbox.sh"
+trap cocxy_test_home_cleanup EXIT
+cocxy_test_home_begin
+
 list_args=("${common_args[@]}")
 if [[ ${#list_extra_args[@]} -gt 0 ]]; then
   list_args+=("${list_extra_args[@]}")
 fi
 
+# `swift test list` ignores --skip, so skipped suites are dropped here instead
+# of running as empty passes.
+skip_patterns=()
+previous_arg=""
+for arg in "${list_args[@]}"; do
+  if [[ "$previous_arg" == "--skip" ]]; then
+    skip_patterns+=("$arg")
+  fi
+  previous_arg="$arg"
+done
+
 suites=()
 while IFS= read -r suite; do
+  for pattern in ${skip_patterns[@]+"${skip_patterns[@]}"}; do
+    if [[ "$suite" =~ $pattern ]]; then
+      continue 2
+    fi
+  done
   suites+=("$suite")
 done < <(
   swift test list "${list_args[@]}" \
@@ -72,26 +97,58 @@ fi
 run_bounded() {
   local suite="$1"
   shift
-  "$@" &
+  local output_path
+  output_path="$(mktemp "${TMPDIR:-/tmp}/cocxy-swift-testing-suite.XXXXXX")"
+  # Job control gives each suite its own process group so a timeout also
+  # terminates Swift Testing helpers spawned underneath `swift test`.
+  set -m
+  (
+    set -o pipefail
+    "$@" 2>&1 | tee "$output_path"
+  ) &
   local pid=$!
+  set +m
   local waited=0
-  while kill -0 "$pid" 2>/dev/null; do
+  while kill -0 -- "-$pid" 2>/dev/null; do
     if (( waited >= suite_timeout_seconds )); then
       echo "error: Swift Testing suite '${suite}' exceeded ${suite_timeout_seconds}s and was terminated." >&2
-      kill -TERM "$pid" 2>/dev/null || true
+      kill -TERM -- "-$pid" 2>/dev/null || true
       local drained=0
-      while kill -0 "$pid" 2>/dev/null && (( drained < 10 )); do
+      while kill -0 -- "-$pid" 2>/dev/null && (( drained < 10 )); do
         sleep 1
         drained=$((drained + 1))
       done
-      kill -KILL "$pid" 2>/dev/null || true
+      kill -KILL -- "-$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null || true
+      rm -f "$output_path"
       return 124
     fi
     sleep 1
     waited=$((waited + 1))
   done
-  wait "$pid"
+  local status
+  if wait "$pid"; then
+    status=0
+  else
+    status=$?
+  fi
+  if (( status != 0 )); then
+    rm -f "$output_path"
+    return "$status"
+  fi
+  if grep -Eq 'Test run with 0 tests' "$output_path"; then
+    echo "error: Swift Testing suite '${suite}' ran no tests; its filter matches nothing." >&2
+    rm -f "$output_path"
+    return 125
+  fi
+  if ! grep -Eq \
+    'Test run with [1-9][0-9]* tests?( in [0-9]+ suites?)? passed after [0-9.]+ seconds[.]$' \
+    "$output_path"; then
+    echo "error: Swift Testing suite '${suite}' exited without a complete passing test-run summary." >&2
+    rm -f "$output_path"
+    return 125
+  fi
+  rm -f "$output_path"
 }
 
 build_dir=""
@@ -152,4 +209,5 @@ if [[ "$coverage_enabled" == true ]]; then
   echo "Swift Testing coverage JSON written to $coverage_json"
 fi
 
+cocxy_test_home_end
 echo "All ${#suites[@]} Swift Testing suite(s) passed."

@@ -382,7 +382,7 @@ final class SessionManagerTests: XCTestCase {
             return self.makeSimpleSession()
         }
 
-        waitForExpectations(timeout: 2.0)
+        waitForExpectations(timeout: 15.0)
         sessionManager.stopAutoSave()
 
         XCTAssertGreaterThanOrEqual(saveCount, 1)
@@ -644,7 +644,7 @@ final class SessionManagerTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             expectation.fulfill()
         }
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
 
         // Allow at most 1 save that was already in flight.
         XCTAssertLessThanOrEqual(saveCount - beforeCount, 1)

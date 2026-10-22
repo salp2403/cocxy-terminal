@@ -29,6 +29,13 @@ struct WorktreeBatchCleanupResult: Codable, Equatable, Sendable {
     let removed: [WorktreeManifest.WorktreeEntry]
 }
 
+struct WorktreePromotionResult: Equatable, Sendable {
+    let entry: WorktreeManifest.WorktreeEntry
+    let candidateCommit: String
+    let mergedCommit: String
+    let createdCandidateCommit: Bool
+}
+
 struct WorktreeBatchCleanupBlock: Codable, Equatable, Sendable {
     let entry: WorktreeManifest.WorktreeEntry
     let reason: WorktreeBatchCleanupBlockReason
@@ -51,8 +58,8 @@ enum WorktreeBatchCleanupSkipReason: Codable, Equatable, Sendable {
 /// Errors surfaced by `WorktreeService`. Typed so CLI and UI layers can
 /// render actionable messages without parsing stderr themselves.
 enum WorktreeServiceError: Error, Equatable, Sendable {
-    /// `config.worktree.enabled == false`. The user must opt in via
-    /// Preferences or `~/.config/cocxy/config.toml`.
+    /// `config.worktree.enabled == false`. The user can re-enable the
+    /// feature via Preferences or `~/.config/cocxy/config.toml`.
     case featureDisabled
     /// No usable `git` binary found on PATH or in the known fallbacks.
     case gitUnavailable
@@ -72,30 +79,20 @@ enum WorktreeServiceError: Error, Equatable, Sendable {
     /// `git status --porcelain` reported unstaged or untracked changes
     /// and the caller did not pass `force = true`.
     case uncommittedChanges(path: String, statusOutput: String)
+    /// The origin checkout must stay clean while a selected candidate is
+    /// committed and merged, otherwise promotion could mix unrelated work.
+    case originHasUncommittedChanges(path: String, statusOutput: String)
+    /// The origin HEAD moved after the task fanned out. Refuse to merge until
+    /// the user refreshes/rebases the task instead of targeting a new base.
+    case baseRevisionChanged(expected: String, actual: String)
     /// Manifest file I/O or schema validation refused the operation.
     case manifestError(WorktreeManifestStoreError)
 }
 
 // MARK: - WorktreeService
 
-/// Actor that owns all `git worktree` side effects for a user session.
-///
-/// Every public method is `async` so the caller never blocks the main
-/// thread on a git invocation that can take seconds on a large repo.
-/// The actor boundary also serialises concurrent requests — two
-/// simultaneous `add` calls for the same origin repo never race past
-/// each other when generating unique IDs, choosing branch names, or
-/// persisting the manifest.
-///
-/// The service does **not** own a manifest store. Each operation
-/// receives the store that matches its origin repository so one service
-/// instance can be reused across multiple repos without re-instantiation.
-/// `WorktreeManifestStore.forRepo(basePath:originRepoPath:)` is the
-/// canonical way to construct the matching store.
-///
-/// Git discovery is delegated to `CodeReviewGit.resolveGitExecutableURL`
-/// so there is a single source of truth for the binary path across the
-/// code review workflow and the worktree workflow.
+/// Serializes git worktree side effects. Callers supply the per-repository
+/// manifest store; executable discovery remains centralized in `CodeReviewGit`.
 actor WorktreeService {
 
     /// Maximum number of id generations attempted before `add(...)`
@@ -115,6 +112,7 @@ actor WorktreeService {
     private let clock: @Sendable () -> Date
     private let randomIDProvider: @Sendable (Int) -> String
     private let isGitRepository: @Sendable (URL) -> Bool
+    private let mutationObserver: @Sendable ([URL]) async -> Void
 
     init(
         gitExecutableURLProvider: @escaping @Sendable () -> URL? = {
@@ -124,19 +122,20 @@ actor WorktreeService {
         randomIDProvider: @escaping @Sendable (Int) -> String = { length in
             WorktreeID.generate(length: length)
         },
-        isGitRepository: (@Sendable (URL) -> Bool)? = nil
+        isGitRepository: (@Sendable (URL) -> Bool)? = nil,
+        gitInfoProvider: (any GitInfoProviding)? = nil,
+        mutationObserver: @escaping @Sendable ([URL]) async -> Void = { _ in }
     ) {
         self.gitExecutableURLProvider = gitExecutableURLProvider
         self.clock = clock
         self.randomIDProvider = randomIDProvider
+        self.mutationObserver = mutationObserver
         if let isGitRepository {
             self.isGitRepository = isGitRepository
         } else {
-            // Default to a freshly constructed provider per call so tests
-            // that swap the filesystem contents between operations get
-            // accurate answers without cache pollution.
+            let provider = gitInfoProvider ?? GitInfoProviderImpl()
             self.isGitRepository = { url in
-                GitInfoProviderImpl().isGitRepository(at: url)
+                provider.isGitRepository(at: url)
             }
         }
     }
@@ -227,6 +226,7 @@ actor WorktreeService {
             )
             throw WorktreeServiceError.manifestError(error)
         }
+        await mutationObserver([originRepoPath, candidate.path])
         return entry
     }
 
@@ -301,6 +301,7 @@ actor WorktreeService {
         } catch let error as WorktreeManifestStoreError {
             throw WorktreeServiceError.manifestError(error)
         }
+        await mutationObserver([originRepoPath, entry.path])
         return entry
     }
 
@@ -345,6 +346,7 @@ actor WorktreeService {
             } catch let error as WorktreeManifestStoreError {
                 throw WorktreeServiceError.manifestError(error)
             }
+            await mutationObserver([originRepoPath] + pruned.map(\.path))
         }
         return pruned
     }
@@ -382,11 +384,12 @@ actor WorktreeService {
     func mergedCleanupPlan(
         originRepoPath: URL,
         baseRef: String,
-        force: Bool = false,
+        force: Bool = false, restrictingToIDs: Set<String>?,
         store: WorktreeManifestStore
     ) async throws -> WorktreeBatchCleanupPlan {
         let manifest = try await loadManifest(store)
-        let entries = manifest.entries
+        let allEntries = manifest.entries
+        let entries = allEntries.filter { restrictingToIDs?.contains($0.id) ?? true }
         guard !entries.isEmpty else {
             return WorktreeBatchCleanupPlan(removable: [], blocked: [], skipped: [])
         }
@@ -402,7 +405,7 @@ actor WorktreeService {
             if force { return entry.id }
             return statusByID[entry.id]?.isClean == true ? entry.id : nil
         })
-        let dependencies = WorktreeDependencyTracker().graph(for: entries)
+        let dependencies = WorktreeDependencyTracker().graph(for: allEntries)
 
         var removable: [WorktreeManifest.WorktreeEntry] = []
         var blocked: [WorktreeBatchCleanupBlock] = []
@@ -447,13 +450,13 @@ actor WorktreeService {
     func cleanupMergedWorktrees(
         originRepoPath: URL,
         baseRef: String,
-        force: Bool = false,
+        force: Bool = false, restrictingToIDs: Set<String>?,
         store: WorktreeManifestStore
     ) async throws -> WorktreeBatchCleanupResult {
         let plan = try await mergedCleanupPlan(
             originRepoPath: originRepoPath,
             baseRef: baseRef,
-            force: force,
+            force: force, restrictingToIDs: restrictingToIDs,
             store: store
         )
         var removed: [WorktreeManifest.WorktreeEntry] = []
@@ -467,6 +470,142 @@ actor WorktreeService {
             removed.append(removedEntry)
         }
         return WorktreeBatchCleanupResult(plan: plan, removed: removed)
+    }
+
+    // MARK: - Task candidate promotion
+    func revision(
+        _ rawRevision: String,
+        at workingDirectory: URL
+    ) throws -> String {
+        let revision = try GitRevisionArgument(rawRevision).value
+        let result = try runGit(
+            at: workingDirectory,
+            arguments: [
+                "rev-parse", "--verify", "--end-of-options", "\(revision)^{commit}",
+            ]
+        )
+        guard result.terminationStatus == 0 else {
+            throw WorktreeServiceError.gitCommandFailed(
+                command: "git rev-parse --verify \(revision)",
+                stderr: result.stderr,
+                exitCode: result.terminationStatus
+            )
+        }
+        return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func validatePromotionOrigin(
+        originRepoPath: URL,
+        expectedBaseCommit: String
+    ) throws {
+        let originStatus = try runGit(
+            at: originRepoPath,
+            arguments: ["status", "--porcelain"]
+        )
+        guard originStatus.terminationStatus == 0 else {
+            throw WorktreeServiceError.gitCommandFailed(
+                command: "git status --porcelain",
+                stderr: originStatus.stderr,
+                exitCode: originStatus.terminationStatus
+            )
+        }
+        let originChanges = originStatus.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard originChanges.isEmpty else {
+            throw WorktreeServiceError.originHasUncommittedChanges(
+                path: originRepoPath.path,
+                statusOutput: originStatus.stdout
+            )
+        }
+
+        let actualBaseCommit = try revision("HEAD", at: originRepoPath)
+        guard actualBaseCommit == expectedBaseCommit else {
+            throw WorktreeServiceError.baseRevisionChanged(
+                expected: expectedBaseCommit,
+                actual: actualBaseCommit
+            )
+        }
+    }
+
+    func promote(
+        id: String,
+        originRepoPath: URL,
+        expectedBaseCommit: String,
+        commitMessage: String,
+        store: WorktreeManifestStore
+    ) async throws -> WorktreePromotionResult {
+        let manifest = try await loadManifest(store)
+        guard let entry = manifest.entry(withID: id) else {
+            throw WorktreeServiceError.worktreeNotFound(id: id)
+        }
+
+        try validatePromotionOrigin(
+            originRepoPath: originRepoPath,
+            expectedBaseCommit: expectedBaseCommit
+        )
+
+        let candidateStatus = try runGit(
+            at: entry.path,
+            arguments: ["status", "--porcelain"]
+        )
+        guard candidateStatus.terminationStatus == 0 else {
+            throw WorktreeServiceError.gitCommandFailed(
+                command: "git status --porcelain",
+                stderr: candidateStatus.stderr,
+                exitCode: candidateStatus.terminationStatus
+            )
+        }
+
+        let hasCandidateChanges = !candidateStatus.stdout
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+        if hasCandidateChanges {
+            let addResult = try runGit(at: entry.path, arguments: ["add", "--all"])
+            guard addResult.terminationStatus == 0 else {
+                throw WorktreeServiceError.gitCommandFailed(
+                    command: "git add --all",
+                    stderr: addResult.stderr,
+                    exitCode: addResult.terminationStatus
+                )
+            }
+
+            let message = commitMessage
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(200)
+            let commitResult = try runGit(
+                at: entry.path,
+                arguments: ["commit", "--no-verify", "-m", message.isEmpty ? "Apply selected task candidate" : String(message)]
+            )
+            guard commitResult.terminationStatus == 0 else {
+                throw WorktreeServiceError.gitCommandFailed(
+                    command: "git commit",
+                    stderr: commitResult.stderr,
+                    exitCode: commitResult.terminationStatus
+                )
+            }
+        }
+
+        let candidateCommit = try revision("HEAD", at: entry.path)
+        let mergeResult = try runGit(
+            at: originRepoPath,
+            arguments: ["merge", "--no-ff", "--no-edit", entry.branch]
+        )
+        guard mergeResult.terminationStatus == 0 else {
+            _ = try? runGit(at: originRepoPath, arguments: ["merge", "--abort"])
+            throw WorktreeServiceError.gitCommandFailed(
+                command: "git merge --no-ff --no-edit \(entry.branch)",
+                stderr: mergeResult.stderr,
+                exitCode: mergeResult.terminationStatus
+            )
+        }
+
+        let promotion = WorktreePromotionResult(
+            entry: entry,
+            candidateCommit: candidateCommit,
+            mergedCommit: try revision("HEAD", at: originRepoPath),
+            createdCandidateCommit: hasCandidateChanges
+        )
+        await mutationObserver([originRepoPath, entry.path])
+        return promotion
     }
 
     // MARK: - Private helpers

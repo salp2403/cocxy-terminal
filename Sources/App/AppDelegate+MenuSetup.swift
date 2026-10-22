@@ -3,28 +3,6 @@
 
 import AppKit
 
-// MARK: - Menu Setup
-
-/// Extension that constructs the application menu bar with all standard
-/// menus: Application, File, Edit, View, Window, and Help.
-///
-/// Extracted from AppDelegate to keep the main file focused on
-/// lifecycle management and service initialization.
-///
-/// ## Rebindable shortcuts
-///
-/// Menu items whose shortcut is surfaced in the Keybindings editor are
-/// registered via `MenuKeybindingsBinder.tag(_:with:)`. That helper both
-/// stores the catalog id on the item (via `NSUserInterfaceItemIdentifier`)
-/// and applies the catalog default `keyEquivalent`. `AppDelegate` then
-/// overlays the user's live `ConfigService.current.keybindings` on top via
-/// `MenuKeybindingsBinder.apply(_:to:)`, and re-applies whenever the config
-/// changes on disk.
-///
-/// Items that are not user-rebindable (About, Hide, Quit, Cut/Copy/Paste,
-/// Undo/Redo, Services, Bring All to Front, the hidden Escape handler,
-/// etc.) keep hardcoded `keyEquivalent` values and are never touched by the
-/// binder.
 extension AppDelegate {
 
     /// Creates the application menu bar with standard menus.
@@ -123,6 +101,26 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(newWindowItem, with: KeybindingActionCatalog.windowNewWindow)
         fileMenu.addItem(newWindowItem)
 
+        let openProjectItem = fileMenu.addItem(
+            withTitle: menuString("menu.file.openProject", "Open Project...", localizer),
+            action: #selector(AppDelegate.openProjectMenuAction(_:)), keyEquivalent: ""
+        )
+        openProjectItem.target = self
+
+        let recentTitle = menuString("menu.file.openRecent", "Open Recent", localizer)
+        let openRecentItem = NSMenuItem(title: recentTitle, action: nil, keyEquivalent: "")
+        let openRecentMenu = NSMenu(title: recentTitle)
+        openRecentMenu.identifier = .projectOpenRecentMenu
+        openRecentMenu.delegate = self
+        openRecentItem.submenu = openRecentMenu
+        fileMenu.addItem(openRecentItem)
+
+        let cloneProjectItem = fileMenu.addItem(
+            withTitle: menuString("menu.file.cloneProject", "Clone Project...", localizer),
+            action: #selector(AppDelegate.cloneProjectMenuAction(_:)), keyEquivalent: ""
+        )
+        cloneProjectItem.target = self
+
         let moveTabItem = NSMenuItem(
             title: menuString("menu.file.moveTabToNewWindow", "Move Tab to New Window", localizer),
             action: #selector(MainWindowController.moveActiveTabToNewWindowAction(_:)),
@@ -183,10 +181,12 @@ extension AppDelegate {
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        updateProjectMenus(in: menu)
         localizeContinuityCameraItems(in: menu)
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        updateProjectMenus(in: menu)
         localizeContinuityCameraItems(in: menu)
     }
 
@@ -348,10 +348,13 @@ extension AppDelegate {
         )
         viewMenu.addItem(smartRoutingItem)
 
-        viewMenu.addItem(withTitle: menuString("menu.view.remoteWorkspaces", "Remote Workspaces...", localizer),
-                         action: #selector(MainWindowController.toggleRemoteWorkspacePanelAction(_:)),
-                         keyEquivalent: "")
-
+        viewMenu.addItem(withTitle: menuString("menu.view.remoteWorkspaces", "Remote Workspaces...", localizer), action: #selector(MainWindowController.toggleRemoteWorkspacePanelAction(_:)), keyEquivalent: "")
+        let mobileMirrorItem = NSMenuItem(
+            title: menuString("menu.view.pairPhone", "Pair Phone...", localizer),
+            action: #selector(showMobileMirrorAction(_:)), keyEquivalent: ""
+        )
+        mobileMirrorItem.target = self
+        viewMenu.addItem(mobileMirrorItem)
         let timelineItem = NSMenuItem(
             title: menuString("menu.view.agentTimeline", "Agent Timeline", localizer),
             action: #selector(MainWindowController.toggleTimelineAction(_:)),
@@ -359,7 +362,6 @@ extension AppDelegate {
         )
         MenuKeybindingsBinder.tag(timelineItem, with: KeybindingActionCatalog.reviewTimeline)
         viewMenu.addItem(timelineItem)
-
         let notificationPanelItem = NSMenuItem(
             title: menuString("menu.view.notifications", "Notifications", localizer),
             action: #selector(MainWindowController.toggleNotificationPanelAction(_:)),
@@ -384,9 +386,7 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(browserItem, with: KeybindingActionCatalog.markdownBrowser)
         viewMenu.addItem(browserItem)
 
-        viewMenu.addItem(withTitle: menuString("menu.view.openMarkdownPanel", "Open Markdown Panel", localizer),
-                         action: #selector(MainWindowController.splitWithMarkdownAction(_:)),
-                         keyEquivalent: "")
+        viewMenu.addItem(withTitle: menuString("menu.view.openMarkdownPanel", "Open Markdown Panel", localizer), action: #selector(MainWindowController.splitWithMarkdownAction(_:)), keyEquivalent: "")
 
         viewMenu.addItem(withTitle: menuString("menu.view.openTextEditorPanel", "Open Text Editor Panel", localizer),
                          action: #selector(MainWindowController.splitWithEditorAction(_:)),
@@ -500,6 +500,89 @@ extension AppDelegate {
         )
         MenuKeybindingsBinder.tag(navDownItem, with: KeybindingActionCatalog.navigateSplitDown)
         viewMenu.addItem(navDownItem)
+
+        viewMenu.addItem(NSMenuItem.separator())
+
+        let scrollPageUpItem = NSMenuItem(
+            title: menuString("menu.view.scrollPageUp", "Scroll Terminal Page Up", localizer),
+            action: #selector(MainWindowController.scrollTerminalPageUpAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(scrollPageUpItem, with: KeybindingActionCatalog.terminalScrollPageUp)
+        viewMenu.addItem(scrollPageUpItem)
+
+        let scrollPageDownItem = NSMenuItem(
+            title: menuString("menu.view.scrollPageDown", "Scroll Terminal Page Down", localizer),
+            action: #selector(MainWindowController.scrollTerminalPageDownAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(scrollPageDownItem, with: KeybindingActionCatalog.terminalScrollPageDown)
+        viewMenu.addItem(scrollPageDownItem)
+
+        let scrollToTopItem = NSMenuItem(
+            title: menuString("menu.view.scrollToTop", "Scroll Terminal to Top", localizer),
+            action: #selector(MainWindowController.scrollTerminalToTopAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(scrollToTopItem, with: KeybindingActionCatalog.terminalScrollToTop)
+        viewMenu.addItem(scrollToTopItem)
+
+        let scrollToBottomItem = NSMenuItem(
+            title: menuString("menu.view.scrollToBottom", "Scroll Terminal to Bottom", localizer),
+            action: #selector(MainWindowController.scrollTerminalToBottomAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(scrollToBottomItem, with: KeybindingActionCatalog.terminalScrollToBottom)
+        viewMenu.addItem(scrollToBottomItem)
+
+        let previousPromptItem = NSMenuItem(
+            title: menuString("menu.view.previousPrompt", "Previous Prompt", localizer),
+            action: #selector(MainWindowController.previousTerminalPromptAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(previousPromptItem, with: KeybindingActionCatalog.terminalPreviousPrompt)
+        viewMenu.addItem(previousPromptItem)
+
+        let nextPromptItem = NSMenuItem(
+            title: menuString("menu.view.nextPrompt", "Next Prompt", localizer),
+            action: #selector(MainWindowController.nextTerminalPromptAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(nextPromptItem, with: KeybindingActionCatalog.terminalNextPrompt)
+        viewMenu.addItem(nextPromptItem)
+
+        let selectCommandOutputItem = NSMenuItem(
+            title: menuString("menu.view.selectCommandOutput", "Select Command Output", localizer),
+            action: #selector(MainWindowController.selectTerminalCommandOutputAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(
+            selectCommandOutputItem,
+            with: KeybindingActionCatalog.terminalSelectCommandOutput
+        )
+        viewMenu.addItem(selectCommandOutputItem)
+
+        let hideCommandBlocksItem = NSMenuItem(
+            title: menuString("menu.view.hideCommandBlocks", "Hide Command Blocks", localizer),
+            action: #selector(MainWindowController.hideCommandBlocksAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(
+            hideCommandBlocksItem,
+            with: KeybindingActionCatalog.terminalHideCommandBlocks
+        )
+        viewMenu.addItem(hideCommandBlocksItem)
+
+        let showDetectedContentHintsItem = NSMenuItem(
+            title: menuString("menu.view.showDetectedContentHints", "Show Content Hints", localizer),
+            action: #selector(MainWindowController.showDetectedContentHintsAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(
+            showDetectedContentHintsItem,
+            with: KeybindingActionCatalog.terminalShowDetectedContentHints
+        )
+        viewMenu.addItem(showDetectedContentHintsItem)
 
         viewMenu.addItem(NSMenuItem.separator())
 

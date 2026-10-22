@@ -72,7 +72,7 @@ protocol DaemonDeployExecuting: AnyObject {
 final class DaemonDeployer {
 
     /// Current version of the bundled cocxyd.sh script.
-    static let bundledVersion = "1.1.0"
+    static let bundledVersion = "1.2.0"
 
     /// Remote installation path for the daemon script.
     static let remotePath = "~/.cocxy/cocxyd.sh"

@@ -9,14 +9,18 @@ final class IDECursorControllerTests: XCTestCase {
 
     // MARK: - Setup
 
-    private func makeController() -> IDECursorController {
+    private func makeController(
+        snapshot: TerminalCursorClickSnapshot? = nil
+    ) -> IDECursorController {
         let vm = TerminalViewModel()
         let view = CocxyCoreView(viewModel: vm)
+        let resolvedSnapshot = snapshot ?? Self.makeSnapshot()
         let controller = IDECursorController(
             hostView: view,
             fontSizeProvider: { [weak vm] in
                 vm?.currentFontSize ?? 14.0
             },
+            terminalStateProvider: { _ in resolvedSnapshot },
             arrowKeySender: { _ in }
         )
         // Set known cell dimensions for predictable tests.
@@ -24,6 +28,65 @@ final class IDECursorControllerTests: XCTestCase {
         controller.leftPadding = 0
         controller.topPadding = 0
         return controller
+    }
+
+    private static func makeSnapshot(
+        visibleStartRow: UInt32 = 0,
+        historyMaxVisibleStart: UInt32 = 0,
+        cursorRow: UInt16 = 0,
+        cursorColumn: UInt16 = 2,
+        semanticState: UInt8 = 2,
+        isAltScreen: Bool = false,
+        mouseTrackingMode: UInt8 = 0,
+        selectionActive: Bool = false,
+        shellClickMode: UInt8 = 2,
+        cellWidths: [UInt8] = Array(repeating: 0, count: 100),
+        cellSemantics: [UInt8]? = nil,
+        rows: [TerminalCursorClickRow]? = nil
+    ) -> TerminalCursorClickSnapshot {
+        let cursorAbsoluteRow = historyMaxVisibleStart + UInt32(cursorRow)
+        let resolvedRows = rows ?? [
+            TerminalCursorClickRow(
+                absoluteRow: cursorAbsoluteRow,
+                wrapped: false,
+                cellWidths: cellWidths,
+                cellSemantics: cellSemantics ?? Array(repeating: 2, count: cellWidths.count)
+            ),
+        ]
+        return TerminalCursorClickSnapshot(
+            visibleStartRow: visibleStartRow,
+            historyMaxVisibleStart: historyMaxVisibleStart,
+            cursorScreenRow: cursorRow,
+            cursorColumn: cursorColumn,
+            semanticState: semanticState,
+            isAltScreen: isAltScreen,
+            mouseTrackingMode: mouseTrackingMode,
+            selectionActive: selectionActive,
+            shellClickMode: shellClickMode,
+            rows: resolvedRows
+        )
+    }
+
+    private func position(row: UInt16 = 0, absoluteRow: UInt32? = nil, column: UInt16) -> TerminalGridPosition {
+        TerminalGridPosition(
+            screenRow: row,
+            absoluteRow: absoluteRow ?? UInt32(row),
+            column: column
+        )
+    }
+
+    private static func row(
+        _ absoluteRow: UInt32,
+        wrapped: Bool,
+        inputColumns: Set<Int>,
+        count: Int = 8
+    ) -> TerminalCursorClickRow {
+        TerminalCursorClickRow(
+            absoluteRow: absoluteRow,
+            wrapped: wrapped,
+            cellWidths: Array(repeating: 0, count: count),
+            cellSemantics: (0..<count).map { inputColumns.contains($0) ? 2 : 0 }
+        )
     }
 
     // MARK: - Column Conversion
@@ -71,7 +134,7 @@ final class IDECursorControllerTests: XCTestCase {
 
     func testArrowKeysWhenDisabled() {
         let controller = makeController()
-        controller.shellPromptDetected(row: 0, column: 2)
+        controller.commandInputStarted(at: position(column: 2))
         controller.isEnabled = false
 
         let result = controller.arrowKeysForClick(
@@ -83,7 +146,7 @@ final class IDECursorControllerTests: XCTestCase {
 
     func testArrowKeysClickOnSamePosition() {
         let controller = makeController()
-        controller.shellPromptDetected(row: 0, column: 2)
+        controller.commandInputStarted(at: position(column: 2))
         // Cursor is at column 2. Click at column 2 (x = 16-23).
         let result = controller.arrowKeysForClick(
             at: CGPoint(x: 18, y: 0),
@@ -95,7 +158,7 @@ final class IDECursorControllerTests: XCTestCase {
 
     func testArrowKeysClickRight() {
         let controller = makeController()
-        controller.shellPromptDetected(row: 0, column: 2)
+        controller.commandInputStarted(at: position(column: 2))
         // Cursor at col 2, click at col 5 (x = 40-47).
         let result = controller.arrowKeysForClick(
             at: CGPoint(x: 42, y: 0),
@@ -107,9 +170,8 @@ final class IDECursorControllerTests: XCTestCase {
     }
 
     func testArrowKeysClickLeft() {
-        let controller = makeController()
-        controller.shellPromptDetected(row: 0, column: 2)
-        controller.cursorMoved(toColumn: 10)
+        let controller = makeController(snapshot: Self.makeSnapshot(cursorColumn: 10))
+        controller.commandInputStarted(at: position(column: 2))
         // Cursor at col 10, click at col 5.
         let result = controller.arrowKeysForClick(
             at: CGPoint(x: 42, y: 0),
@@ -121,8 +183,8 @@ final class IDECursorControllerTests: XCTestCase {
     }
 
     func testArrowKeysClickBeforePromptClampsToPrompt() {
-        let controller = makeController()
-        controller.shellPromptDetected(row: 0, column: 4)
+        let controller = makeController(snapshot: Self.makeSnapshot(cursorColumn: 4))
+        controller.commandInputStarted(at: position(column: 4))
         // Cursor at col 4 (prompt end). Click at col 1 (before prompt).
         let result = controller.arrowKeysForClick(
             at: CGPoint(x: 10, y: 0),
@@ -134,8 +196,8 @@ final class IDECursorControllerTests: XCTestCase {
     }
 
     func testArrowKeysClickOnDifferentRow() {
-        let controller = makeController()
-        controller.shellPromptDetected(row: 5, column: 2)
+        let controller = makeController(snapshot: Self.makeSnapshot(cursorRow: 5))
+        controller.commandInputStarted(at: position(row: 5, column: 2))
         // Click on row 3 (different from prompt row 5).
         let result = controller.arrowKeysForClick(
             at: CGPoint(x: 40, y: 48), // y=48 → row 3
@@ -144,11 +206,198 @@ final class IDECursorControllerTests: XCTestCase {
         XCTAssertNil(result, "Should not reposition when clicking different row")
     }
 
+    func testArrowKeysRequireSemanticPromptStateAndNoTerminalCapture() {
+        let blockedSnapshots = [
+            Self.makeSnapshot(semanticState: 0),
+            Self.makeSnapshot(semanticState: 3),
+            Self.makeSnapshot(isAltScreen: true),
+            Self.makeSnapshot(mouseTrackingMode: 1),
+            Self.makeSnapshot(selectionActive: true),
+            Self.makeSnapshot(visibleStartRow: 9, historyMaxVisibleStart: 10),
+        ]
+
+        for snapshot in blockedSnapshots {
+            let controller = makeController(snapshot: snapshot)
+            controller.commandInputStarted(at: position(column: 2))
+            XCTAssertNil(controller.arrowKeysForClick(
+                at: CGPoint(x: 40, y: 0),
+                viewBounds: NSRect(x: 0, y: 0, width: 800, height: 600)
+            ))
+        }
+    }
+
+    func testArrowKeysAllowPromptAndCommandInputSemanticStates() {
+        for semanticState in [UInt8(1), UInt8(2)] {
+            let controller = makeController(snapshot: Self.makeSnapshot(
+                cursorColumn: 2,
+                semanticState: semanticState
+            ))
+            controller.commandInputStarted(at: position(column: 2))
+
+            XCTAssertEqual(controller.arrowKeysForClick(
+                at: CGPoint(x: 24, y: 0),
+                viewBounds: NSRect(x: 0, y: 0, width: 800, height: 600)
+            ), [.right])
+        }
+    }
+
+    func testArrowKeysCompareAbsoluteRows() {
+        let controller = makeController(snapshot: Self.makeSnapshot(
+            visibleStartRow: 10,
+            historyMaxVisibleStart: 10,
+            cursorRow: 2,
+            cursorColumn: 4
+        ))
+        controller.commandInputStarted(at: position(row: 2, absoluteRow: 12, column: 2))
+
+        let result = controller.arrowKeysForClick(
+            at: CGPoint(x: 16, y: 32),
+            viewBounds: NSRect(x: 0, y: 0, width: 800, height: 600)
+        )
+
+        XCTAssertEqual(result, [.left, .left])
+    }
+
+    func testArrowKeysRejectStaleInputStartAbsoluteRow() {
+        let controller = makeController(snapshot: Self.makeSnapshot(
+            visibleStartRow: 10,
+            historyMaxVisibleStart: 10,
+            cursorRow: 2,
+            cursorColumn: 4
+        ))
+        controller.commandInputStarted(at: position(row: 2, absoluteRow: 2, column: 2))
+
+        XCTAssertNil(controller.arrowKeysForClick(
+            at: CGPoint(x: 16, y: 32),
+            viewBounds: NSRect(x: 0, y: 0, width: 800, height: 600)
+        ))
+    }
+
+    func testWideCellCountsAsOneArrowAndContinuationTargetsLeadingCell() {
+        var widths = Array(repeating: UInt8(0), count: 20)
+        widths[2] = 1
+        widths[3] = 2
+        let controller = makeController(snapshot: Self.makeSnapshot(
+            cursorColumn: 4,
+            cellWidths: widths
+        ))
+        controller.commandInputStarted(at: position(column: 2))
+
+        let result = controller.arrowKeysForClick(
+            at: CGPoint(x: 24, y: 0),
+            viewBounds: NSRect(x: 0, y: 0, width: 160, height: 32)
+        )
+
+        XCTAssertEqual(result, [.left])
+    }
+
+    func testCursorMustRemainOnCapturedInputRange() {
+        let controller = makeController(snapshot: Self.makeSnapshot(cursorColumn: 1))
+        controller.commandInputStarted(at: position(column: 2))
+
+        XCTAssertNil(controller.arrowKeysForClick(
+            at: CGPoint(x: 40, y: 0),
+            viewBounds: NSRect(x: 0, y: 0, width: 800, height: 600)
+        ))
+    }
+
+    func testMultilineClickCountsOnlyInputCellsAndClampsContinuationStart() {
+        let rows = [
+            Self.row(10, wrapped: true, inputColumns: [2, 3, 4]),
+            Self.row(11, wrapped: false, inputColumns: [1, 2, 3]),
+        ]
+        let controller = makeController(snapshot: Self.makeSnapshot(
+            visibleStartRow: 10,
+            historyMaxVisibleStart: 10,
+            cursorRow: 1,
+            cursorColumn: 4,
+            rows: rows
+        ))
+        controller.commandInputStarted(at: position(row: 0, absoluteRow: 10, column: 2))
+
+        let result = controller.arrowKeysForClick(
+            at: CGPoint(x: 0, y: 16),
+            viewBounds: NSRect(x: 0, y: 0, width: 64, height: 32)
+        )
+
+        XCTAssertEqual(result, [.left, .left, .left])
+    }
+
+    func testMultilineClickRightOfLastInputTargetsEndOfWrappedRow() {
+        let rows = [
+            Self.row(10, wrapped: true, inputColumns: [2, 3, 4]),
+            Self.row(11, wrapped: false, inputColumns: [0, 1, 2]),
+        ]
+        let controller = makeController(snapshot: Self.makeSnapshot(
+            visibleStartRow: 10,
+            historyMaxVisibleStart: 10,
+            cursorRow: 1,
+            cursorColumn: 3,
+            rows: rows
+        ))
+        controller.commandInputStarted(at: position(row: 0, absoluteRow: 10, column: 2))
+
+        let result = controller.arrowKeysForClick(
+            at: CGPoint(x: 56, y: 0),
+            viewBounds: NSRect(x: 0, y: 0, width: 64, height: 32)
+        )
+
+        XCTAssertEqual(result, [.left, .left, .left])
+    }
+
+    func testMultilineClickRejectsHardLineBreak() {
+        let rows = [
+            Self.row(10, wrapped: false, inputColumns: [2, 3, 4]),
+            Self.row(11, wrapped: false, inputColumns: [0, 1, 2]),
+        ]
+        let controller = makeController(snapshot: Self.makeSnapshot(
+            visibleStartRow: 10,
+            historyMaxVisibleStart: 10,
+            cursorRow: 1,
+            cursorColumn: 3,
+            rows: rows
+        ))
+        controller.commandInputStarted(at: position(row: 0, absoluteRow: 10, column: 2))
+
+        XCTAssertNil(controller.arrowKeysForClick(
+            at: CGPoint(x: 16, y: 0),
+            viewBounds: NSRect(x: 0, y: 0, width: 64, height: 32)
+        ))
+    }
+
+    func testShellClickCapabilityGatesMultilineMovement() {
+        let rows = [
+            Self.row(0, wrapped: true, inputColumns: [2, 3, 4]),
+            Self.row(1, wrapped: false, inputColumns: [0, 1, 2]),
+        ]
+        for mode in [UInt8(0), UInt8(1)] {
+            let controller = makeController(snapshot: Self.makeSnapshot(
+                cursorRow: 1,
+                cursorColumn: 3,
+                shellClickMode: mode,
+                rows: rows
+            ))
+            controller.commandInputStarted(at: position(row: 0, column: 2))
+
+            XCTAssertNil(controller.arrowKeysForClick(
+                at: CGPoint(x: 16, y: 0),
+                viewBounds: NSRect(x: 0, y: 0, width: 64, height: 32)
+            ))
+        }
+    }
+
     // MARK: - Prompt Tracking
 
-    func testShellPromptDetectedSetsState() {
+    func testShellPromptAndCommandInputTrackDistinctBoundaries() {
         let controller = makeController()
-        controller.shellPromptDetected(row: 3, column: 5)
+        let prompt = position(row: 3, column: 1)
+        let input = position(row: 3, column: 5)
+        controller.shellPromptDetected(at: prompt)
+
+        XCTAssertEqual(controller.promptPosition, prompt)
+        XCTAssertFalse(controller.isOnPromptLine)
+
+        controller.commandInputStarted(at: input)
 
         XCTAssertEqual(controller.promptRow, 3)
         XCTAssertEqual(controller.promptColumn, 5)
@@ -158,7 +407,7 @@ final class IDECursorControllerTests: XCTestCase {
 
     func testCommandExecutedClearsPromptLine() {
         let controller = makeController()
-        controller.shellPromptDetected(row: 0, column: 2)
+        controller.commandInputStarted(at: position(column: 2))
         XCTAssertTrue(controller.isOnPromptLine)
 
         controller.commandExecuted()
@@ -167,7 +416,7 @@ final class IDECursorControllerTests: XCTestCase {
 
     func testCursorMovedUpdatesColumn() {
         let controller = makeController()
-        controller.shellPromptDetected(row: 0, column: 2)
+        controller.commandInputStarted(at: position(column: 2))
         controller.cursorMoved(toColumn: 15)
 
         XCTAssertEqual(controller.cursorColumn, 15)
@@ -192,102 +441,7 @@ final class IDECursorControllerTests: XCTestCase {
     }
 }
 
-// MARK: - Text Selection Manager Tests
-
-@MainActor
-final class TextSelectionManagerTests: XCTestCase {
-
-    func testURLDetectionHTTP() {
-        // The URL detection is internal, test via the pattern matching.
-        let text = "https://example.com/path?q=1"
-        XCTAssertTrue(textContainsURL(text))
-    }
-
-    func testURLDetectionNoScheme() {
-        let text = "example.com"
-        XCTAssertFalse(textContainsURL(text))
-    }
-
-    func testFilePathDetection() {
-        let text = "/usr/local/bin/zsh"
-        XCTAssertTrue(textContainsFilePath(text))
-    }
-
-    func testFilePathDetectionTilde() {
-        let text = "~/.config/cocxy/config.toml"
-        XCTAssertTrue(textContainsFilePath(text))
-    }
-
-    func testDragStateTracking() {
-        let manager = makeManager()
-        XCTAssertFalse(manager.isDragging)
-
-        manager.dragDidStart()
-        XCTAssertTrue(manager.isDragging)
-
-        manager.dragDidEnd()
-        XCTAssertFalse(manager.isDragging)
-    }
-
-    // MARK: - Helpers
-
-    private func makeManager() -> TextSelectionManager {
-        TextSelectionManager(hostView: NSView())
-    }
-
-    private static let urlPattern = try! NSRegularExpression(
-        pattern: #"https?://[^\s<>\"'\])}]+"#,
-        options: .caseInsensitive
-    )
-
-    private static let filePathPattern = try! NSRegularExpression(
-        pattern: #"(?:~|/)[/\w.\-@]+"#,
-        options: []
-    )
-
-    private func textContainsURL(_ text: String) -> Bool {
-        let range = NSRange(text.startIndex..., in: text)
-        return Self.urlPattern.firstMatch(in: text, range: range) != nil
-    }
-
-    private func textContainsFilePath(_ text: String) -> Bool {
-        let range = NSRange(text.startIndex..., in: text)
-        return Self.filePathPattern.firstMatch(in: text, range: range) != nil
-    }
-}
-
-// MARK: - Selection Highlight Layer Tests
-
-final class SelectionHighlightLayerTests: XCTestCase {
-
-    func testInitialState() {
-        let layer = SelectionHighlightLayer()
-        XCTAssertTrue(layer.highlightRects.isEmpty)
-        XCTAssertFalse(layer.isOpaque)
-    }
-
-    func testClearHighlights() {
-        let layer = SelectionHighlightLayer()
-        layer.highlightRects = [CGRect(x: 0, y: 0, width: 100, height: 20)]
-        XCTAssertEqual(layer.highlightRects.count, 1)
-
-        layer.clearHighlights()
-        XCTAssertTrue(layer.highlightRects.isEmpty)
-    }
-
-    func testMultipleHighlightRects() {
-        let layer = SelectionHighlightLayer()
-        layer.highlightRects = [
-            CGRect(x: 0, y: 0, width: 100, height: 20),
-            CGRect(x: 0, y: 20, width: 80, height: 20),
-            CGRect(x: 0, y: 40, width: 120, height: 20),
-        ]
-        XCTAssertEqual(layer.highlightRects.count, 3)
-    }
-}
-
 // NOTE: `IDECursorIndicatorLayer` was removed in v0.1.53 together with the
 // synthetic blink overlay — the real shell cursor rendered by CocxyCore /
 // Metal is now the only on-screen cursor indicator. The previous layer-based
 // tests lived here; they were deleted with the layer itself.
-

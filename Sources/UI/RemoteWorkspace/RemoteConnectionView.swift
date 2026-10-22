@@ -401,6 +401,15 @@ struct RemoteConnectionView: View {
     /// Opens a detected remote dev server in the browser.
     var onOpenRemoteBrowser: ((RemoteConnectionProfile, RemoteBrowserOpenSuggestion) async -> Bool)?
 
+    /// Opens a real terminal tab attached to the selected tmux session.
+    var onAttachTmuxSession: ((UUID, TmuxSessionInfo) -> Bool)?
+
+    /// Opens a CocxyCore terminal surface backed by an existing daemon session.
+    var onAttachDaemonSession: ((UUID, DaemonSessionInfo) async throws -> Void)?
+
+    /// Creates a daemon session and opens it in a retained terminal surface.
+    var onCreateDaemonSession: ((UUID, String) async throws -> Void)?
+
     /// Forced `NSAppearance` for the translucent panel background.
     ///
     /// `nil` preserves the legacy inherit-from-window behaviour; non-nil
@@ -536,7 +545,7 @@ struct RemoteConnectionView: View {
                 .onSubmit { viewModel.quickConnect() }
 
             Button(action: { viewModel.quickConnect() }) {
-                Image(systemName: "arrow.right.circle.fill")
+                Image(systemName: "arrow.forward.circle.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(
                         viewModel.quickConnectText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -613,7 +622,7 @@ struct RemoteConnectionView: View {
     ) -> some View {
         Button(action: { viewModel.toggleGroupCollapse(group) }) {
             HStack(spacing: 4) {
-                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                Image(systemName: isCollapsed ? "chevron.forward" : "chevron.down")
                     .font(.system(size: 8, weight: .bold))
                     .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                     .frame(width: 12)
@@ -778,7 +787,10 @@ struct RemoteConnectionView: View {
                         connectionManager: viewModel.connectionManager,
                         profileID: profileID
                     ),
-                    localizer: localizer
+                    localizer: localizer,
+                    onAttachSession: onAttachTmuxSession.map { handler in
+                        { session in handler(profileID, session) }
+                    }
                 )
             } else {
                 selectProfilePlaceholder(
@@ -879,7 +891,13 @@ struct RemoteConnectionView: View {
                     profileID: profileID,
                     viewModel: viewModel,
                     daemonManager: daemonManager,
-                    localizer: localizer
+                    localizer: localizer,
+                    onAttachSession: onAttachDaemonSession.map { handler in
+                        { session in try await handler(profileID, session) }
+                    },
+                    onCreateSession: onCreateDaemonSession.map { handler in
+                        { title in try await handler(profileID, title) }
+                    }
                 )
                 .id(profileID)
             } else {

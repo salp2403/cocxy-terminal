@@ -82,6 +82,24 @@ enum AgentStatusTextFormatter {
         }
     }
 
+    /// Dashboard counterpart used by app-wide consumers such as the menu bar.
+    /// Keeping both mappings in this formatter prevents badge semantics from
+    /// drifting between the status bar and dashboard-backed UI.
+    static func counterBucket(for state: AgentDashboardState) -> CounterBucket? {
+        switch state {
+        case .working, .launching:
+            return .working
+        case .waitingForInput:
+            return .waiting
+        case .error, .blocked:
+            return .errors
+        case .finished:
+            return .finished
+        case .idle:
+            return nil
+        }
+    }
+
     /// Summary counter buckets. One value per bucket keeps the mapping
     /// exhaustive and avoids silent drift when a new `AgentState` case is
     /// added.

@@ -3,9 +3,10 @@
 
 import Foundation
 
-struct TerminalBlockStore {
+final class TerminalBlockStore: @unchecked Sendable {
     let rootDirectory: URL
     private let fileManager: FileManager
+    private let lock = NSLock()
 
     init(
         rootDirectory: URL = TerminalBlockStore.defaultRootDirectory(),
@@ -22,54 +23,60 @@ struct TerminalBlockStore {
     }
 
     func append(_ block: TerminalCommandBlock, sessionID: String) throws {
-        try ensureRootDirectory()
-        let line = try TerminalBlockSerializer.encodeLine(block)
-        let fileURL = fileURL(forSessionID: sessionID)
-        let data = Data(line.utf8)
+        try withLock {
+            try ensureRootDirectory()
+            let line = try TerminalBlockSerializer.encodeLine(block)
+            let fileURL = fileURL(forSessionID: sessionID)
+            let data = Data(line.utf8)
 
-        if fileManager.fileExists(atPath: fileURL.path) {
-            let handle = try FileHandle(forWritingTo: fileURL)
-            defer { try? handle.close() }
-            try handle.seekToEnd()
-            try handle.write(contentsOf: data)
-        } else {
-            try data.write(to: fileURL, options: [.atomic])
+            if fileManager.fileExists(atPath: fileURL.path) {
+                let handle = try FileHandle(forWritingTo: fileURL)
+                defer { try? handle.close() }
+                try handle.seekToEnd()
+                try handle.write(contentsOf: data)
+            } else {
+                try data.write(to: fileURL, options: [.atomic])
+            }
         }
     }
 
     func load(sessionID: String) throws -> [TerminalCommandBlock] {
-        let fileURL = fileURL(forSessionID: sessionID)
-        guard fileManager.fileExists(atPath: fileURL.path) else { return [] }
+        try withLock {
+            let fileURL = fileURL(forSessionID: sessionID)
+            guard fileManager.fileExists(atPath: fileURL.path) else { return [] }
 
-        let content = try String(contentsOf: fileURL, encoding: .utf8)
-        return content
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .compactMap { line in
-                try? TerminalBlockSerializer.decodeLine(String(line))
-            }
+            let content = try String(contentsOf: fileURL, encoding: .utf8)
+            return content
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .compactMap { line in
+                    try? TerminalBlockSerializer.decodeLine(String(line))
+                }
+        }
     }
 
     func sessionIDs() throws -> [String] {
-        var isDirectory: ObjCBool = false
-        guard fileManager.fileExists(atPath: rootDirectory.path, isDirectory: &isDirectory),
-              isDirectory.boolValue
-        else {
-            return []
-        }
+        try withLock {
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: rootDirectory.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue
+            else {
+                return []
+            }
 
-        return try fileManager.contentsOfDirectory(
-            at: rootDirectory,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        )
-        .compactMap { url in
-            guard url.pathExtension == "jsonl" else { return nil }
-            let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
-            guard values?.isRegularFile == true else { return nil }
-            return url.deletingPathExtension().lastPathComponent
-        }
-        .sorted { lhs, rhs in
-            lhs.localizedStandardCompare(rhs) == .orderedAscending
+            return try fileManager.contentsOfDirectory(
+                at: rootDirectory,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            )
+            .compactMap { url in
+                guard url.pathExtension == "jsonl" else { return nil }
+                let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
+                guard values?.isRegularFile == true else { return nil }
+                return url.deletingPathExtension().lastPathComponent
+            }
+            .sorted { lhs, rhs in
+                lhs.localizedStandardCompare(rhs) == .orderedAscending
+            }
         }
     }
 
@@ -116,5 +123,11 @@ struct TerminalBlockStore {
             withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
         )
+    }
+
+    private func withLock<Value>(_ operation: () throws -> Value) rethrows -> Value {
+        lock.lock()
+        defer { lock.unlock() }
+        return try operation()
     }
 }

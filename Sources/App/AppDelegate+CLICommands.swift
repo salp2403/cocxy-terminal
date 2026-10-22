@@ -531,7 +531,7 @@ extension AppDelegate {
             return nil
         }
 
-        controller.terminalEngine(for: surfaceID).sendText(command + "\r", to: surfaceID)
+        guard controller.terminalEngine(for: surfaceID).sendText(command + "\r", to: surfaceID) else { return nil }
         var data: [String: String] = [
             "status": "sent",
             "id": "\(block.id)",
@@ -744,7 +744,6 @@ extension AppDelegate {
                 "connections": "0",
             ]
         }
-
         var data: [String: String] = [
             "status": status.running ? "running" : "stopped",
             "running": status.running ? "true" : "false",
@@ -753,6 +752,7 @@ extension AppDelegate {
             "connections": "\(status.connectionCount)",
             "auth_required": status.authRequired ? "true" : "false",
             "max_fps": "\(status.maxFrameRate)",
+            "input_allowed": status.allowsInput ? "true" : "false",
             "one_shot": status.oneShot ? "true" : "false",
         ]
         if let eventType = status.lastEventType {

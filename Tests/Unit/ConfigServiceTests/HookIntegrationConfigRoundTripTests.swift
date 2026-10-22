@@ -30,11 +30,13 @@ struct HookIntegrationConfigRoundTripTests {
         let defaults = CocxyConfig.defaults.hooks
 
         #expect(defaults.enabled == true)
+        #expect(defaults.debugLog == false)
         #expect(defaults.agents.count == 12)
         #expect(defaults.isAgentEnabled(.codex))
         #expect(defaults.isAgentEnabled(.qoder))
         #expect(defaults.disablingEnvironment()["COCXY_CLAUDE_HOOKS"] == "1")
         #expect(defaults.disablingEnvironment()["COCXY_HOOKS_DISABLED"] == nil)
+        #expect(defaults.disablingEnvironment()["COCXY_HOOK_DEBUG_LOG"] == nil)
     }
 
     @Test("generated default TOML documents hooks config and built-in agents")
@@ -42,6 +44,7 @@ struct HookIntegrationConfigRoundTripTests {
         let toml = ConfigService.generateDefaultToml()
 
         #expect(toml.contains("[hooks]"))
+        #expect(toml.contains("debug-log = false"))
         #expect(toml.contains("[hooks.agents.codex]"))
         #expect(toml.contains("[hooks.agents.rovo-dev]"))
         #expect(toml.contains("[hooks.agents.qoder]"))
@@ -52,6 +55,7 @@ struct HookIntegrationConfigRoundTripTests {
         let config = try loadConfig(from: """
         [hooks]
         enabled = false
+        debug-log = true
 
         [hooks.agents.codex]
         enabled = false
@@ -61,12 +65,14 @@ struct HookIntegrationConfigRoundTripTests {
         """)
 
         #expect(config.hooks.enabled == false)
+        #expect(config.hooks.debugLog == true)
         #expect(config.hooks.isAgentEnabled(.codex) == false)
         #expect(config.hooks.isAgentEnabled(.rovoDev) == false)
         #expect(config.hooks.isAgentEnabled(.opencode) == true)
 
         let env = config.hooks.disablingEnvironment()
         #expect(env["COCXY_HOOKS_DISABLED"] == "1")
+        #expect(env["COCXY_HOOK_DEBUG_LOG"] == "1")
         #expect(env["COCXY_CODEX_HOOKS_DISABLED"] == "1")
         #expect(env["COCXY_ROVODEV_HOOKS_DISABLED"] == "1")
         #expect(env["COCXY_OPENCODE_HOOKS_DISABLED"] == nil)
@@ -114,6 +120,7 @@ struct HookIntegrationConfigRoundTripTests {
     func codablePayloadsKeepAgentIDsStable() throws {
         let config = HookIntegrationConfig(
             enabled: false,
+            debugLog: true,
             agents: [
                 .codex: HookIntegrationAgentConfig(enabled: false),
                 .rovoDev: HookIntegrationAgentConfig(enabled: false),
@@ -127,6 +134,7 @@ struct HookIntegrationConfigRoundTripTests {
         #expect(json.contains(#""codex""#))
         #expect(json.contains(#""rovo-dev""#))
         #expect(decoded.enabled == false)
+        #expect(decoded.debugLog == true)
         #expect(decoded.isAgentEnabled(.codex) == false)
         #expect(decoded.isAgentEnabled(.rovoDev) == false)
     }

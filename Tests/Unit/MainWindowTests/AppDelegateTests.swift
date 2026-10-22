@@ -3,6 +3,7 @@
 
 import XCTest
 import AppKit
+import CocxyShared
 @testable import CocxyTerminal
 
 // MARK: - AppDelegate Bridge Initialization Tests
@@ -138,5 +139,33 @@ final class AppDelegateBridgeTests: XCTestCase {
         XCTAssertEqual(result.entries.count, 1)
         let commands = result.entries[0]["hooks"] as? [[String: Any]]
         XCTAssertEqual(commands?.first?["command"] as? String, wrapperCommand)
+    }
+
+    func testFirstLaunchSetupRepairsEmptyFileChangedMatcher() {
+        let command = AppDelegate.guardedHookCommand("cocxy hook-handler")
+        let existing: [String: Any] = [
+            "matcher": "",
+            "hooks": [["type": "command", "command": command]],
+        ]
+        let desired: [String: Any] = [
+            "matcher": ClaudeFileChangedMatcher.value,
+            "hooks": [["type": "command", "command": command]],
+        ]
+
+        let result = AppDelegate.reconciledHookEntries(
+            [existing],
+            desiredEntry: desired,
+            expectedCommand: command,
+            requiredMatcher: AppDelegate.claudeHookMatcher(for: "FileChanged")
+        )
+
+        XCTAssertTrue(result.modified)
+        XCTAssertEqual(result.entries.count, 1)
+        XCTAssertEqual(
+            result.entries.first?["matcher"] as? String,
+            ClaudeFileChangedMatcher.value
+        )
+        XCTAssertFalse(ClaudeFileChangedMatcher.watchedRootFiles.contains("."))
+        XCTAssertEqual(AppDelegate.claudeHookMatcher(for: "CwdChanged"), "")
     }
 }

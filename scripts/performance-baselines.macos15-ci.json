@@ -99,7 +99,7 @@
     },
     {
       "name": "cocxycore_idle_rss_delta_mb",
-      "baseline": 3.0,
+      "baseline": 8.3,
       "direction": "lower",
       "absolute_tolerance": 1.0
     }

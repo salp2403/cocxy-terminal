@@ -33,21 +33,24 @@ extension MainWindowController {
 
         var swiftUIView = makeVaultSidebarView(viewModel: viewModel, panelWidth: vaultSidebarPanelWidth)
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let panelY = statusBarHostingView?.frame.height ?? 24
         hostingView.frame = NSRect(
-            x: overlayContainer.bounds.width - vaultSidebarPanelWidth,
+            x: trailingPanelOrigin(
+                containerWidth: overlayContainer.bounds.width,
+                panelWidth: vaultSidebarPanelWidth
+            ),
             y: panelY,
             width: vaultSidebarPanelWidth,
             height: max(0, overlayContainer.bounds.height - panelY)
         )
-        hostingView.autoresizingMask = [.height, .minXMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
 
         vaultSidebarHostingView = hostingView
         overlayContainer.addSubview(hostingView)
         isVaultSidebarVisible = true
-        layoutRightDockedAgentPanels()
+        layoutTrailingDockedPanels()
     }
 
     func dismissVaultSidebar() {
@@ -60,7 +63,10 @@ extension MainWindowController {
         }
 
         isVaultSidebarVisible = false
-        let targetX = overlayContainer.bounds.width
+        let targetX = trailingPanelExitOrigin(
+            containerWidth: overlayContainer.bounds.width,
+            panelWidth: hostingView.frame.width
+        )
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -69,7 +75,7 @@ extension MainWindowController {
             Task { @MainActor [weak self] in
                 self?.vaultSidebarHostingView?.removeFromSuperview()
                 self?.vaultSidebarHostingView = nil
-                self?.layoutRightDockedAgentPanels()
+                self?.layoutTrailingDockedPanels()
                 self?.focusActiveTerminalSurface()
             }
         })
@@ -170,7 +176,7 @@ extension MainWindowController {
                 self?.compareVaultSession(session)
             },
             onWidthModeChanged: { [weak self] in
-                self?.layoutRightDockedAgentPanels()
+                self?.layoutTrailingDockedPanels()
             },
             panelWidth: panelWidth,
             localizer: appLocalizer()
@@ -230,11 +236,10 @@ extension MainWindowController {
                 return false
             }
             let invocation = try VaultSessionResumer.plan(agent: agent, session: session)
-            terminalEngine(for: surfaceID).sendText(
+            return terminalEngine(for: surfaceID).sendText(
                 VaultShellCommandRenderer.commandLine(for: invocation),
                 to: surfaceID
             )
-            return true
         } catch {
             return false
         }

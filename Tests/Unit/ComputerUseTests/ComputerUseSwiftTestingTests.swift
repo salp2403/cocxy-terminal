@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // ComputerUseSwiftTestingTests.swift - Local Computer Use domain contracts.
 
+import CoreGraphics
 import Foundation
 import Testing
 @testable import CocxyTerminal
@@ -150,18 +151,173 @@ struct ComputerUseSwiftTestingTests {
             screenshotCapture: RecordingScreenshotCapture(result: ComputerUseScreenshot(
                 fileURL: screenshotURL,
                 width: 120,
-                height: 80
+                height: 80,
+                scaleFactor: 2
             )),
             auditLog: ComputerUseAuditLog(fileURL: logURL)
         )
 
         let result = try await actor.perform(.screenshot(.mainDisplay))
 
-        #expect(result == .screenshot(fileURL: screenshotURL, width: 120, height: 80))
+        #expect(result == .screenshot(
+            fileURL: screenshotURL,
+            width: 120,
+            height: 80,
+            scaleFactor: 2
+        ))
         #expect(await permission.promptFlags.isEmpty)
         let log = try String(contentsOf: logURL, encoding: .utf8)
         #expect(log.contains("\"action\":\"screenshot.main_display\""))
         #expect(log.contains("\"outcome\":\"success\""))
+    }
+
+    @Test("ScreenCaptureKit screenshots persist as local PNG files")
+    func screenCaptureKitScreenshotsPersistAsPNG() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-screen-capture-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let context = try #require(CGContext(
+            data: nil,
+            width: 6,
+            height: 4,
+            bitsPerComponent: 8,
+            bytesPerRow: 24,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        let image = try #require(context.makeImage())
+        let capture = ScreenCaptureKitComputerUseScreenshotCapture(
+            directory: directory,
+            displayGeometryProvider: { _ in
+                ScreenCaptureKitComputerUseScreenshotCapture.DisplayGeometrySample(
+                    modePixelWidth: 6,
+                    modePixelHeight: 4,
+                    fallbackPixelWidth: 3,
+                    fallbackPixelHeight: 2,
+                    pointWidth: 3
+                )
+            }
+        )
+        let plan = capture.capturePlan(for: 42)
+
+        let screenshot = try capture.write(image, plan: plan)
+
+        #expect(screenshot.width == 6)
+        #expect(screenshot.height == 4)
+        #expect(screenshot.scaleFactor == 2)
+        #expect(screenshot.fileURL.pathExtension == "png")
+        #expect(FileManager.default.fileExists(atPath: screenshot.fileURL.path))
+        #expect(try Data(contentsOf: screenshot.fileURL).starts(with: [0x89, 0x50, 0x4E, 0x47]))
+    }
+
+    @Test("capture plan prefers injected physical display mode dimensions")
+    func capturePlanPrefersInjectedPhysicalDisplayModeDimensions() {
+        let capture = ScreenCaptureKitComputerUseScreenshotCapture(
+            directory: FileManager.default.temporaryDirectory,
+            displayGeometryProvider: { _ in
+                ScreenCaptureKitComputerUseScreenshotCapture.DisplayGeometrySample(
+                    modePixelWidth: 3_456,
+                    modePixelHeight: 2_234,
+                    fallbackPixelWidth: 1_728,
+                    fallbackPixelHeight: 1_117,
+                    pointWidth: 1_728
+                )
+            }
+        )
+
+        let plan = capture.capturePlan(for: 42)
+
+        #expect(plan.pixelWidth == 3_456)
+        #expect(plan.pixelHeight == 2_234)
+        #expect(plan.pointWidth == 1_728)
+    }
+
+    @Test("capture plan falls back from missing or invalid display mode dimensions")
+    func capturePlanFallsBackFromInvalidDisplayModeDimensions() {
+        let capture = ScreenCaptureKitComputerUseScreenshotCapture(
+            directory: FileManager.default.temporaryDirectory,
+            displayGeometryProvider: { _ in
+                ScreenCaptureKitComputerUseScreenshotCapture.DisplayGeometrySample(
+                    modePixelWidth: nil,
+                    modePixelHeight: 0,
+                    fallbackPixelWidth: 1_920,
+                    fallbackPixelHeight: 1_080,
+                    pointWidth: 1_280
+                )
+            }
+        )
+
+        let plan = capture.capturePlan(for: 42)
+
+        #expect(plan.pixelWidth == 1_920)
+        #expect(plan.pixelHeight == 1_080)
+        #expect(plan.pointWidth == 1_280)
+
+        let invalidPointWidths: [Double] = [0, .nan]
+        for pointWidth in invalidPointWidths {
+            let invalidPointPlan = ScreenCaptureKitComputerUseScreenshotCapture.capturePlan(from: .init(
+                modePixelWidth: 3_456,
+                modePixelHeight: 2_234,
+                fallbackPixelWidth: 1_728,
+                fallbackPixelHeight: 1_117,
+                pointWidth: pointWidth
+            ))
+            if pointWidth.isNaN {
+                #expect(invalidPointPlan.pointWidth.isNaN)
+            } else {
+                #expect(invalidPointPlan.pointWidth == pointWidth)
+            }
+            #expect(ScreenCaptureKitComputerUseScreenshotCapture.scale(
+                pixelWidth: invalidPointPlan.pixelWidth,
+                pointWidth: invalidPointPlan.pointWidth
+            ) == 1)
+        }
+    }
+
+    @Test("physical display dimensions reject invalid mode values")
+    func physicalDisplayDimensionsRejectInvalidModeValues() {
+        #expect(ScreenCaptureKitComputerUseScreenshotCapture.physicalPixelDimension(
+            preferred: 3_456,
+            fallback: 1_728
+        ) == 3_456)
+        #expect(ScreenCaptureKitComputerUseScreenshotCapture.physicalPixelDimension(
+            preferred: 0,
+            fallback: 1_920
+        ) == 1_920)
+        #expect(ScreenCaptureKitComputerUseScreenshotCapture.physicalPixelDimension(
+            preferred: nil,
+            fallback: 0
+        ) == 1)
+    }
+
+    @Test("screenshot scale uses fixed physical-width oracles")
+    func screenshotScaleUsesFixedPhysicalWidthOracles() {
+        #expect(ScreenCaptureKitComputerUseScreenshotCapture.scale(
+            pixelWidth: 3_456,
+            pointWidth: 1_728
+        ) == 2)
+        #expect(ScreenCaptureKitComputerUseScreenshotCapture.scale(
+            pixelWidth: 1_920,
+            pointWidth: 1_280
+        ) == 1.5)
+        #expect(ScreenCaptureKitComputerUseScreenshotCapture.scale(
+            pixelWidth: 1_024,
+            pointWidth: 2_048
+        ) == 1)
+        #expect(ScreenCaptureKitComputerUseScreenshotCapture.scale(
+            pixelWidth: 0,
+            pointWidth: 1_728
+        ) == 1)
+        #expect(ScreenCaptureKitComputerUseScreenshotCapture.scale(
+            pixelWidth: 3_456,
+            pointWidth: 0
+        ) == 1)
+        #expect(ScreenCaptureKitComputerUseScreenshotCapture.scale(
+            pixelWidth: 3_456,
+            pointWidth: .leastNonzeroMagnitude
+        ) == 1)
     }
 
     private func temporaryLogURL() -> URL {
@@ -215,7 +371,8 @@ private actor RecordingScreenshotCapture: ComputerUseScreenshotCapturing {
     init(result: ComputerUseScreenshot = ComputerUseScreenshot(
         fileURL: URL(fileURLWithPath: "/tmp/cocxy-computer-use-default.png"),
         width: 1,
-        height: 1
+        height: 1,
+        scaleFactor: 1
     )) {
         self.result = result
     }

@@ -82,19 +82,21 @@ final class CocxyMakeTabCommand: NSScriptCommand, @unchecked Sendable {
                 workingDir = FileManager.default.homeDirectoryForCurrentUser
             }
 
-            windowController.createTab(workingDirectory: workingDir)
+            let newTabID = windowController.createTab(workingDirectory: workingDir)
 
             // If a command was specified, send it to the new tab's terminal.
-            if let cmd = commandText, !cmd.isEmpty,
-               let activeID = windowController.tabManager.activeTabID,
-               let surfaceID = windowController.tabSurfaceMap[activeID] {
-                windowController.terminalEngine(for: surfaceID).sendText(cmd + "\r", to: surfaceID)
+            if let cmd = commandText, !cmd.isEmpty {
+                guard let surfaceID = windowController.tabSurfaceMap[newTabID],
+                      windowController.terminalEngine(for: surfaceID).sendText(
+                        cmd + "\r",
+                        to: surfaceID
+                      ) else {
+                    windowController.performCloseTab(newTabID)
+                    return (nil, CocxyScriptCommandErrorCopy.noActiveTerminal(using: localizer))
+                }
             }
 
             // Return the scriptable tab object for the new tab.
-            guard let newTabID = windowController.tabManager.activeTabID else {
-                return (nil, nil)
-            }
             return (ScriptableTab(tabID: newTabID, tabManager: windowController.tabManager), nil)
         }
 
@@ -127,8 +129,10 @@ final class CocxyRunCommandCommand: NSScriptCommand, @unchecked Sendable {
                 return CocxyScriptCommandErrorCopy.noActiveTerminal(using: localizer)
             }
 
-            windowController.terminalEngine(for: surfaceID).sendText(text + "\r", to: surfaceID)
-            return nil
+            return windowController.terminalEngine(for: surfaceID).sendText(
+                text + "\r",
+                to: surfaceID
+            ) ? nil : CocxyScriptCommandErrorCopy.noActiveTerminal(using: localizer)
         }
 
         if let errorMessage {

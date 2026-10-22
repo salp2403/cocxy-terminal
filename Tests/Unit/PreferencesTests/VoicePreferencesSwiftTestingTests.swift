@@ -38,7 +38,12 @@ struct VoicePreferencesSwiftTestingTests {
             appearance: .defaults,
             terminal: .defaults,
             agentDetection: .defaults,
-            voice: VoiceConfig(enabled: true, localeIdentifier: "es-ES"),
+            voice: VoiceConfig(
+                enabled: true,
+                localeIdentifier: "es-ES",
+                autoSendToAgent: true,
+                consentPrompted: true
+            ),
             notifications: .defaults,
             quickTerminal: .defaults,
             keybindings: .defaults,
@@ -49,6 +54,7 @@ struct VoicePreferencesSwiftTestingTests {
 
         #expect(vm.voiceEnabled == true)
         #expect(vm.voiceLocaleIdentifier == "es-ES")
+        #expect(vm.voiceAutoSendToAgent == true)
         #expect(vm.availableVoiceLocales.map(\.identifier) == ["en-US", "es-ES"])
         #expect(vm.resolvedVoiceLocale == VoiceLocaleResolution(
             localeIdentifier: "es-ES",
@@ -61,15 +67,40 @@ struct VoicePreferencesSwiftTestingTests {
     func changingVoiceFieldsMarksDirtyAndDiscardRestores() {
         let (vm, _) = makeViewModel()
 
-        vm.voiceEnabled = true
+        vm.voiceEnabled = false
         vm.voiceLocaleIdentifier = "en-US"
+        vm.voiceAutoSendToAgent = true
 
         #expect(vm.hasUnsavedChanges == true)
 
         vm.discardChanges()
 
+        #expect(vm.voiceEnabled == true)
+        #expect(vm.voiceLocaleIdentifier == VoiceConfig.systemLocaleIdentifier)
+        #expect(vm.voiceAutoSendToAgent == false)
+        #expect(vm.hasUnsavedChanges == false)
+    }
+
+    @Test("external Voice changes refresh the baseline without erasing pending edits")
+    func externalVoiceChangesPreservePendingEdits() {
+        let (vm, _) = makeViewModel()
+        vm.voiceEnabled = false
+        vm.voiceLocaleIdentifier = "es-ES"
+        vm.voiceAutoSendToAgent = true
+
+        vm.applyExternalVoiceConfig(VoiceConfig(consentPrompted: true))
+
+        #expect(vm.voiceEnabled == false)
+        #expect(vm.voiceLocaleIdentifier == "es-ES")
+        #expect(vm.voiceAutoSendToAgent == true)
+        #expect(vm.hasUnsavedChanges == true)
+
+        vm.applyExternalVoiceConfig(VoiceConfig(enabled: false, consentPrompted: true))
+        vm.discardChanges()
+
         #expect(vm.voiceEnabled == false)
         #expect(vm.voiceLocaleIdentifier == VoiceConfig.systemLocaleIdentifier)
+        #expect(vm.voiceAutoSendToAgent == false)
         #expect(vm.hasUnsavedChanges == false)
     }
 
@@ -79,6 +110,7 @@ struct VoicePreferencesSwiftTestingTests {
 
         vm.voiceEnabled = true
         vm.voiceLocaleIdentifier = "es-ES"
+        vm.voiceAutoSendToAgent = true
         try vm.save()
 
         let written = try #require(provider.content)
@@ -87,6 +119,31 @@ struct VoicePreferencesSwiftTestingTests {
 
         #expect(service.current.voice.enabled == true)
         #expect(service.current.voice.localeIdentifier == "es-ES")
+        #expect(service.current.voice.autoSendToAgent == true)
+        #expect(service.current.voice.consentPrompted == false)
         #expect(vm.hasUnsavedChanges == false)
+    }
+
+    @Test("save preserves internal Voice consent state")
+    func savePreservesInternalVoiceConsentState() throws {
+        let config = CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            voice: VoiceConfig(consentPrompted: true),
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults
+        )
+        let (vm, provider) = makeViewModel(config: config)
+
+        vm.voiceLocaleIdentifier = "es-ES"
+        try vm.save()
+
+        let service = ConfigService(fileProvider: InMemoryProvider(provider.content))
+        try service.reload()
+        #expect(service.current.voice.consentPrompted == true)
     }
 }

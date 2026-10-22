@@ -153,10 +153,27 @@ struct DashboardPanelView: View {
     private var sessionListView: some View {
         Group {
             if displayedSessions.isEmpty {
-                emptyStateView
+                if let issue = viewModel.hookConnectionIssue {
+                    hookDiagnosticView(issue)
+                } else if let repairSucceeded = viewModel.hookRepairSucceeded {
+                    hookRepairResultView(succeeded: repairSucceeded)
+                } else {
+                    emptyStateView
+                }
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(alignment: .leading, spacing: 0) {
+                        if let issue = viewModel.hookConnectionIssue {
+                            hookDiagnosticView(issue)
+                            Divider()
+                        } else if let repairSucceeded = viewModel.hookRepairSucceeded {
+                            hookRepairResultView(succeeded: repairSucceeded)
+                            Divider()
+                        } else if viewModel.droppedByCwdCount > 0 {
+                            droppedEventCountView
+                                .padding(12)
+                            Divider()
+                        }
                         ForEach(displayedSessions) { session in
                             DashboardSessionRow(
                                 session: session,
@@ -165,6 +182,9 @@ struct DashboardPanelView: View {
                                 },
                                 onSetPriority: { priority in
                                     viewModel.setPriority(priority, for: session.id)
+                                },
+                                onOpenFileImpact: { filePath in
+                                    viewModel.openFileImpact(filePath, for: session.id)
                                 },
                                 localizer: localizer
                             )
@@ -193,10 +213,134 @@ struct DashboardPanelView: View {
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 .multilineTextAlignment(.center)
                 .lineSpacing(2)
+            droppedEventCountView
             Spacer()
         }
         .frame(maxWidth: .infinity)
         .padding()
+    }
+
+    private func hookDiagnosticView(_ issue: DashboardHookConnectionIssue) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(CocxyColors.swiftUI(CocxyColors.yellow))
+                Text(hookDiagnosticMessage(issue))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Color(nsColor: CocxyColors.subtext0))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            switch issue {
+            case .noEvents:
+                Button {
+                    viewModel.reinstallHooks()
+                } label: {
+                    Label(
+                        localized(
+                            "agentDashboard.hooks.reinstall",
+                            fallback: "Reinstall hooks"
+                        ),
+                        systemImage: "arrow.clockwise"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            case .cwdMismatch:
+                Button {
+                    viewModel.bindDroppedSession()
+                } label: {
+                    Label(
+                        localized(
+                            "agentDashboard.hooks.bind",
+                            fallback: "Link this session to this tab"
+                        ),
+                        systemImage: "link"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+
+            droppedEventCountView
+
+            if let repairSucceeded = viewModel.hookRepairSucceeded {
+                hookRepairResultContent(succeeded: repairSucceeded)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color(nsColor: CocxyColors.surface0).opacity(0.55))
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var droppedEventCountView: some View {
+        if viewModel.droppedByCwdCount > 0 {
+            Label(
+                String(
+                    format: localized(
+                        "agentDashboard.hooks.droppedCount",
+                        fallback: "%d events ignored because their directory did not match"
+                    ),
+                    viewModel.droppedByCwdCount
+                ),
+                systemImage: "folder.badge.questionmark"
+            )
+            .font(.system(size: 10, weight: .medium))
+            .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("agentDashboard.hooks.droppedCount")
+        }
+    }
+
+    private func hookRepairResultView(succeeded: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            hookRepairResultContent(succeeded: succeeded)
+            droppedEventCountView
+        }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+    }
+
+    private func hookRepairResultContent(succeeded: Bool) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: succeeded ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundColor(
+                    succeeded
+                        ? CocxyColors.swiftUI(CocxyColors.green)
+                        : CocxyColors.swiftUI(CocxyColors.red)
+                )
+            Text(
+                succeeded
+                    ? localized(
+                        "agentDashboard.hooks.repair.success",
+                        fallback: "Hook repair completed. New events will reconnect this session."
+                    )
+                    : localized(
+                        "agentDashboard.hooks.repair.failure",
+                        fallback: "Hook repair could not be completed from this app installation."
+                    )
+            )
+            .font(.system(size: 11, weight: .medium))
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func hookDiagnosticMessage(_ issue: DashboardHookConnectionIssue) -> String {
+        switch issue {
+        case .noEvents:
+            return localized(
+                "agentDashboard.hooks.noEvents",
+                fallback: "Claude Code is running, but Cocxy is not receiving its events."
+            )
+        case .cwdMismatch:
+            return localized(
+                "agentDashboard.hooks.cwdMismatch",
+                fallback: "Cocxy received agent events that do not match any open tab directory."
+            )
+        }
     }
 
     private var displayedSessions: [AgentSessionInfo] {

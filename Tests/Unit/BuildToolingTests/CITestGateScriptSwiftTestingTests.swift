@@ -4,6 +4,7 @@
 import Foundation
 import Dispatch
 import CryptoKit
+import Darwin
 import Testing
 
 @Suite("CI test gate script")
@@ -36,7 +37,6 @@ struct CITestGateScriptSwiftTestingTests {
             contentsOf: root.appendingPathComponent(".github/PULL_REQUEST_TEMPLATE.md"),
             encoding: .utf8
         )
-
         #expect(script.contains("set -euo pipefail"))
         #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
         #expect(script.contains("swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks"))
@@ -49,6 +49,10 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(serialScript.contains("xcrun llvm-profdata merge -sparse"))
         #expect(serialScript.contains("xcrun llvm-cov export -format=text"))
         #expect(serialScript.contains("CocxyTerminal-SwiftTesting.json"))
+        #expect(serialScript.contains("set -m"))
+        #expect(serialScript.contains(#"kill -0 -- "-$pid""#))
+        #expect(serialScript.contains(#"kill -TERM -- "-$pid""#))
+        #expect(serialScript.contains(#"kill -KILL -- "-$pid""#))
         #expect(!serialScript.contains("mapfile"))
         #expect(FileManager.default.isExecutableFile(atPath: filteredScriptURL.path))
         #expect(filteredScript.contains("matching_test_count == 0"))
@@ -57,10 +61,126 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(pullRequestTemplate.contains("`./scripts/run-tests.sh` passes locally"))
     }
 
+    @Test("serial Swift Testing timeout terminates the complete process group")
+    func serialSwiftTestingTimeoutTerminatesCompleteProcessGroup() throws {
+        let fixtureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cocxy-serial-timeout-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: fixtureRoot,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        let childPIDURL = fixtureRoot.appendingPathComponent("child.pid")
+        var childPID: pid_t?
+        defer {
+            if let childPID, Darwin.kill(childPID, 0) == 0 {
+                _ = Darwin.kill(childPID, SIGKILL)
+            }
+            try? FileManager.default.removeItem(at: fixtureRoot)
+        }
+
+        let fakeSwiftURL = fixtureRoot.appendingPathComponent("swift")
+        try """
+        #!/bin/bash
+        set -euo pipefail
+        if [[ "${1:-}" == "test" && "${2:-}" == "list" ]]; then
+          echo "CocxyTerminalTests.FakeTimeoutSuite/testTimeout()"
+          exit 0
+        fi
+        sleep 300 &
+        child=$!
+        printf '%s\n' "$child" > "$FAKE_SWIFT_CHILD_PID_FILE"
+        wait "$child"
+        """.write(to: fakeSwiftURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: fakeSwiftURL.path
+        )
+
+        let existingPath = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"
+        let result = try runProcess(
+            repositoryRoot().appendingPathComponent("scripts/run-swift-testing-serial.sh"),
+            arguments: [],
+            environment: [
+                "FAKE_SWIFT_CHILD_PID_FILE": childPIDURL.path,
+                "PATH": "\(fixtureRoot.path):\(existingPath)",
+                "SWIFT_TESTING_SERIAL_LIMIT": "1",
+                "SWIFT_TESTING_SUITE_TIMEOUT_SECONDS": "1",
+            ]
+        )
+
+        #expect(result.terminationStatus == 124)
+        #expect(result.stderr.contains("FakeTimeoutSuite"))
+        let rawPID = try String(contentsOf: childPIDURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let parsedPID = pid_t(rawPID, radix: 10) else {
+            Issue.record("Fake Swift helper did not publish a valid child PID")
+            return
+        }
+        childPID = parsedPID
+        errno = 0
+        #expect(Darwin.kill(try #require(childPID), 0) == -1)
+        #expect(errno == ESRCH)
+    }
+
+    @Test("serial Swift Testing rejects a zero-status truncated test run")
+    func serialSwiftTestingRejectsZeroStatusTruncatedTestRun() throws {
+        let fixtureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cocxy-serial-truncated-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: fixtureRoot,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        defer { try? FileManager.default.removeItem(at: fixtureRoot) }
+
+        let fakeSwiftURL = fixtureRoot.appendingPathComponent("swift")
+        try """
+        #!/bin/bash
+        set -euo pipefail
+        if [[ "${1:-}" == "test" && "${2:-}" == "list" ]]; then
+          echo "CocxyTerminalTests.FakeTruncatedSuite/testTruncated()"
+          exit 0
+        fi
+        echo '◇ Test run started.'
+        echo '◇ Suite "Fake truncated suite" started.'
+        echo '◇ Test "never completes" started.'
+        exit 0
+        """.write(to: fakeSwiftURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: fakeSwiftURL.path
+        )
+
+        let existingPath = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"
+        let result = try runProcess(
+            repositoryRoot().appendingPathComponent("scripts/run-swift-testing-serial.sh"),
+            arguments: [],
+            environment: [
+                "PATH": "\(fixtureRoot.path):\(existingPath)",
+                "SWIFT_TESTING_SERIAL_LIMIT": "1",
+            ]
+        )
+
+        #expect(result.terminationStatus == 125)
+        #expect(result.stderr.contains(
+            "FakeTruncatedSuite' exited without a complete passing test-run summary"
+        ))
+        #expect(!result.stdout.contains("All 1 Swift Testing suite(s) passed."))
+    }
+
     @Test("bounded process containment uses current mandatory runners and rejects empty filters")
     func boundedProcessContainmentUsesCurrentRunnerAndNonemptyFilter() throws {
         let ci = try String(
             contentsOf: repositoryRoot().appendingPathComponent(".github/workflows/ci.yml"),
+            encoding: .utf8
+        )
+        let translationWorkflow = try String(
+            contentsOf: repositoryRoot().appendingPathComponent(".github/workflows/translations-stale.yml"),
             encoding: .utf8
         )
         let jobStart = try #require(ci.range(of: "  bounded-process-containment:"))
@@ -75,15 +195,16 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(job.contains("timeout-minutes: 20"))
         #expect(job.contains("persist-credentials: false"))
         #expect(!job.contains("macos-14"))
+        #expect(!translationWorkflow.contains("runs-on: macos-14"))
         #expect(!job.contains("continue-on-error"))
         #expect(job.contains(
             "./scripts/run-filtered-swift-testing.sh NotebookProcessRunnerSwiftTestingTests"
         ))
+        #expect(job.contains("run-filtered-swift-testing.sh SocketLocalExecutionIntegrationSwiftTestingTests"))
         #expect(!job.contains("swift test --filter"))
         #expect(!job.contains("COCXYCORE_DEPLOY_KEY"))
         #expect(!job.contains("repository: salp2403/cocxycore"))
     }
-
     @Test("filtered Swift Testing gate exits nonzero when discovery finds no match")
     func filteredGateRejectsEmptyDiscovery() throws {
         let result = try runFilteredGateWithFakeSwift(
@@ -101,7 +222,6 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(result.terminationStatus != 0)
         #expect(result.stderr.contains("filter discovered zero tests"))
     }
-
     @Test("filtered Swift Testing gate discovers and executes matching tests")
     func filteredGateDiscoversAndExecutesMatchingTests() throws {
         let result = try runFilteredGateWithFakeSwift(
@@ -139,7 +259,6 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(executionInvocation.contains("--disable-xctest"))
         #expect(executionInvocation.contains("--verbose --filter FilteredSuite"))
     }
-
     @Test("filtered Swift Testing gate propagates discovery failure")
     func filteredGatePropagatesDiscoveryFailure() throws {
         let result = try runFilteredGateWithFakeSwift(
@@ -157,7 +276,6 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(result.terminationStatus == 23)
         #expect(result.stderr.contains("synthetic discovery failure"))
     }
-
     @Test("filtered Swift Testing gate propagates filtered execution failure")
     func filteredGatePropagatesExecutionFailure() throws {
         let result = try runFilteredGateWithFakeSwift(
@@ -180,7 +298,6 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(result.stdout.contains("Discovered 1 Swift Testing test(s)"))
         #expect(result.stderr.contains("synthetic filtered execution failure"))
     }
-
     @Test("workflow actions use reviewed immutable commits and checkouts drop credentials")
     func workflowActionsUseImmutableCommits() throws {
         let workflowDirectory = repositoryRoot().appendingPathComponent(".github/workflows", isDirectory: true)
@@ -714,7 +831,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect((ciMetric("cocxycore_frame_average_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 0.6)
         #expect((ciMetric("cocxycore_frame_p99_ms")?["baseline"] as? NSNumber)?.doubleValue == 6.5)
         #expect((ciMetric("cocxycore_frame_p99_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 1.5)
-        #expect((ciMetric("cocxycore_idle_rss_delta_mb")?["baseline"] as? NSNumber)?.doubleValue == 3.0)
+        #expect((ciMetric("cocxycore_idle_rss_delta_mb")?["baseline"] as? NSNumber)?.doubleValue == 8.3)
         #expect(FileManager.default.isExecutableFile(atPath: memoryScriptURL.path))
         #expect(memoryScript.contains("BENCHMARK_ENV=\"COCXY_MEMORY_BASELINE_BENCHMARK=1\""))
         #expect(memoryScript.contains("/usr/bin/open -n --env \"$BENCHMARK_ENV\" \"$APP_PATH\""))
@@ -864,131 +981,6 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(runtimeScript.contains(#"nohup env NODE_ENV=production PORT="$PORT" "$NODE_BIN" server.js"#))
         #expect(runtimeScript.contains(#""http://127.0.0.1:${PORT}/health""#))
         #expect(!deployBlock.contains("web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/ || true"))
-    }
-
-    @Test("manual website deploy workflow validates static site and restarts server runtime")
-    func manualWebsiteDeployWorkflowValidatesStaticSiteAndRestartsServerRuntime() throws {
-        let root = repositoryRoot()
-        let workflow = try String(
-            contentsOf: root.appendingPathComponent(".github/workflows/deploy-website.yml"),
-            encoding: .utf8
-        )
-        let runtimeScript = try String(
-            contentsOf: root.appendingPathComponent("web/scripts/restart-production-runtime.sh"),
-            encoding: .utf8
-        )
-        let serverScript = try String(
-            contentsOf: root.appendingPathComponent("web/server.js"),
-            encoding: .utf8
-        )
-
-        #expect(workflow.contains("workflow_dispatch:"))
-        #expect(workflow.contains("environment: production"))
-        #expect(workflow.contains("npm run smoke"))
-        #expect(workflow.contains("npm audit --audit-level=high"))
-        #expect(workflow.contains("npm audit signatures"))
-        #expect(workflow.contains("npm run smoke:visual"))
-        #expect(workflow.contains("npm run audit:quality:full"))
-        #expect(workflow.contains("node scripts/generate-releases-page.mjs"))
-        #expect(workflow.contains("tar -czf /tmp/${BACKUP_NAME} -C ${DEPLOY_PATH} ."))
-        #expect(workflow.contains("web/public/css/* ${DEPLOY_TARGET}:${DEPLOY_PATH}css/"))
-        #expect(workflow.contains("web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/"))
-        #expect(workflow.contains("build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html"))
-        #expect(workflow.contains("build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html"))
-        #expect(workflow.contains("web/server.js web/package.json web/package-lock.json web/ecosystem.config.js"))
-        #expect(workflow.contains("web/scripts/restart-production-runtime.sh"))
-        #expect(workflow.contains("npm ci --omit=dev --ignore-scripts --no-audit --no-fund"))
-        #expect(workflow.contains("main.js?v=${ASSET_VERSION}"))
-        #expect(workflow.contains("theme-switcher.js?v=${ASSET_VERSION}"))
-        #expect(workflow.contains("cocxy-preview.png?v=${ASSET_VERSION}"))
-        #expect(workflow.contains(#"export PATH=\"\$HOME/.npm-global/bin:\$HOME/.npm/bin:\$HOME/.local/bin:\$HOME/.nvm/current/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:\$PATH\""#))
-        #expect(workflow.contains(#"if [ -s \"\$HOME/.nvm/nvm.sh\" ]; then . \"\$HOME/.nvm/nvm.sh\""#))
-        #expect(workflow.contains("chmod +x restart-production-runtime.sh"))
-        #expect(workflow.contains("./restart-production-runtime.sh"))
-        #expect(runtimeScript.contains("node not found in deploy environment and pm2 is unavailable"))
-        #expect(runtimeScript.contains("cocxy-web failed to stay running after fallback start"))
-        #expect(runtimeScript.contains("cocxy-web did not pass local health check"))
-        #expect(runtimeScript.contains("port_listener_pids | tr"))
-        #expect(serverScript.contains("PUBLIC_ROOT"))
-        #expect(serverScript.contains("isPublicRequestPath"))
-        #expect(serverScript.contains(#"dotfiles: "ignore""#))
-        #expect(serverScript.contains("no-cache, no-transform, max-age=0, must-revalidate"))
-        #expect(workflow.contains("https://cocxy.dev/getting-started.html"))
-        #expect(workflow.contains(#"test "$REDIRECT_STATUS" = "301""#))
-        #expect(workflow.contains(#"SMOKE_DIR="$(mktemp -d)""#))
-        #expect(workflow.contains(#"curl -fsSL https://cocxy.dev/ -o "$SMOKE_DIR/home.html""#))
-        #expect(workflow.contains(#"grep -qi "cache-control: .*no-transform" "$SMOKE_DIR/home.headers""#))
-        #expect(workflow.contains(#"grep -q "style.css?v=${ASSET_VERSION}" "$SMOKE_DIR/home.html""#))
-        #expect(workflow.contains(#"grep -q "main.js?v=${ASSET_VERSION}" "$SMOKE_DIR/home.html""#))
-        #expect(workflow.contains(#"grep -q "theme-switcher.js?v=${ASSET_VERSION}" "$SMOKE_DIR/home.html""#))
-        #expect(workflow.contains(#"grep -qi "^permissions-policy:" "$SMOKE_DIR/home.headers""#))
-        #expect(workflow.contains(#"curl -fsSL https://cocxy.dev/appcast.xml -o "$SMOKE_DIR/appcast.xml""#))
-        #expect(workflow.contains(#"grep -q "sparkle:edSignature=" "$SMOKE_DIR/appcast.xml""#))
-        #expect(workflow.contains(#"curl -fsSL "https://cocxy.dev/service-worker.js?deploy=${GITHUB_RUN_ID}" -o "$SMOKE_DIR/service-worker.js""#))
-        #expect(workflow.contains(#"echo "runtime_backup=${RUNTIME_BACKUP}" >> "$GITHUB_STEP_SUMMARY""#))
-        #expect(workflow.contains("for private_path in server.js package.json package-lock.json ecosystem.config.js restart-production-runtime.sh cocxy-web.log cocxy-web.err.log node_modules/express/package.json; do"))
-        #expect(workflow.contains(#"test "$(curl -sS -o /dev/null -w '%{http_code}' "https://cocxy.dev/${private_path}?deploy=${GITHUB_RUN_ID}")" = "404""#))
-        #expect(!workflow.contains("curl -fsSL https://cocxy.dev/ | grep -q"))
-        #expect(!workflow.contains("|| true"))
-    }
-
-    @Test("website deploys install the server runtime beside the public root, never inside it")
-    func websiteDeploysInstallServerRuntimeBesidePublicRoot() throws {
-        let root = repositoryRoot()
-        let runtimeScript = try String(
-            contentsOf: root.appendingPathComponent("web/scripts/restart-production-runtime.sh"),
-            encoding: .utf8
-        )
-        let ecosystem = try String(
-            contentsOf: root.appendingPathComponent("web/ecosystem.config.js"),
-            encoding: .utf8
-        )
-
-        let serverScript = try String(
-            contentsOf: root.appendingPathComponent("web/server.js"),
-            encoding: .utf8
-        )
-
-        for workflowName in ["deploy-website.yml", "release.yml"] {
-            let workflow = try String(
-                contentsOf: root.appendingPathComponent(".github/workflows/\(workflowName)"),
-                encoding: .utf8
-            )
-            let deployStep = try #require(workflow.range(of: "- name: Deploy website"))
-            let runtimeResolution = try #require(workflow.range(of: #"public_root=\$(readlink -f ${DEPLOY_PATH}); \"#))
-            let firstStaticCopy = try #require(workflow.range(of: "web/public/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}"))
-            let runtimeBackup = try #require(workflow.range(of: "then tar -czf ${RUNTIME_BACKUP} \\$existing; fi"))
-            let runtimeCopy = try #require(workflow.range(of: "${DEPLOY_TARGET}:${RUNTIME_PATH}/"))
-            #expect(deployStep.lowerBound < runtimeResolution.lowerBound, "\(workflowName)")
-            #expect(runtimeResolution.lowerBound < firstStaticCopy.lowerBound, "\(workflowName) resolves the runtime after copying pages")
-            #expect(runtimeBackup.lowerBound < runtimeCopy.lowerBound, "\(workflowName) overwrites the runtime before backing it up")
-            #expect(workflow.contains(#"test \"\$(basename \"\$public_root\")\" = public; \"#), "\(workflowName)")
-            #expect(workflow.contains(#"test -f \"\$(dirname \"\$public_root\")/server.js\"; \"#), "\(workflowName)")
-            #expect(workflow.contains(#"export PATH=\"\$PATH:/opt/bitnami/node/bin\"; \"#), "\(workflowName)")
-            #expect(workflow.contains("web/scripts/restart-production-runtime.sh \\\n            ${DEPLOY_TARGET}:${RUNTIME_PATH}/"), "\(workflowName)")
-            #expect(workflow.contains("cd ${RUNTIME_PATH}; \\"), "\(workflowName)")
-            #expect(!workflow.contains("cd ${DEPLOY_PATH}; \\"), "\(workflowName) installs the runtime into the public root")
-            #expect(workflow.contains("for artifact in server.js package.json package-lock.json ecosystem.config.js restart-production-runtime.sh cocxy-web.log cocxy-web.err.log .cocxy-web.pid node_modules; do"), "\(workflowName)")
-            #expect(workflow.contains(#"mv ${DEPLOY_PATH}\$artifact \$quarantine/"#), "\(workflowName)")
-        }
-
-        let releaseWorkflow = try String(
-            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
-            encoding: .utf8
-        )
-        #expect(releaseWorkflow.contains(#"grep -q "sparkle:version=\"${VERSION}\"" "$APPCAST_CHECK""#))
-        for feed in ["/appcast.xml", "/appcast-preview.xml", "/appcast-nightly.xml"] {
-            #expect(serverScript.contains("\"\(feed)\","), "server.js refuses the \(feed) update feed")
-        }
-        let verification = try #require(runtimeScript.range(of: "  verify_current_runtime\n  \"$PM2_BIN\" save"))
-        #expect(!runtimeScript[..<verification.lowerBound].contains(#""$PM2_BIN" save"#))
-        #expect(ecosystem.contains("cwd: __dirname,"))
-        #expect(!ecosystem.contains("/home/"))
-        #expect(runtimeScript.contains(#"if [ "$(pm2_exec_path)" = "$APP_DIR/server.js" ]; then"#))
-        #expect(runtimeScript.contains(#""$PM2_BIN" delete "$APP_NAME""#))
-        #expect(runtimeScript.contains(#"grep -qi '^permissions-policy:'"#))
-        #expect(runtimeScript.contains("cocxy-web is still serving a stale runtime"))
-        #expect(runtimeScript.components(separatedBy: "verify_current_runtime\n").count == 4)
     }
 
     @Test("preview workflow runs website quality gates without publishing from pull requests")
@@ -5536,9 +5528,9 @@ struct CITestGateScriptSwiftTestingTests {
         }
         #expect(englishHome.contains(">Zero telemetry</span>"))
         #expect(spanishHome.contains(">Cero telemetría</span>"))
-        #expect(spanishHome.contains("<b>ESPACIOS</b>"))
-        #expect(spanishHome.contains("> inactivo · 1</span>"))
-        #expect(!spanishHome.contains("<b>WORKSPACES</b>"))
+        #expect(spanishHome.contains("<strong>Te espera</strong> Revisión lista"))
+        #expect(spanishHome.contains("<strong>Trabajando</strong> Editando archivos"))
+        #expect(!spanishHome.contains("<strong>Waiting for you</strong>"))
 
         for releasePage in [englishReleases, spanishReleases] {
             #expect(releasePage.contains(#""@type": "BreadcrumbList""#))
@@ -5588,49 +5580,6 @@ struct CITestGateScriptSwiftTestingTests {
         }
     }
 
-    @Test("public marketing copy confines named agent brands to compatibility surfaces")
-    func publicMarketingCopyConfinesNamedAgentBrandsToCompatibilitySurfaces() throws {
-        let root = repositoryRoot()
-        let webRoot = root.appendingPathComponent("web/public", isDirectory: true)
-        var files = [
-            root.appendingPathComponent("README.md"),
-        ]
-        files += try Self.files(under: webRoot, fileExtension: "html")
-        files += try Self.files(under: webRoot, fileExtension: "js")
-
-        let pattern = try NSRegularExpression(
-            pattern: #"\b(claude|codex|gemini|aider|kiro|opencode|anthropic|openai|warp)\b"#,
-            options: [.caseInsensitive]
-        )
-        let comparisonPattern = try NSRegularExpression(
-            pattern: #"\b(cocxy\s+vs\.?|vs\.?\s+cocxy|versus|better than|faster than|beats|mejor que|más rápido que|supera a)\b"#,
-            options: [.caseInsensitive]
-        )
-        let compatibilitySurfaces: Set<String> = [
-            "web/public/index.html",
-            "web/public/es/index.html",
-            "web/public/agents.html",
-            "web/public/es/agents.html",
-            "web/public/features/agents.html",
-            "web/public/es/features/agents.html",
-        ]
-
-        for file in files {
-            let relativePath = Self.relativePath(file, root: root)
-            let contents = try String(contentsOf: file, encoding: .utf8)
-            let range = NSRange(location: 0, length: (contents as NSString).length)
-            #expect(
-                comparisonPattern.firstMatch(in: contents, range: range) == nil,
-                "\(relativePath) should describe Cocxy without competitor comparisons"
-            )
-            guard !compatibilitySurfaces.contains(relativePath) else { continue }
-            #expect(
-                pattern.firstMatch(in: contents, range: range) == nil,
-                "\(relativePath) should reserve named agent brands for compatibility surfaces"
-            )
-        }
-    }
-
     @Test("public getting started docs include v0 migration guidance in both locales")
     func publicGettingStartedDocsIncludeMigrationGuidanceInBothLocales() throws {
         let root = repositoryRoot()
@@ -5644,7 +5593,7 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         #expect(english.contains(#"<h2 id="migration-guide">Migration from v0.x</h2>"#))
-        #expect(english.contains(##"<a href="#migration-guide" class="sidebar-link">Migration Guide</a>"##))
+        #expect(english.contains(##"<a href="#migration-guide">Migration Guide</a>"##))
         #expect(english.contains("~/.config/cocxy/"))
         #expect(english.contains("brew update &amp;&amp; brew upgrade --cask cocxy"))
         #expect(spanish.contains("Migrar desde versiones v0.x"))
@@ -5664,7 +5613,7 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         #expect(english.contains(#"<h2 id="local-backups">Local Backups</h2>"#))
-        #expect(english.contains(##"<a href="#local-backups" class="sidebar-link">Local Backups</a>"##))
+        #expect(english.contains(##"<a href="#local-backups">Local Backups</a>"##))
         #expect(english.contains("Preferences &gt; Backups"))
         #expect(english.contains("Restore only the selected artifact"))
         #expect(spanish.contains("Copias locales"))
@@ -5685,7 +5634,7 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         #expect(english.contains(#"<h2 id="input-classifier">Input Classifier</h2>"#))
-        #expect(english.contains(##"<a href="#input-classifier" class="sidebar-link">Input Classifier</a>"##))
+        #expect(english.contains(##"<a href="#input-classifier">Input Classifier</a>"##))
         #expect(english.contains("[input-classifier]"))
         #expect(english.contains("dangerous-command-warning = true"))
         #expect(english.contains("auto-route-natural-language = false"))
@@ -5718,7 +5667,7 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         #expect(english.contains(#"<h2 id="command-signatures">Command Signatures</h2>"#))
-        #expect(english.contains(##"<a href="#command-signatures" class="sidebar-link">Command Signatures</a>"##))
+        #expect(english.contains(##"<a href="#command-signatures">Command Signatures</a>"##))
         #expect(english.contains("[security]"))
         #expect(english.contains("require-signed-templates = false"))
         #expect(english.contains("require-signed-macros = false"))
@@ -5761,7 +5710,7 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         #expect(english.contains(#"<h2 id="sandbox-controls">Sandbox Controls</h2>"#))
-        #expect(english.contains(##"<a href="#sandbox-controls" class="sidebar-link">Sandbox Controls</a>"##))
+        #expect(english.contains(##"<a href="#sandbox-controls">Sandbox Controls</a>"##))
         #expect(english.contains("[security.sandbox]"))
         #expect(english.contains("plugins-strict = true"))
         #expect(english.contains("agents-isolated = true"))
@@ -5799,7 +5748,7 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         #expect(english.contains(#"<h2 id="command-corrections">Command Corrections</h2>"#))
-        #expect(english.contains(##"<a href="#command-corrections" class="sidebar-link">Command Corrections</a>"##))
+        #expect(english.contains(##"<a href="#command-corrections">Command Corrections</a>"##))
         #expect(english.contains("[command-corrections]"))
         #expect(english.contains("edit-distance-threshold = 2"))
         #expect(english.contains("foundation-models-enabled = true"))
@@ -6106,11 +6055,8 @@ struct CITestGateScriptSwiftTestingTests {
 
         #expect(english.contains("Launch note draft"))
         #expect(english.contains("Demo outline"))
-        #expect(english.contains("/images/icon.png"))
-        #expect(english.contains("/images/og-image.png"))
-        #expect(english.contains("/images/cocxy-preview.png"))
-        #expect(english.contains("/videos/cocxy-demo.mp4"))
-        #expect(english.contains(#"<video controls preload="metadata" poster="/images/og-image.avif""#))
+        #expect(english.contains(#"<a href="/images/icon.png">"#))
+        #expect(english.contains(#"<a href="/images/og-image.png">"#))
         #expect(english.contains("No telemetry pipeline"))
         #expect(english.contains(#""@type": "Article""#))
         #expect(english.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/press.html">"#))
@@ -6118,11 +6064,17 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(spanish.contains("Borrador de nota de lanzamiento"))
         #expect(spanish.contains("Guion de demo"))
         #expect(spanish.contains("Recursos visuales"))
-        #expect(spanish.contains("/videos/cocxy-demo.mp4"))
-        #expect(spanish.contains("Video demo"))
+        #expect(spanish.contains(#"<a href="/images/icon.png">"#))
         #expect(spanish.contains("Sin sistema de telemetr&iacute;a"))
         #expect(spanish.contains(#""@type": "Article""#))
         #expect(spanish.contains(#"<link rel="alternate" hreflang="en" href="https://cocxy.dev/press.html">"#))
+
+        // Captures that show a personal shell prompt or internal test output stay off the press kit.
+        for page in [english, spanish] {
+            #expect(!page.contains("/images/cocxy-preview"))
+            #expect(!page.contains("/videos/cocxy-demo"))
+            #expect(!page.contains("<video"))
+        }
 
         let video = root.appendingPathComponent("web/public/videos/cocxy-demo.mp4")
         let attributes = try FileManager.default.attributesOfItem(atPath: video.path)

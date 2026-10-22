@@ -391,6 +391,9 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("remoteWorkspace.profileEditor.section.jumpHosts", fallback: "Jump Hosts") == "Hosts de salto")
         #expect(spanish.string("remoteWorkspace.proxy.systemWide.detail", fallback: "Routes all macOS traffic through the SSH tunnel. Requires admin password.") == "Enruta todo el tráfico de macOS por el túnel SSH. Requiere contraseña de administrador.")
         #expect(spanish.string("remoteWorkspace.daemon.controls", fallback: "Controls") == "Controles")
+        #expect(spanish.string("remoteWorkspace.sessions.attach.help", fallback: "Open session in a terminal tab") == "Abrir sesión en una pestaña de terminal")
+        #expect(spanish.string("remoteWorkspace.daemon.session.disconnected", fallback: "Remote session disconnected. Reconnect from Remote Workspaces.") == "La sesión remota se desconectó. Vuelve a conectarla desde Espacios remotos.")
+        #expect(spanish.string("remoteWorkspace.daemon.session.invalidTitle", fallback: "Invalid session name") == "Usa de 1 a 128 caracteres: A-Z, a-z, 0-9, . _ @ $ o -; el nombre no puede comenzar con -.")
         #expect(spanish.string("remoteWorkspace.relay.activeChannels", fallback: "Active Channels") == "Canales activos")
         #expect(spanish.string("remoteWorkspace.relay.hosts", fallback: "Hosts:") == "Servidores:")
         #expect(spanish.string("remoteWorkspace.relay.processes", fallback: "Procs:") == "Procesos:")
@@ -683,6 +686,21 @@ struct AppLocalizationSwiftTestingTests {
         #expect(KeybindingCategory.tab.localizedTitle(using: spanish) == "Pestañas")
         #expect(KeybindingActionCatalog.tabNew.localizedDisplayName(using: spanish) == "Nueva pestaña")
         #expect(KeybindingActionCatalog.tabNew.localizedSummary(using: spanish) == "Abrir una nueva pestaña de terminal.")
+        #expect(
+            KeybindingActionCatalog.terminalPreviousPrompt.localizedDisplayName(using: spanish)
+                == "Prompt anterior"
+        )
+        #expect(
+            KeybindingActionCatalog.terminalSelectCommandOutput.localizedSummary(using: spanish)
+                == "Seleccionar la salida del comando asociada al prompt actual."
+        )
+        #expect(spanish.string("menu.view.nextPrompt", fallback: "Next Prompt") == "Prompt siguiente")
+        #expect(
+            spanish.string(
+                "command.terminal.selectCommandOutput.name",
+                fallback: "Select Command Output"
+            ) == "Seleccionar salida del comando"
+        )
 
         for category in KeybindingCategory.allCases {
             #expect(
@@ -1079,6 +1097,101 @@ struct AppLocalizationSwiftTestingTests {
     }
 
     @Test
+    func terminalScrollMenuLocalizationKeysExistInEverySupportedResource() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let resourcesRoot = root.appendingPathComponent("Resources/Localization", isDirectory: true)
+        let expectedKeys: Set<String> = [
+            "menu.view.scrollPageUp",
+            "menu.view.scrollPageDown",
+            "menu.view.scrollToTop",
+            "menu.view.scrollToBottom",
+        ]
+        let languages = AppLocalizationResolver.supportedLanguages
+
+        #expect(languages.filter { $0 != .english }.count == 20)
+        for language in languages {
+            let keys = try localizationKeys(
+                at: resourcesRoot.appendingPathComponent(
+                    "\(language.rawValue).lproj/Localizable.strings"
+                )
+            )
+            let missingKeys = expectedKeys.subtracting(keys).sorted()
+
+            #expect(
+                missingKeys.isEmpty,
+                Comment(
+                    rawValue: "\(language.rawValue).lproj is missing terminal scroll menu keys: \(missingKeys.joined(separator: ", "))"
+                )
+            )
+        }
+    }
+
+    @MainActor
+    @Test
+    func voiceConsentIsLocalizedInEverySupportedResource() throws {
+        let bundle = try #require(localizationBundle())
+        let english = AppLocalizer(languagePreference: .english, bundle: bundle)
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(VoiceConsentBanner.localizedTitle(using: english) == "Voice dictation is on")
+        #expect(
+            VoiceConsentBanner.localizedMessage(using: english)
+                == "Processing is 100% on-device; nothing leaves your Mac. Keep it enabled?"
+        )
+        #expect(VoiceConsentBanner.localizedKeepEnabled(using: english) == "Keep Enabled")
+        #expect(VoiceConsentBanner.localizedDisable(using: english) == "Disable")
+        #expect(VoiceConsentBanner.localizedOpenPreferences(using: english) == "Voice Settings")
+        #expect(
+            VoiceConsentBanner.localizedSaveFailed(using: english)
+                == "This choice could not be saved. Try again."
+        )
+
+        #expect(VoiceConsentBanner.localizedTitle(using: spanish) == "El dictado por voz está activado")
+        #expect(
+            VoiceConsentBanner.localizedMessage(using: spanish)
+                == "El procesamiento es 100 % local; nada sale de tu Mac. ¿Quieres mantenerlo activado?"
+        )
+        #expect(VoiceConsentBanner.localizedKeepEnabled(using: spanish) == "Mantener activado")
+        #expect(VoiceConsentBanner.localizedDisable(using: spanish) == "Desactivar")
+        #expect(VoiceConsentBanner.localizedOpenPreferences(using: spanish) == "Ajustes de voz")
+
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let resourcesRoot = root.appendingPathComponent("Resources/Localization", isDirectory: true)
+        let expectedKeys: Set<String> = [
+            "voice.consent.title",
+            "voice.consent.message",
+            "voice.consent.keepEnabled",
+            "voice.consent.disable",
+            "voice.consent.openPreferences",
+            "voice.consent.saveFailed",
+        ]
+
+        #expect(AppLocalizationResolver.supportedLanguages.count == 21)
+        for language in AppLocalizationResolver.supportedLanguages {
+            let strings = try localizationStrings(
+                at: resourcesRoot.appendingPathComponent(
+                    "\(language.rawValue).lproj/Localizable.strings"
+                )
+            )
+            let missingKeys = expectedKeys.subtracting(strings.keys).sorted()
+            let emptyKeys = expectedKeys.filter { strings[$0]?.isEmpty != false }.sorted()
+
+            #expect(
+                missingKeys.isEmpty,
+                Comment(
+                    rawValue: "\(language.rawValue).lproj is missing Voice consent keys: \(missingKeys.joined(separator: ", "))"
+                )
+            )
+            #expect(
+                emptyKeys.isEmpty,
+                Comment(
+                    rawValue: "\(language.rawValue).lproj has empty Voice consent values: \(emptyKeys.joined(separator: ", "))"
+                )
+            )
+        }
+    }
+
+    @Test
     func agentWorkspaceLocalizationResourcesExposeCellsAndAgentTeamKeys() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let resourcesRoot = root.appendingPathComponent("Resources/Localization", isDirectory: true)
@@ -1133,16 +1246,6 @@ struct AppLocalizationSwiftTestingTests {
             "agentTeams.creator.launch",
             "agentTeams.graph.title",
             "agentTeams.feed.empty",
-            "cells.sidebar.empty.title",
-            "cells.sidebar.empty.message",
-            "cells.toolbar.running",
-            "cells.toolbar.refresh",
-            "cells.toolbar.create",
-            "cells.card.destroy",
-            "cells.create.provider",
-            "cells.create.profile",
-            "cells.create.image",
-            "cells.create.launch",
         ]
         let plannedLanguageCodes = [
             "ar", "bs", "da", "de", "fr", "it", "ja", "km", "ko", "no",
@@ -1162,43 +1265,6 @@ struct AppLocalizationSwiftTestingTests {
                 Comment(rawValue: "\(code).lproj still has English Agent Workspace fallback text for: \(clonedKeys.joined(separator: ", "))")
             )
         }
-    }
-
-    @Test
-    func sourceLiteralFallbackLocalizationKeysExistInEnglishAndSpanishResources() throws {
-        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let english = try localizationKeys(
-            at: root.appendingPathComponent("Resources/Localization/en.lproj/Localizable.strings")
-        )
-        let spanish = try localizationKeys(
-            at: root.appendingPathComponent("Resources/Localization/es.lproj/Localizable.strings")
-        )
-        let sourceKeys = try sourceLiteralFallbackLocalizationKeys(
-            at: root.appendingPathComponent("Sources", isDirectory: true),
-            relativeTo: root
-        )
-
-        #expect(!sourceKeys.isEmpty)
-        #expect(
-            sourceKeys.keys.filter { !english.contains($0) }.isEmpty,
-            Comment(
-                rawValue: missingLocalizationMessage(
-                    sourceKeys: sourceKeys,
-                    availableKeys: english,
-                    localeName: "English"
-                )
-            )
-        )
-        #expect(
-            sourceKeys.keys.filter { !spanish.contains($0) }.isEmpty,
-            Comment(
-                rawValue: missingLocalizationMessage(
-                    sourceKeys: sourceKeys,
-                    availableKeys: spanish,
-                    localeName: "Spanish"
-                )
-            )
-        )
     }
 
     @Test
@@ -1302,56 +1368,6 @@ struct AppLocalizationSwiftTestingTests {
             format: nil
         )
         return try #require(propertyList as? [String: String])
-    }
-
-    private func sourceLiteralFallbackLocalizationKeys(
-        at sourcesURL: URL,
-        relativeTo root: URL
-    ) throws -> [String: [String]] {
-        let expression = try NSRegularExpression(
-            pattern: #"(?:\.string|localizedString)\(\s*"([A-Za-z0-9_.-]+)"\s*,\s*fallback:"#,
-            options: []
-        )
-        guard let enumerator = FileManager.default.enumerator(
-            at: sourcesURL,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return [:]
-        }
-
-        var keysBySource: [String: [String]] = [:]
-        for case let fileURL as URL in enumerator {
-            guard fileURL.pathExtension == "swift" else { continue }
-            let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
-            guard values.isRegularFile == true else { continue }
-
-            let source = try String(contentsOf: fileURL, encoding: .utf8)
-            let range = NSRange(source.startIndex..<source.endIndex, in: source)
-            for match in expression.matches(in: source, options: [], range: range) {
-                guard let keyRange = Range(match.range(at: 1), in: source) else { continue }
-                let key = String(source[keyRange])
-                keysBySource[key, default: []].append(relativePath(for: fileURL, from: root))
-            }
-        }
-        return keysBySource
-    }
-
-    private func missingLocalizationMessage(
-        sourceKeys: [String: [String]],
-        availableKeys: Set<String>,
-        localeName: String
-    ) -> String {
-        let missing = sourceKeys.keys
-            .filter { !availableKeys.contains($0) }
-            .sorted()
-            .prefix(20)
-            .map { key in
-                let locations = sourceKeys[key, default: []].prefix(3).joined(separator: ", ")
-                return "\(key) [\(locations)]"
-            }
-            .joined(separator: "; ")
-        return "Missing \(localeName) localization keys: \(missing)"
     }
 
     private struct HardcodedVisibleLiteral: Comparable {

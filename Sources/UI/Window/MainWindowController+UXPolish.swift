@@ -48,10 +48,12 @@ extension MainWindowController {
                 }
             )
 
-            if let host = shortcutHintOverlayHosts[placement] {
+            let host: ShortcutHintPassthroughHostingView<ShortcutHintsOverlayView>
+            if let existingHost = shortcutHintOverlayHosts[placement] {
+                host = existingHost
                 host.rootView = rootView
             } else {
-                let host = ShortcutHintPassthroughHostingView(rootView: rootView)
+                host = ShortcutHintPassthroughHostingView(rootView: rootView)
                 host.translatesAutoresizingMaskIntoConstraints = true
                 host.autoresizingMask = []
                 host.wantsLayer = true
@@ -59,6 +61,7 @@ extension MainWindowController {
                 overlayContainer.addSubview(host)
                 shortcutHintOverlayHosts[placement] = host
             }
+            applyShellLayoutDirection(to: host)
         }
 
         layoutShortcutHintOverlays()
@@ -91,14 +94,30 @@ extension MainWindowController {
         case .sidebar:
             if let tabBarView {
                 let sidebarFrame = tabBarView.convert(tabBarView.bounds, to: overlayContainer)
+                let width = min(size.width, max(120, sidebarFrame.width - 24))
                 return NSRect(
-                    x: sidebarFrame.minX + 12,
+                    x: sidebarFrame.minX + DirectionalPanelGeometry.logicalLeadingOrigin(
+                        containerWidth: sidebarFrame.width,
+                        panelWidth: width,
+                        inset: 12,
+                        direction: shellLayoutDirection
+                    ),
                     y: sidebarFrame.minY + 16,
-                    width: min(size.width, max(120, sidebarFrame.width - 24)),
+                    width: width,
                     height: size.height
                 )
             }
-            return NSRect(x: 14, y: 16, width: size.width, height: size.height)
+            return NSRect(
+                x: DirectionalPanelGeometry.logicalLeadingOrigin(
+                    containerWidth: bounds.width,
+                    panelWidth: size.width,
+                    inset: 14,
+                    direction: shellLayoutDirection
+                ),
+                y: 16,
+                width: size.width,
+                height: size.height
+            )
         case .titlebar:
             return NSRect(
                 x: max(12, (bounds.width - size.width) / 2),
@@ -109,15 +128,25 @@ extension MainWindowController {
         case .pane:
             let anchor = focusedPaneView() ?? terminalSurfaceView ?? terminalContainerView ?? overlayContainer
             let paneFrame = anchor.convert(anchor.bounds, to: overlayContainer)
+            let width = min(size.width, max(120, paneFrame.width - 24))
             return NSRect(
-                x: max(paneFrame.minX + 12, paneFrame.maxX - size.width - 16),
+                x: DirectionalPanelGeometry.paneTrailingOrigin(
+                    paneFrame: paneFrame,
+                    panelWidth: width,
+                    direction: shellLayoutDirection
+                ),
                 y: max(paneFrame.minY + 12, paneFrame.maxY - size.height - 16),
-                width: min(size.width, max(120, paneFrame.width - 24)),
+                width: width,
                 height: size.height
             )
         case .debug:
             return NSRect(
-                x: 18,
+                x: DirectionalPanelGeometry.logicalLeadingOrigin(
+                    containerWidth: bounds.width,
+                    panelWidth: size.width,
+                    inset: 18,
+                    direction: shellLayoutDirection
+                ),
                 y: max(12, bounds.height - size.height - 84),
                 width: size.width,
                 height: size.height

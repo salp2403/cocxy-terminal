@@ -182,6 +182,128 @@ actor NoteStore {
         return result
     }
 
+    /// Moves notes written under a legacy workspace identity into the
+    /// canonical workspace folder. The operation is idempotent and merges
+    /// into an existing destination without overwriting either version of a
+    /// note when the same UUID has diverged.
+    @discardableResult
+    func migrateNotes(
+        from legacyWorkspaceID: NoteWorkspaceID,
+        to canonicalWorkspaceID: NoteWorkspaceID
+    ) throws -> Int {
+        guard legacyWorkspaceID != canonicalWorkspaceID else { return 0 }
+
+        let fileManager = FileManager.default
+        let sourceDirectory = directoryURL(for: legacyWorkspaceID)
+        guard fileManager.fileExists(atPath: sourceDirectory.path) else { return 0 }
+
+        let destinationDirectory = directoryURL(for: canonicalWorkspaceID)
+        do {
+            try fileManager.createDirectory(
+                at: destinationDirectory,
+                withIntermediateDirectories: true
+            )
+            let sourceFiles = try fileManager.contentsOfDirectory(
+                at: sourceDirectory,
+                includingPropertiesForKeys: [
+                    .isRegularFileKey,
+                    .isSymbolicLinkKey,
+                    .creationDateKey,
+                    .contentModificationDateKey,
+                ],
+                options: [.skipsHiddenFiles]
+            )
+
+            var migratedCount = 0
+            for sourceURL in sourceFiles where sourceURL.pathExtension == format.fileExtension {
+                let values = try sourceURL.resourceValues(forKeys: [
+                    .isRegularFileKey,
+                    .isSymbolicLinkKey,
+                    .creationDateKey,
+                    .contentModificationDateKey,
+                ])
+                guard values.isRegularFile == true, values.isSymbolicLink != true else { continue }
+
+                let destinationURL = destinationDirectory
+                    .appendingPathComponent(sourceURL.lastPathComponent, isDirectory: false)
+                if !fileManager.fileExists(atPath: destinationURL.path) {
+                    do {
+                        try fileManager.moveItem(at: sourceURL, to: destinationURL)
+                        migratedCount += 1
+                        continue
+                    } catch where !fileManager.fileExists(atPath: sourceURL.path)
+                        && fileManager.fileExists(atPath: destinationURL.path) {
+                        // A concurrent migration completed this file first.
+                        continue
+                    }
+                }
+
+                let sourceData = try Data(contentsOf: sourceURL)
+                let destinationData = try Data(contentsOf: destinationURL)
+                if sourceData == destinationData {
+                    try fileManager.removeItem(at: sourceURL)
+                    migratedCount += 1
+                    continue
+                }
+
+                // UUID collisions can happen after a partial copy or when two
+                // legacy identities were edited independently. Preserve both
+                // bodies and assign the incoming copy a fresh identity.
+                let replacementID = UUID()
+                let replacementURL = fileURL(for: replacementID, in: canonicalWorkspaceID)
+                let replacementData: Data
+                if let sourceText = String(data: sourceData, encoding: .utf8),
+                   let parsed = try? NoteSerializer.deserialize(sourceText, format: format) {
+                    let createdAt = parsed.createdAt
+                        ?? values.creationDate
+                        ?? values.contentModificationDate
+                        ?? Date()
+                    let updatedAt = parsed.updatedAt
+                        ?? values.contentModificationDate
+                        ?? createdAt
+                    let replacement = Note(
+                        id: replacementID,
+                        workspaceID: canonicalWorkspaceID,
+                        body: parsed.body,
+                        createdAt: createdAt,
+                        updatedAt: updatedAt
+                    )
+                    replacementData = Data(NoteSerializer.serialize(replacement, format: format).utf8)
+                } else {
+                    // Keep malformed user data byte-for-byte. It remains
+                    // recoverable on disk even if the current parser cannot
+                    // display it.
+                    replacementData = sourceData
+                }
+                try replacementData.write(to: replacementURL, options: .atomic)
+                var attributes: [FileAttributeKey: Any] = [:]
+                if let creationDate = values.creationDate {
+                    attributes[.creationDate] = creationDate
+                }
+                if let modificationDate = values.contentModificationDate {
+                    attributes[.modificationDate] = modificationDate
+                }
+                if !attributes.isEmpty {
+                    try? fileManager.setAttributes(
+                        attributes,
+                        ofItemAtPath: replacementURL.path
+                    )
+                }
+                try fileManager.removeItem(at: sourceURL)
+                migratedCount += 1
+            }
+
+            if (try? fileManager.contentsOfDirectory(atPath: sourceDirectory.path).isEmpty) == true {
+                try fileManager.removeItem(at: sourceDirectory)
+            }
+            return migratedCount
+        } catch let error as NoteStoreError {
+            throw error
+        } catch {
+            throw NoteStoreError.ioFailure(error.localizedDescription)
+        }
+    }
+
     // MARK: - Mutation
 
     /// Creates a fresh note in `workspaceID` with the supplied body

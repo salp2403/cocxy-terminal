@@ -165,6 +165,14 @@ final class PreferencesViewModel: ObservableObject {
     /// Maximum suggestions shown in one correction prompt.
     @Published var commandCorrectionsMaxSuggestionsShown: Int
 
+    // MARK: - Command Blocks
+
+    /// Whether command block rails and headers are rendered in terminal surfaces.
+    @Published var commandBlocksEnabled: Bool
+
+    /// Whether command block actions stay hidden until hover or selection.
+    @Published var commandBlocksShowOnlyOnHover: Bool
+
     /// Whether the chrome theme picker should be interactive.
     ///
     /// Mirrors the runtime rule: the override only matters while the
@@ -260,6 +268,9 @@ final class PreferencesViewModel: ObservableObject {
     /// Master switch for external-agent hook forwarding from Cocxy-launched shells.
     @Published var hooksIntegrationEnabled: Bool
 
+    /// Opt-in local hook delivery diagnostics for new terminal shells.
+    @Published var hooksDebugLogEnabled: Bool
+
     /// Per-agent forwarding enablement for hook bridges.
     @Published private var hookAgents: [HookIntegrationAgent: HookIntegrationAgentConfig]
 
@@ -281,6 +292,9 @@ final class PreferencesViewModel: ObservableObject {
 
     /// `"system"` or a normalized locale identifier selected by the user.
     @Published var voiceLocaleIdentifier: String
+
+    /// Whether a transcript sent to a detected terminal agent also submits it.
+    @Published var voiceAutoSendToAgent: Bool
 
     // MARK: - Inline Completions
 
@@ -450,6 +464,8 @@ final class PreferencesViewModel: ObservableObject {
 
     /// Whether the cursor blinks, from the saved config.
     var cursorBlink: Bool { savedConfig.terminal.cursorBlink }
+    /// Whether shell input clicks move the terminal cursor.
+    @Published var cursorClickToMove: Bool
     /// Whether inline image file transfer is enabled.
     @Published var imageFileTransfer: Bool
     /// Whether sixel images are enabled.
@@ -666,6 +682,8 @@ final class PreferencesViewModel: ObservableObject {
             || appLanguage != c.appearance.appLanguage
             || uxPolishHasUnsavedChanges(comparedTo: c.uxPolish)
             || commandCorrectionsHasUnsavedChanges(comparedTo: c.commandCorrections)
+            || commandBlocksHasUnsavedChanges(comparedTo: c.commandBlocks)
+            || cursorClickToMove != c.terminal.cursorClickToMove
             || imageFileTransfer != c.terminal.imageFileTransfer
             || enableSixelImages != c.terminal.enableSixelImages
             || enableKittyImages != c.terminal.enableKittyImages
@@ -681,7 +699,7 @@ final class PreferencesViewModel: ObservableObject {
             || agentModeHasUnsavedChanges(comparedTo: c.agent)
             || vaultHasUnsavedChanges(comparedTo: c.vault)
             || hooksHasUnsavedChanges(comparedTo: c.hooks)
-            || voiceHasUnsavedChanges(comparedTo: c.voice)
+            || voiceHasUnsavedChanges(comparedTo: savedVoiceConfig)
             || completionHasUnsavedChanges(comparedTo: c.completions)
             || spotlightHasUnsavedChanges(comparedTo: c.spotlight)
             || activityHasUnsavedChanges(comparedTo: c.activity)
@@ -808,6 +826,7 @@ final class PreferencesViewModel: ObservableObject {
     /// Reverts all editable properties to the original config snapshot.
     func discardChanges() {
         let c = savedConfig
+        let voice = savedVoiceConfig
         shell = c.general.shell
         workingDirectory = c.general.workingDirectory
         confirmCloseProcess = c.general.confirmCloseProcess
@@ -842,6 +861,9 @@ final class PreferencesViewModel: ObservableObject {
         commandCorrectionsAutoShowOnFailure = c.commandCorrections.autoShowOnFailure
         commandCorrectionsShowConfidenceBadge = c.commandCorrections.showConfidenceBadge
         commandCorrectionsMaxSuggestionsShown = c.commandCorrections.maxSuggestionsShown
+        commandBlocksEnabled = c.commandBlocks.enabled
+        commandBlocksShowOnlyOnHover = c.commandBlocks.showOnlyOnHover
+        cursorClickToMove = c.terminal.cursorClickToMove
         imageFileTransfer = c.terminal.imageFileTransfer
         enableSixelImages = c.terminal.enableSixelImages
         enableKittyImages = c.terminal.enableKittyImages
@@ -868,9 +890,11 @@ final class PreferencesViewModel: ObservableObject {
         vaultSessionRetentionDays = c.vault.sessionRetentionDays
         vaultAgents = c.vault.agents
         hooksIntegrationEnabled = c.hooks.enabled
+        hooksDebugLogEnabled = c.hooks.debugLog
         hookAgents = c.hooks.agents
-        voiceEnabled = c.voice.enabled
-        voiceLocaleIdentifier = c.voice.localeIdentifier
+        voiceEnabled = voice.enabled
+        voiceLocaleIdentifier = voice.localeIdentifier
+        voiceAutoSendToAgent = voice.autoSendToAgent
         completionInlineAIEnabled = c.completions.inlineAIEnabled
         completionIdleDelaySeconds = c.completions.idleDelaySeconds
         completionMaxContextUTF16Length = c.completions.maxContextUTF16Length
@@ -949,6 +973,12 @@ final class PreferencesViewModel: ObservableObject {
     /// sections not exposed in the UI (terminal, quick-terminal, keybindings, sessions).
     /// Updated after each successful save so `hasUnsavedChanges` resets to false.
     private var savedConfig: CocxyConfig
+
+    /// Voice baseline updated independently when consent changes outside Preferences.
+    private var savedVoiceConfig: VoiceConfig
+
+    /// Internal acknowledgement state preserved by Preferences without exposing a control.
+    private var voiceConsentPrompted: Bool
 
     /// Pending keybindings applied via `applyKeybindings(_:)` but not yet
     /// persisted. When `nil` the writer emits `savedConfig.keybindings`.
@@ -1031,6 +1061,8 @@ final class PreferencesViewModel: ObservableObject {
         appLocalizationBundle: Bundle = .main
     ) {
         self.savedConfig = config
+        self.savedVoiceConfig = config.voice
+        self.voiceConsentPrompted = config.voice.consentPrompted
         self.fileProvider = fileProvider
         self.voiceLocaleResolver = voiceLocaleResolver
         self.agentSecrets = agentSecrets
@@ -1088,6 +1120,8 @@ final class PreferencesViewModel: ObservableObject {
         self.commandCorrectionsAutoShowOnFailure = config.commandCorrections.autoShowOnFailure
         self.commandCorrectionsShowConfidenceBadge = config.commandCorrections.showConfidenceBadge
         self.commandCorrectionsMaxSuggestionsShown = config.commandCorrections.maxSuggestionsShown
+        self.commandBlocksEnabled = config.commandBlocks.enabled
+        self.commandBlocksShowOnlyOnHover = config.commandBlocks.showOnlyOnHover
 
         // Agent Detection
         self.agentDetectionEnabled = config.agentDetection.enabled
@@ -1119,11 +1153,13 @@ final class PreferencesViewModel: ObservableObject {
 
         // Hook Integration
         self.hooksIntegrationEnabled = config.hooks.enabled
+        self.hooksDebugLogEnabled = config.hooks.debugLog
         self.hookAgents = config.hooks.agents
 
         // Voice Input
         self.voiceEnabled = config.voice.enabled
         self.voiceLocaleIdentifier = config.voice.localeIdentifier
+        self.voiceAutoSendToAgent = config.voice.autoSendToAgent
 
         // Inline Completions
         self.completionInlineAIEnabled = config.completions.inlineAIEnabled
@@ -1184,6 +1220,7 @@ final class PreferencesViewModel: ObservableObject {
         self.badgeOnTab = config.notifications.badgeOnTab
         self.flashTab = config.notifications.flashTab
         self.showDockBadge = config.notifications.showDockBadge
+        self.cursorClickToMove = config.terminal.cursorClickToMove
         self.imageFileTransfer = config.terminal.imageFileTransfer
         self.enableSixelImages = config.terminal.enableSixelImages
         self.enableKittyImages = config.terminal.enableKittyImages
@@ -1875,6 +1912,7 @@ final class PreferencesViewModel: ObservableObject {
         let spotlight = buildSpotlightConfigFromViewModel()
         let uxPolish = buildUXPolishConfigFromViewModel()
         let commandCorrections = buildCommandCorrectionsConfigFromViewModel()
+        let commandBlocks = buildCommandBlocksConfigFromViewModel()
         let notes = buildNotesConfigFromViewModel()
         let keybindings = (pendingKeybindings ?? savedConfig.keybindings)
             .applyingFallbackShortcut(
@@ -1916,6 +1954,7 @@ final class PreferencesViewModel: ObservableObject {
                 cursorOpacity: savedConfig.terminal.cursorOpacity,
                 mouseHideWhileTyping: savedConfig.terminal.mouseHideWhileTyping,
                 copyOnSelect: savedConfig.terminal.copyOnSelect,
+                cursorClickToMove: cursorClickToMove,
                 clipboardPasteProtection: savedConfig.terminal.clipboardPasteProtection,
                 clipboardReadAccess: savedConfig.terminal.clipboardReadAccess,
                 clipboardWriteAccess: savedConfig.terminal.clipboardWriteAccess,
@@ -1935,6 +1974,7 @@ final class PreferencesViewModel: ObservableObject {
                 idleTimeoutSeconds: idleTimeoutSeconds
             ),
             commandCorrections: commandCorrections,
+            commandBlocks: commandBlocks,
             security: savedConfig.security,
             uxPolish: uxPolish,
             agent: agent,
@@ -1974,6 +2014,7 @@ final class PreferencesViewModel: ObservableObject {
             vim: buildVimConfigFromViewModel(),
             experimental: savedConfig.experimental
         )
+        savedVoiceConfig = voice
         rateLimitEnabledProviders = Set(savedConfig.rateLimit.enabledProviders)
         rateLimitAutoDetect = savedConfig.rateLimit.autoDetect
         rateLimitOAuthRefreshIntervalMinutes = savedConfig.rateLimit.oauthRefreshIntervalMinutes
@@ -1984,6 +2025,7 @@ final class PreferencesViewModel: ObservableObject {
         vaultSessionRetentionDays = vault.sessionRetentionDays
         vaultAgents = vault.agents
         hooksIntegrationEnabled = hooks.enabled
+        hooksDebugLogEnabled = hooks.debugLog
         hookAgents = hooks.agents
         activityCostTrackingEnabled = activity.costTrackingEnabled
         activityInputCostMicrosPerMillionTokens = activity.inputCostMicrosPerMillionTokens
@@ -2000,6 +2042,7 @@ final class PreferencesViewModel: ObservableObject {
         backupMonthlyRetentionCount = backup.monthlyRetentionCount
         backupArtifactKinds = backup.artifactKinds
         voiceLocaleIdentifier = voice.localeIdentifier
+        voiceAutoSendToAgent = voice.autoSendToAgent
         completionIdleDelaySeconds = completions.idleDelaySeconds
         completionMaxContextUTF16Length = completions.maxContextUTF16Length
         completionEnabledLanguageIDs = Set(completions.enabledLanguageIDs)
@@ -2068,6 +2111,7 @@ final class PreferencesViewModel: ObservableObject {
     private func buildHookIntegrationConfigFromViewModel() -> HookIntegrationConfig {
         HookIntegrationConfig(
             enabled: hooksIntegrationEnabled,
+            debugLog: hooksDebugLogEnabled,
             agents: hookAgents
         )
     }
@@ -2079,13 +2123,35 @@ final class PreferencesViewModel: ObservableObject {
     private func buildVoiceConfigFromViewModel() -> VoiceConfig {
         VoiceConfig(
             enabled: voiceEnabled,
-            localeIdentifier: voiceLocaleIdentifier
+            localeIdentifier: voiceLocaleIdentifier,
+            autoSendToAgent: voiceAutoSendToAgent,
+            consentPrompted: voiceConsentPrompted
         )
+    }
+
+    func applyExternalVoiceConfig(_ config: VoiceConfig) {
+        let enabledChangedExternally = config.enabled != savedVoiceConfig.enabled
+        let localeWasEdited = VoiceConfig.normalizedLocaleIdentifier(voiceLocaleIdentifier)
+            != savedVoiceConfig.localeIdentifier
+        let autoSendWasEdited = voiceAutoSendToAgent != savedVoiceConfig.autoSendToAgent
+
+        savedVoiceConfig = config
+        voiceConsentPrompted = config.consentPrompted
+        if enabledChangedExternally {
+            voiceEnabled = config.enabled
+        }
+        if !localeWasEdited {
+            voiceLocaleIdentifier = config.localeIdentifier
+        }
+        if !autoSendWasEdited {
+            voiceAutoSendToAgent = config.autoSendToAgent
+        }
     }
 
     private func voiceHasUnsavedChanges(comparedTo config: VoiceConfig) -> Bool {
         voiceEnabled != config.enabled
             || VoiceConfig.normalizedLocaleIdentifier(voiceLocaleIdentifier) != config.localeIdentifier
+            || voiceAutoSendToAgent != config.autoSendToAgent
     }
 
     private func buildCommandCorrectionsConfigFromViewModel() -> CommandCorrectionsConfig {
@@ -2102,6 +2168,17 @@ final class PreferencesViewModel: ObservableObject {
 
     private func commandCorrectionsHasUnsavedChanges(comparedTo config: CommandCorrectionsConfig) -> Bool {
         buildCommandCorrectionsConfigFromViewModel() != config
+    }
+
+    private func buildCommandBlocksConfigFromViewModel() -> CommandBlocksConfig {
+        CommandBlocksConfig(
+            enabled: commandBlocksEnabled,
+            showOnlyOnHover: commandBlocksShowOnlyOnHover
+        )
+    }
+
+    private func commandBlocksHasUnsavedChanges(comparedTo config: CommandBlocksConfig) -> Bool {
+        buildCommandBlocksConfigFromViewModel() != config
     }
 
     private func buildCompletionConfigFromViewModel() -> CompletionConfig {
@@ -2444,6 +2521,7 @@ final class PreferencesViewModel: ObservableObject {
         let service = ConfigService(fileProvider: fileProvider)
         try service.reload()
         savedConfig = service.current
+        savedVoiceConfig = service.current.voice
         discardChanges()
     }
 
@@ -2677,6 +2755,7 @@ final class PreferencesViewModel: ObservableObject {
         let spotlight = buildSpotlightConfigFromViewModel()
         let uxPolish = buildUXPolishConfigFromViewModel()
         let commandCorrections = buildCommandCorrectionsConfigFromViewModel()
+        let commandBlocks = buildCommandBlocksConfigFromViewModel()
         let lsp = buildLSPConfigFromViewModel()
         let vim = buildVimConfigFromViewModel()
         let gitAssistant = buildGitAssistantSettingsFromViewModel()
@@ -2730,6 +2809,7 @@ final class PreferencesViewModel: ObservableObject {
         cursor-opacity = \(Self.tomlNumber(defaults.terminal.cursorOpacity))
         mouse-hide-while-typing = \(defaults.terminal.mouseHideWhileTyping)
         copy-on-select = \(defaults.terminal.copyOnSelect)
+        cursor-click-to-move = \(cursorClickToMove)
         clipboard-paste-protection = \(defaults.terminal.clipboardPasteProtection)
         # OSC 52 policies: prompt, allow, or deny. Reads send clipboard data
         # to the terminal program; writes replace the system clipboard.
@@ -2758,6 +2838,10 @@ final class PreferencesViewModel: ObservableObject {
         auto-show-on-failure = \(commandCorrections.autoShowOnFailure)
         show-confidence-badge = \(commandCorrections.showConfidenceBadge)
         max-suggestions-shown = \(commandCorrections.maxSuggestionsShown)
+
+        [command-blocks]
+        enabled = \(commandBlocks.enabled)
+        show-only-on-hover = \(commandBlocks.showOnlyOnHover)
 
         [security]
         require-signed-templates = \(defaults.security.requireSignedTemplates)
@@ -2802,12 +2886,15 @@ final class PreferencesViewModel: ObservableObject {
 
         [hooks]
         enabled = \(hooks.enabled)
+        debug-log = \(hooks.debugLog)
 
         \(Self.hookAgentSectionsToml(hooks.agents))
 
         [voice]
         enabled = \(voice.enabled)
         locale = "\(voice.localeIdentifier)"
+        auto-send-to-agent = \(voice.autoSendToAgent)
+        consent-prompted = \(voice.consentPrompted)
 
         [completions]
         inline-ai = \(completions.inlineAIEnabled)

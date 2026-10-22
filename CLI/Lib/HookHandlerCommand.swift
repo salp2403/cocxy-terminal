@@ -2,6 +2,7 @@
 // HookHandlerCommand.swift - Bridge between Claude Code hooks and Cocxy socket.
 
 import Foundation
+import CocxyShared
 
 // MARK: - Hook Handler Command
 
@@ -114,27 +115,65 @@ public enum HookHandlerCommand {
     ) -> CLIResult {
         // Ignore globally-installed hooks outside Cocxy shells.
         guard shouldForwardHook(environment: environment) else {
+            HookIntegrationDebugLog.append(
+                "stage=skipped reason=disabled-or-external",
+                environment: environment
+            )
             return CLIResult(exitCode: 0, stdout: "", stderr: "")
         }
 
         // Read all of stdin
         let stdinData = FileHandle.standardInput.readDataToEndOfFile()
+        writeDebugRecord(stage: "received", data: stdinData, environment: environment)
 
         let request: CLISocketRequest
         do {
             request = try buildRequest(from: stdinData, environment: environment)
         } catch {
             // Fail silently -- don't block Claude Code
+            writeDebugRecord(stage: "invalid-payload", data: stdinData, environment: environment)
             return CLIResult(exitCode: 0, stdout: "", stderr: "")
         }
 
         // Send to socket -- fail silently on connection errors
         do {
             _ = try socketClient.send(request)
+            writeDebugRecord(stage: "forwarded", data: stdinData, environment: environment)
         } catch {
             // Silently drop -- Cocxy might not be running
+            writeDebugRecord(stage: "socket-unavailable", data: stdinData, environment: environment)
         }
 
         return CLIResult(exitCode: 0, stdout: "", stderr: "")
+    }
+
+    static func debugRecord(
+        stage: String,
+        data: Data,
+        environment: [String: String]
+    ) -> String {
+        let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let source = AgentSource.detect(environment: environment, payload: payload)
+        let sourceIdentifier = source.configAgentName ?? source.rawValue
+        let event = payload?["hook_event_name"] as? String ?? "unknown"
+        let session = payload?["session_id"] as? String
+            ?? AgentSource.resolveSessionID(from: environment)
+            ?? "unknown"
+        let cwd = payload?["new_cwd"] as? String
+            ?? payload?["cwd"] as? String
+            ?? "unknown"
+        let file = payload?["file_path"] as? String ?? "none"
+        return "stage=\(stage) source=\(sourceIdentifier) event=\(event) session=\(session) cwd=\(cwd) file=\(file)"
+    }
+
+    private static func writeDebugRecord(
+        stage: String,
+        data: Data,
+        environment: [String: String]
+    ) {
+        HookIntegrationDebugLog.append(
+            debugRecord(stage: stage, data: data, environment: environment),
+            environment: environment
+        )
     }
 }

@@ -1,0 +1,79 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+
+import Foundation
+import Testing
+@testable import CocxyTerminal
+
+@MainActor
+@Suite("Aurora inline rename integration", .serialized)
+struct AuroraRenameIntegrationSwiftTestingTests {
+
+    @Test("session rename reaches TabManager and blank input restores automatic title")
+    func sessionRenameReachesDomainModel() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let tabID = controller.tabManager.tabs[0].id
+
+        controller.applyAuroraSessionRename(tabID: tabID, newTitle: "  Build Session  ")
+        #expect(controller.tabManager.tab(for: tabID)?.customTitle == "Build Session")
+        #expect(controller.tabManager.tab(for: tabID)?.displayTitle == "Build Session")
+
+        controller.applyAuroraSessionRename(tabID: tabID, newTitle: "   ")
+        #expect(controller.tabManager.tab(for: tabID)?.customTitle == nil)
+    }
+
+    @Test("workspace rename persists once by identity without copying onto tabs")
+    func workspaceRenameUsesIdentityStore() throws {
+        let suiteName = HermeticUserDefaults.suiteName()
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let titleStore = AuroraWorkspaceTitleStore(
+            defaults: defaults,
+            storageKey: "titles"
+        )
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            auroraWorkspaceTitleStore: titleStore
+        )
+        let tab = controller.tabManager.tabs[0]
+        let workspaceID = AuroraWorkspacePlanner.descriptor(
+            for: tab,
+            projectResolver: controller.projectResolver
+        ).identity
+
+        controller.applyAuroraWorkspaceRename(
+            workspaceID: workspaceID,
+            newTitle: "  Product Workspace  "
+        )
+
+        #expect(controller.auroraWorkspaceTitleStore.title(for: workspaceID) == "Product Workspace")
+        #expect(controller.tabManager.tab(for: tab.id)?.workspaceCustomTitle == nil)
+
+        controller.applyAuroraWorkspaceRename(workspaceID: workspaceID, newTitle: "")
+        #expect(controller.auroraWorkspaceTitleStore.title(for: workspaceID) == nil)
+        #expect(controller.auroraWorkspaceTitleStore.snapshot[workspaceID] == "")
+    }
+
+    @Test("windows sharing the app title store observe workspace renames immediately")
+    func windowsShareWorkspaceTitleStore() throws {
+        let suiteName = HermeticUserDefaults.suiteName()
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let titleStore = AuroraWorkspaceTitleStore(
+            defaults: defaults,
+            storageKey: "titles"
+        )
+        let first = MainWindowController(
+            bridge: MockTerminalEngine(),
+            auroraWorkspaceTitleStore: titleStore
+        )
+        let second = MainWindowController(
+            bridge: MockTerminalEngine(),
+            auroraWorkspaceTitleStore: titleStore
+        )
+
+        first.auroraWorkspaceTitleStore.setTitle("Shared Workspace", for: "/repo/shared")
+
+        #expect(first.auroraWorkspaceTitleStore === second.auroraWorkspaceTitleStore)
+        #expect(second.auroraWorkspaceTitleStore.title(for: "/repo/shared") == "Shared Workspace")
+    }
+}

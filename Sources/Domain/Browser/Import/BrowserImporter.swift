@@ -114,7 +114,6 @@ struct BrowserImporter: Sendable {
         do {
             if plan.importHistory, let historyStore {
                 var failedHistoryCount = 0
-                var lastHistoryError: String?
                 for visit in preview.history {
                     try checkCancellation()
                     do {
@@ -133,22 +132,21 @@ struct BrowserImporter: Sendable {
                         if isCancellation(error) { throw BrowserImportError.cancelled }
                         skippedCount += 1
                         failedHistoryCount += 1
-                        lastHistoryError = (error as? LocalizedError)?.errorDescription
-                            ?? String(describing: error)
+                        BrowserImportPrivacyLog.record("History write failed", error: error)
                     }
                 }
                 if failedHistoryCount > 0 {
-                    let detail = lastHistoryError.map { ": \($0)" } ?? ""
                     issues.append(issue(
                         plan,
                         sourceProfile,
-                        "Skipped \(failedHistoryCount) history visits after write failures\(detail)"
+                        "Skipped \(failedHistoryCount) history visits after write failures",
+                        kind: .historyWriteFailed(count: failedHistoryCount)
                     ))
                 }
             } else if !preview.history.isEmpty {
                 skippedCount += preview.history.count
                 if plan.importHistory {
-                    issues.append(issue(plan, sourceProfile, "Browser history storage is unavailable"))
+                    issues.append(issue(plan, sourceProfile, "Browser history storage is unavailable", kind: .storageUnavailable(.history)))
                 }
             }
 
@@ -187,13 +185,15 @@ struct BrowserImporter: Sendable {
                     } catch {
                         if isCancellation(error) { throw BrowserImportError.cancelled }
                         skippedCount += cookies.count
-                        issues.append(issue(plan, sourceProfile, "Cookie write failed: \(error)"))
+                        BrowserImportPrivacyLog.record("Cookie write failed", error: error)
+                        let stopped = BrowserImportIssueKind.cookieBatchWrite(imported: 0, total: cookies.count, uncertain: 0)
+                        issues.append(issue(plan, sourceProfile, "Cookie write failed", kind: stopped))
                     }
                 }
             } else if !preview.cookies.isEmpty {
                 skippedCount += preview.cookies.count
                 if plan.importCookies {
-                    issues.append(issue(plan, sourceProfile, "Browser cookie storage is unavailable"))
+                    issues.append(issue(plan, sourceProfile, "Browser cookie storage is unavailable", kind: .storageUnavailable(.cookies)))
                 }
             }
 
@@ -210,11 +210,11 @@ struct BrowserImporter: Sendable {
                     importedBookmarkCount += bookmarkResult.imported
                     skippedCount += bookmarkResult.skipped
                     if bookmarkResult.failed > 0 {
-                        let detail = bookmarkResult.lastError.map { ": \($0)" } ?? ""
                         issues.append(issue(
                             plan,
                             sourceProfile,
-                            "Skipped \(bookmarkResult.failed) bookmarks after write failures\(detail)"
+                            "Skipped \(bookmarkResult.failed) bookmarks after write failures",
+                            kind: .bookmarkWriteFailed(count: bookmarkResult.failed)
                         ))
                     }
                 } catch {
@@ -228,17 +228,16 @@ struct BrowserImporter: Sendable {
                             kind: .bookmarkRootConflict
                         ))
                     } else {
-                        issues.append(issue(
-                            plan,
-                            sourceProfile,
-                            "Bookmark write failed: \(error)"
-                        ))
+                        BrowserImportPrivacyLog.record("Bookmark write failed", error: error)
+                        issues.append(issue(plan, sourceProfile, "Bookmark write failed", kind: .bookmarkWriteFailed(
+                            count: preview.bookmarks.count
+                        )))
                     }
                 }
             } else if !preview.bookmarks.isEmpty {
                 skippedCount += preview.bookmarks.count
                 if plan.importBookmarks {
-                    issues.append(issue(plan, sourceProfile, "Browser bookmark storage is unavailable"))
+                    issues.append(issue(plan, sourceProfile, "Browser bookmark storage is unavailable", kind: .storageUnavailable(.bookmarks)))
                 }
             }
 
@@ -324,7 +323,8 @@ struct BrowserImporter: Sendable {
         do {
             try auditLogger?.record(entry)
         } catch {
-            issues.append(issue(plan, sourceProfile, "Import audit write failed: \(error)"))
+            BrowserImportPrivacyLog.record("Import audit write failed", error: error)
+            issues.append(issue(plan, sourceProfile, "Import audit write failed", kind: .auditWriteFailed))
             if status == .completed { status = .partial }
         }
 
@@ -347,9 +347,9 @@ struct BrowserImporter: Sendable {
         sourceProfile: String,
         sourceProfileIdentifier: String,
         store: any BrowserBookmarkStoring
-    ) throws -> (imported: Int, skipped: Int, failed: Int, lastError: String?) {
+    ) throws -> (imported: Int, skipped: Int, failed: Int) {
         try checkCancellation()
-        guard !imported.isEmpty else { return (0, 0, 0, nil) }
+        guard !imported.isEmpty else { return (0, 0, 0) }
         let existing = try store.loadAll()
         try checkCancellation()
         var pending: [BrowserBookmark] = []
@@ -439,27 +439,27 @@ struct BrowserImporter: Sendable {
         try checkCancellation()
         do {
             try store.saveBatch(pending)
-            return (sourceBookmarkIDs.count, skippedCount, 0, nil)
+            return (sourceBookmarkIDs.count, skippedCount, 0)
         } catch let error as BrowserBookmarkBatchSaveError {
             if isCancellation(error), error.savedItemIDs.isEmpty {
                 throw BrowserImportError.cancelled
             }
+            BrowserImportPrivacyLog.record("Bookmark write failed", error: error)
             let importedCount = sourceBookmarkIDs.intersection(error.savedItemIDs).count
             let failedCount = sourceBookmarkIDs.count - importedCount
             return (
                 importedCount,
                 skippedCount + failedCount,
-                failedCount,
-                error.localizedDescription
+                failedCount
             )
         } catch {
             if isCancellation(error) { throw BrowserImportError.cancelled }
+            BrowserImportPrivacyLog.record("Bookmark write failed", error: error)
             let failedCount = sourceBookmarkIDs.count
             return (
                 0,
                 skippedCount + failedCount,
-                failedCount,
-                (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+                failedCount
             )
         }
     }
@@ -503,7 +503,7 @@ struct BrowserImporter: Sendable {
         _ plan: BrowserImportPlan,
         _ sourceProfile: String,
         _ message: String,
-        kind: BrowserImportIssueKind? = nil
+        kind: BrowserImportIssueKind
     ) -> BrowserImportIssue {
         BrowserImportIssue(
             source: plan.source,

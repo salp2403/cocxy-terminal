@@ -72,12 +72,19 @@ struct CocxyCoreViewTests {
         #expect(harness.view.isFocused == false)
     }
 
-    @Test("handleShellPrompt updates IDE cursor state")
+    @Test("shell prompt and command input update distinct IDE cursor state")
     func handleShellPromptUpdatesIDECursorState() throws {
         let harness = try makeViewHarness()
         defer { harness.bridge.destroySurface(harness.surfaceID) }
 
-        harness.view.handleShellPrompt(row: 3, column: 5)
+        let promptPosition = TerminalGridPosition(screenRow: 3, absoluteRow: 3, column: 1)
+        let inputPosition = TerminalGridPosition(screenRow: 3, absoluteRow: 3, column: 5)
+        harness.view.handleShellPrompt(position: promptPosition)
+
+        #expect(harness.view.ideCursorController.promptPosition == promptPosition)
+        #expect(harness.view.ideCursorController.isOnPromptLine == false)
+
+        harness.view.handleCommandInputStarted(at: inputPosition)
 
         #expect(harness.view.ideCursorController.promptRow == 3)
         #expect(harness.view.ideCursorController.promptColumn == 5)
@@ -89,7 +96,11 @@ struct CocxyCoreViewTests {
     func moveRightAdvancesIDECursor() throws {
         let harness = try makeViewHarness()
         defer { harness.bridge.destroySurface(harness.surfaceID) }
-        harness.view.handleShellPrompt(row: 0, column: 2)
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: 0,
+            absoluteRow: 0,
+            column: 2
+        ))
 
         harness.view.moveRight(nil)
 
@@ -100,7 +111,11 @@ struct CocxyCoreViewTests {
     func moveLeftClampsAtPromptColumn() throws {
         let harness = try makeViewHarness()
         defer { harness.bridge.destroySurface(harness.surfaceID) }
-        harness.view.handleShellPrompt(row: 0, column: 2)
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: 0,
+            absoluteRow: 0,
+            column: 2
+        ))
 
         harness.view.moveLeft(nil)
 
@@ -111,7 +126,11 @@ struct CocxyCoreViewTests {
     func insertNewlineClearsPromptTracking() throws {
         let harness = try makeViewHarness()
         defer { harness.bridge.destroySurface(harness.surfaceID) }
-        harness.view.handleShellPrompt(row: 0, column: 2)
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: 0,
+            absoluteRow: 0,
+            column: 2
+        ))
         var submitCount = 0
         harness.view.onUserInputSubmitted = {
             submitCount += 1
@@ -164,7 +183,7 @@ struct CocxyCoreViewTests {
         #expect(harness.view.hasMarkedText() == true)
         #expect(harness.view.markedRange().location == 0)
         #expect(harness.view.markedRange().length == "composed".count)
-        #expect(harness.view.selectedRange().location == NSNotFound)
+        #expect(harness.view.selectedRange() == NSRange(location: 2, length: 3))
         #expect(harness.view.characterIndex(for: .zero) == 0)
         #expect(harness.view.attributedSubstring(forProposedRange: NSRange(location: 0, length: 1), actualRange: nil) == nil)
         #expect(harness.view.validAttributesForMarkedText().contains(.underlineStyle))
@@ -818,6 +837,7 @@ struct CocxyCoreViewTests {
         harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
             output.data.append(data)
         }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
 
         let firstPayload = String(repeating: "first-paste-line\n", count: 2_600)
         harness.view.clipboardService = RecordingClipboardService(readText: firstPayload)
@@ -844,15 +864,6 @@ struct CocxyCoreViewTests {
         let secondPayloadRange = try #require(text.range(of: "second-paste"))
         #expect(closeRange.lowerBound < secondOpenRange.lowerBound)
         #expect(secondOpenRange.lowerBound < secondPayloadRange.lowerBound)
-    }
-
-    @Test("terminal paste text normalizes Notes control characters")
-    func terminalPasteTextNormalizesNotesControlCharacters() {
-        let text = "alpha\rbravo\r\ncharlie\u{2028}delta\u{2029}echo\u{0000}\u{001B}[31m"
-
-        let normalized = CocxyCoreView.normalizedTerminalPasteText(text)
-
-        #expect(normalized == "alpha\nbravo\ncharlie\ndelta\necho[31m")
     }
 
     @Test("default paste chunking uses small TUI-safe chunks")
@@ -883,11 +894,14 @@ struct CocxyCoreViewTests {
         defer { harness.bridge.destroySurface(harness.surfaceID) }
         let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
         feed("alpha beta\r\n", into: state.terminal)
+        let visibleStartRow = try #require(
+            harness.bridge.terminalViewportSnapshot(for: harness.surfaceID)
+        ).visibleStartRow
         harness.bridge.setSelection(
             for: harness.surfaceID,
-            startRow: 0,
+            startRow: visibleStartRow,
             startCol: 0,
-            endRow: 0,
+            endRow: visibleStartRow,
             endCol: 4
         )
         let clipboard = RecordingClipboardService(readText: "shortcut paste\n")
@@ -901,10 +915,17 @@ struct CocxyCoreViewTests {
         harness.view.keyDown(with: makeKeyEvent(characters: "c", modifiers: [.command], keyCode: 0x08))
         #expect(clipboard.writtenText == "alpha")
 
+        harness.view.setMarkedText(
+            "draft",
+            selectedRange: NSRange(location: 5, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
         harness.view.keyDown(with: makeKeyEvent(characters: "v", modifiers: [.command], keyCode: 0x09))
         try await waitUntil {
             String(data: output.data, encoding: .utf8)?.contains("shortcut paste") == true
         }
+        #expect(harness.view.hasMarkedText() == false)
+        #expect(cocxycore_terminal_preedit_active(state.terminal) == false)
 
         harness.view.keyDown(with: makeKeyEvent(characters: "a", modifiers: [.command], keyCode: 0x00))
         harness.view.keyDown(with: makeKeyEvent(characters: "k", modifiers: [.command], keyCode: 0x28))
@@ -936,6 +957,28 @@ struct CocxyCoreViewTests {
         harness.view.insertNewline(nil)
 
         #expect(submitCount == 1)
+    }
+
+    @Test("responder arrow commands preserve application cursor mode")
+    func responderArrowsUseModeAwareEncoder() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        feed("\u{1B}[?1h", into: state.terminal)
+
+        harness.view.moveUp(nil)
+
+        let applicationCursorUp = Data([0x1B, 0x4F, 0x41])
+        try await waitUntil {
+            output.data.range(of: applicationCursorUp) != nil
+        }
+        #expect(output.data.range(of: applicationCursorUp) != nil)
     }
 
     @Test("keyDown routes printable, control, option and shift-return input")
@@ -1114,7 +1157,11 @@ struct CocxyCoreViewTests {
         harness.view.onUserInputSubmitted = {
             submitCount += 1
         }
-        harness.view.handleShellPrompt(row: 0, column: 2)
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: 0,
+            absoluteRow: 0,
+            column: 2
+        ))
 
         harness.view.keyDown(with: makeKeyEvent(characters: "", keyCode: 0x7C))
         #expect(harness.view.ideCursorController.cursorColumn == 3)
@@ -1128,20 +1175,169 @@ struct CocxyCoreViewTests {
         #expect(submitCount == 1)
     }
 
-    @Test("shell prompt at current cursor enables click-to-position arrow synthesis")
-    func shellPromptAtCurrentCursorEnablesClickToPositionArrowSynthesis() throws {
+    @Test("plain third-party OSC 133 enables single-line click-to-position")
+    func plainThirdPartyOSC133EnablesClickToPosition() throws {
         let harness = try makeViewHarness()
         defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
 
+        feed("\u{1B}]133;A\u{07}", into: state.terminal)
         harness.view.handleShellPromptAtCurrentCursor()
+        #expect(harness.view.ideCursorController.promptPosition != nil)
+        #expect(harness.view.ideCursorController.isOnPromptLine == false)
+
+        feed("\u{1B}]133;B\u{07}", into: state.terminal)
+        let inputSnapshot = try #require(
+            harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID)
+        )
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: inputSnapshot.cursorScreenRow,
+            absoluteRow: inputSnapshot.cursorAbsoluteRow,
+            column: inputSnapshot.cursorColumn
+        ))
+
+        feed("abc", into: state.terminal)
+        let snapshot = try #require(harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID))
+        #expect(snapshot.shellClickMode == 1)
+        #expect(snapshot.cursorColumn == inputSnapshot.cursorColumn + 3)
+
         let controller = harness.view.ideCursorController
         let target = CGPoint(
-            x: controller.leftPadding + controller.cellWidth * 3,
+            x: controller.leftPadding + controller.cellWidth + 1,
             y: controller.topPadding + CGFloat(controller.promptRow) * controller.cellHeight + 1
         )
 
+        #expect(controller.arrowKeysForClick(at: target, viewBounds: harness.view.bounds) == [.left, .left])
         #expect(controller.handleClickToPosition(at: target) == true)
-        #expect(controller.cursorColumn == 3)
+    }
+
+    @Test("wide input cell emits one DECCKM-aware arrow through the PTY")
+    func wideInputCellEmitsOneDECCKMAwareArrow() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+
+        feed("\u{1B}]133;A;cl=m\u{07}\u{1B}]133;B\u{07}界\u{1B}[?1h", into: state.terminal)
+        let snapshot = try #require(harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID))
+        #expect(snapshot.cursorColumn == 2)
+        #expect(snapshot.cellWidths[0] == 1)
+        #expect(snapshot.cellWidths[1] == 2)
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: snapshot.cursorScreenRow,
+            absoluteRow: snapshot.cursorAbsoluteRow,
+            column: 0
+        ))
+
+        let controller = harness.view.ideCursorController
+        let target = CGPoint(
+            x: controller.leftPadding + 1,
+            y: controller.topPadding
+                + controller.cellHeight * CGFloat(snapshot.cursorScreenRow)
+                + 1
+        )
+        let liveSnapshot = try #require(
+            harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID)
+        )
+        #expect(liveSnapshot.semanticState == 2)
+        #expect(!liveSnapshot.isAltScreen)
+        #expect(liveSnapshot.mouseTrackingMode == 0)
+        #expect(!liveSnapshot.selectionActive)
+        #expect(liveSnapshot.visibleStartRow == liveSnapshot.historyMaxVisibleStart)
+        #expect(controller.arrowKeysForClick(at: target, viewBounds: harness.view.bounds) == [.left])
+        output.data.removeAll()
+
+        let handled = controller.handleClickToPosition(at: target)
+
+        #expect(handled)
+        let expected = Data("\u{1B}OD".utf8)
+        try await waitUntil { output.data.containsSubsequence(expected) }
+        #expect(output.data == expected)
+    }
+
+    @Test("cursor click snapshot uses the live history base while scrolled back")
+    func cursorClickSnapshotUsesLiveHistoryBaseWhileScrolledBack() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        #expect(cocxycore_terminal_resize(state.terminal, 24, 4))
+        feed(numberedTerminalLines(20), into: state.terminal)
+
+        let liveSnapshot = try #require(
+            harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID)
+        )
+        #expect(liveSnapshot.historyMaxVisibleStart > 0)
+        #expect(harness.bridge.setHistoryVisibleStart(0, for: harness.surfaceID))
+
+        let scrolledSnapshot = try #require(
+            harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID)
+        )
+        #expect(scrolledSnapshot.visibleStartRow < scrolledSnapshot.historyMaxVisibleStart)
+        #expect(
+            scrolledSnapshot.cursorAbsoluteRow
+                == scrolledSnapshot.historyMaxVisibleStart
+                    + UInt32(scrolledSnapshot.cursorScreenRow)
+        )
+        #expect(
+            scrolledSnapshot.cursorAbsoluteRow
+                != scrolledSnapshot.visibleStartRow
+                    + UInt32(scrolledSnapshot.cursorScreenRow)
+        )
+        #expect(scrolledSnapshot.rows.last?.absoluteRow == scrolledSnapshot.cursorAbsoluteRow)
+    }
+
+    @Test("soft-wrapped input click emits the semantic arrow distance through the PTY")
+    func softWrappedInputClickEmitsSemanticArrowDistance() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+        #expect(cocxycore_terminal_resize(state.terminal, 24, 4))
+
+        feed("\u{1B}]133;A;cl=m\u{07}\u{1B}]133;B\u{07}", into: state.terminal)
+        let inputSnapshot = try #require(
+            harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID)
+        )
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: inputSnapshot.cursorScreenRow,
+            absoluteRow: inputSnapshot.cursorAbsoluteRow,
+            column: inputSnapshot.cursorColumn
+        ))
+        feed("abcdef", into: state.terminal)
+
+        let snapshot = try #require(harness.bridge.terminalCursorClickSnapshot(
+            for: harness.surfaceID,
+            fromAbsoluteRow: inputSnapshot.cursorAbsoluteRow
+        ))
+        #expect(snapshot.rows.count == 2)
+        #expect(snapshot.rows[0].wrapped)
+        #expect(snapshot.cursorColumn == 2)
+
+        let controller = harness.view.ideCursorController
+        let target = CGPoint(
+            x: controller.leftPadding + controller.cellWidth * 2 + 1,
+            y: controller.topPadding
+                + controller.cellHeight * CGFloat(inputSnapshot.cursorScreenRow)
+                + 1
+        )
+        output.data.removeAll()
+
+        #expect(controller.handleClickToPosition(at: target))
+        let expected = Data(String(repeating: "\u{1B}[D", count: 4).utf8)
+        try await waitUntil { output.data.containsSubsequence(expected) }
+        #expect(output.data == expected)
     }
 
     @Test("shell prompt at current cursor ignores missing surfaces")
@@ -1176,6 +1372,398 @@ struct CocxyCoreViewTests {
         harness.view.scrollWheel(with: makeScrollEvent(deltaY: 12))
         harness.view.scrollWheel(with: makeScrollEvent(deltaY: -12))
         #expect(harness.view.commandBlockOverlayView != nil)
+    }
+
+    @Test("double click selects a word and auto-copies it")
+    func doubleClickSelectsWordAndAutoCopies() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let clipboard = RecordingClipboardService(readText: nil)
+        harness.view.clipboardService = clipboard
+        feed("alpha beta", into: state.terminal)
+
+        let location = try selectionMouseLocation(row: 0, column: 1, harness: harness)
+        harness.view.mouseDown(with: makeMouseEvent(
+            type: .leftMouseDown,
+            location: location,
+            clickCount: 2
+        ))
+
+        #expect(harness.viewModel.lastClickCount == 2)
+        #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.text == "alpha")
+
+        harness.view.mouseUp(with: makeMouseEvent(
+            type: .leftMouseUp,
+            location: location,
+            clickCount: 2
+        ))
+        #expect(clipboard.writtenText == "alpha")
+    }
+
+    @Test("triple click selects every physical row in a soft-wrapped logical line")
+    func tripleClickSelectsWrappedLogicalLine() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        harness.viewModel.autoCopyOnSelect = false
+        harness.bridge.resize(
+            harness.surfaceID,
+            to: TerminalSize(columns: 4, rows: 3, pixelWidth: 80, pixelHeight: 60)
+        )
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("abcdef", into: state.terminal)
+        let visibleStart = cocxycore_terminal_history_visible_start(state.terminal)
+        #expect(cocxycore_terminal_row_wrapped(state.terminal, visibleStart))
+
+        let location = try selectionMouseLocation(row: 0, column: 1, harness: harness)
+        harness.view.mouseDown(with: makeMouseEvent(
+            type: .leftMouseDown,
+            location: location,
+            clickCount: 3
+        ))
+
+        let selection = try #require(harness.bridge.selectionSnapshot(for: harness.surfaceID))
+        #expect(harness.viewModel.lastClickCount == 3)
+        #expect(selection.active)
+        #expect(selection.startRow == visibleStart)
+        #expect(selection.endRow == visibleStart + 1)
+        #expect(selection.text == "abcdef")
+    }
+
+    @Test("Option drag selects a rectangular column band")
+    func optionDragSelectsRectangularBand() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        harness.viewModel.autoCopyOnSelect = false
+        harness.bridge.resize(
+            harness.surfaceID,
+            to: TerminalSize(columns: 6, rows: 4, pixelWidth: 120, pixelHeight: 80)
+        )
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("abcdef\r\nghijkl\r\nmnopqr", into: state.terminal)
+        let visibleStart = cocxycore_terminal_history_visible_start(state.terminal)
+
+        let start = try selectionMouseLocation(row: 0, column: 1, harness: harness)
+        let end = try selectionMouseLocation(row: 2, column: 3, harness: harness)
+        harness.view.mouseDown(with: makeMouseEvent(
+            type: .leftMouseDown,
+            location: start,
+            modifiers: [.option]
+        ))
+        harness.view.mouseDragged(with: makeMouseEvent(
+            type: .leftMouseDragged,
+            location: end
+        ))
+        harness.view.mouseUp(with: makeMouseEvent(type: .leftMouseUp, location: end))
+
+        let selection = try #require(harness.bridge.selectionSnapshot(for: harness.surfaceID))
+        #expect(selection.startRow == visibleStart)
+        #expect(selection.startCol == 1)
+        #expect(selection.endRow == visibleStart + 2)
+        #expect(selection.endCol == 3)
+        #expect(selection.text == "bcd\nhij\nnop")
+    }
+
+    @Test("local host underlines and activates engine-detected content")
+    func localHostActivatesDetectedContent() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("https://cocxy.dev\r\n", into: state.terminal)
+        let content = try #require(
+            harness.bridge.visibleDetectedContents(for: harness.surfaceID).first
+        )
+        var activated: TerminalDetectedContent?
+        harness.view.onActivateDetectedContent = {
+            activated = $0
+            return true
+        }
+        harness.view.updateTrackingAreas()
+        #expect(harness.view.trackingAreas.contains { $0.options.contains(.mouseEnteredAndExited) })
+
+        let location = try selectionMouseLocation(row: 0, column: 2, harness: harness)
+        harness.view.mouseMoved(with: makeMouseEvent(type: .mouseMoved, location: location))
+        #expect(harness.view.hoveredDetectedContent == content)
+        #expect(harness.view.detectedContentOverlayView?.hoveredContent == content)
+
+        harness.view.mouseDown(with: makeMouseEvent(
+            type: .leftMouseDown,
+            location: location,
+            modifiers: [.command]
+        ))
+        harness.view.mouseUp(with: makeMouseEvent(
+            type: .leftMouseUp,
+            location: location,
+            modifiers: [.command]
+        ))
+        #expect(activated == content)
+        #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active == false)
+
+        harness.view.mouseExited(with: makeMouseEvent(type: .mouseExited, location: location))
+        #expect(harness.view.hoveredDetectedContent == nil)
+
+        let application = NSApplication.shared
+        let oldMenu = application.mainMenu
+        let target = MenuActionTarget()
+        target.onDetectedContentHints = {
+            _ = harness.view.showDetectedContentHints()
+        }
+        let mainMenu = NSMenu(title: "Main")
+        let viewItem = NSMenuItem()
+        let viewMenu = NSMenu(title: "View")
+        let hintsItem = NSMenuItem(
+            title: "Show Content Hints",
+            action: #selector(MenuActionTarget.showDetectedContentHints(_:)),
+            keyEquivalent: ""
+        )
+        hintsItem.target = target
+        MenuKeybindingsBinder.tag(
+            hintsItem,
+            with: KeybindingActionCatalog.terminalShowDetectedContentHints
+        )
+        viewMenu.addItem(hintsItem)
+        viewItem.submenu = viewMenu
+        mainMenu.addItem(viewItem)
+        MenuKeybindingsBinder.apply(.defaults, to: mainMenu)
+        application.mainMenu = mainMenu
+        defer { application.mainMenu = oldMenu }
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        activated = nil
+        harness.view.keyDown(with: makeKeyEvent(
+            characters: "l",
+            modifiers: [.command, .shift],
+            keyCode: 37
+        ))
+        #expect(target.didInvokeDetectedContentHints)
+        #expect(harness.view.detectedContentHintSession?.hints.map(\.label) == ["A"])
+        #expect(output.data.isEmpty)
+        harness.view.keyDown(with: makeKeyEvent(characters: "a", keyCode: 0))
+        #expect(activated == content)
+        #expect(harness.view.detectedContentHintSession == nil)
+        #expect(output.data.isEmpty)
+
+        activated = nil
+        #expect(harness.view.showDetectedContentHints() == 1)
+        harness.view.keyDown(with: makeKeyEvent(characters: "\u{1B}", keyCode: 53))
+        #expect(activated == nil)
+        #expect(harness.view.detectedContentHintSession == nil)
+    }
+
+    @Test("any-event SGR tracking forwards button motion release and unbuttoned movement")
+    func anyEventSGRTrackingForwardsCompleteMouseGesture() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+        feed("\u{001B}[?1000h\u{001B}[?1002h\u{001B}[?1003h\u{001B}[?1006h", into: state.terminal)
+
+        let snapshot = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
+        #expect(snapshot.mouseTrackingMode == TerminalMouseTracking.anyEvent.rawValue)
+        #expect(snapshot.mouseEncodingMode == TerminalMouseEncoding.sgr.rawValue)
+
+        var focusRequests = 0
+        harness.view.onFocusRequested = { focusRequests += 1 }
+        harness.view.updateTrackingAreas()
+        #expect(harness.view.trackingAreas.contains { $0.options.contains(.mouseMoved) })
+
+        let press = Data("\u{001B}[<0;1;1M".utf8)
+        let drag = Data("\u{001B}[<32;1;1M".utf8)
+        let release = Data("\u{001B}[<0;1;1m".utf8)
+        let move = Data("\u{001B}[<35;1;1M".utf8)
+        let topLeftInWindow = NSPoint(x: 0, y: harness.view.bounds.maxY)
+
+        harness.view.mouseDown(with: makeMouseEvent(type: .leftMouseDown, location: topLeftInWindow))
+        try await waitUntil { output.data.containsSubsequence(press) }
+        output.data.removeAll()
+
+        harness.view.mouseDragged(with: makeMouseEvent(type: .leftMouseDragged, location: topLeftInWindow))
+        try await waitUntil { output.data.containsSubsequence(drag) }
+        output.data.removeAll()
+
+        harness.view.mouseUp(with: makeMouseEvent(type: .leftMouseUp, location: topLeftInWindow))
+        try await waitUntil { output.data.containsSubsequence(release) }
+        output.data.removeAll()
+
+        harness.view.mouseMoved(with: makeMouseEvent(type: .mouseMoved, location: topLeftInWindow))
+        try await waitUntil { output.data.containsSubsequence(move) }
+
+        harness.view.mouseMoved(with: makeMouseEvent(type: .mouseMoved, location: topLeftInWindow))
+        let nextCellInWindow = try selectionMouseLocation(row: 0, column: 1, harness: harness)
+        let nextCellMove = Data("\u{001B}[<35;2;1M".utf8)
+        harness.view.mouseMoved(with: makeMouseEvent(type: .mouseMoved, location: nextCellInWindow))
+        try await waitUntil { output.data.containsSubsequence(nextCellMove) }
+
+        var expectedMotionOutput = move
+        expectedMotionOutput.append(nextCellMove)
+
+        #expect(focusRequests == 1)
+        #expect(output.data == expectedMotionOutput)
+        #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active == false)
+    }
+
+    @Test("X10 captures release without emitting a release payload")
+    func x10ReleaseDoesNotFallThroughToSelection() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+        feed("\u{001B}[?9h", into: state.terminal)
+        let topLeftInWindow = NSPoint(x: 0, y: harness.view.bounds.maxY)
+
+        harness.view.mouseDown(with: makeMouseEvent(type: .leftMouseDown, location: topLeftInWindow))
+        let press = Data([0x1B, 0x5B, 0x4D, 0x20, 0x21, 0x21])
+        try await waitUntil { output.data.containsSubsequence(press) }
+        output.data.removeAll()
+
+        harness.view.mouseUp(with: makeMouseEvent(type: .leftMouseUp, location: topLeftInWindow))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(output.data.isEmpty)
+        #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active == false)
+    }
+
+    @Test("Shift drag selects locally while terminal mouse capture is active")
+    func shiftDragEscapesTerminalMouseCapture() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        harness.viewModel.autoCopyOnSelect = false
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+        feed("selectable text", into: state.terminal)
+        feed("\u{001B}[?1003h\u{001B}[?1006h", into: state.terminal)
+
+        harness.view.mouseDown(with: makeMouseEvent(
+            type: .leftMouseDown,
+            location: NSPoint(x: 12, y: 12),
+            modifiers: [.shift]
+        ))
+        harness.view.mouseDragged(with: makeMouseEvent(
+            type: .leftMouseDragged,
+            location: NSPoint(x: 96, y: 12),
+            modifiers: [.shift]
+        ))
+        harness.view.mouseUp(with: makeMouseEvent(
+            type: .leftMouseUp,
+            location: NSPoint(x: 96, y: 12),
+            modifiers: [.shift]
+        ))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(output.data.isEmpty)
+        #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active == true)
+    }
+
+    @Test("prompt click emits arrows only after mouse release")
+    func promptClickRepositionsOnRelease() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+        feed("\u{1B}]133;A;cl=m\u{07}\u{1B}]133;B\u{07}", into: state.terminal)
+        let inputSnapshot = try #require(
+            harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID)
+        )
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: inputSnapshot.cursorScreenRow,
+            absoluteRow: inputSnapshot.cursorAbsoluteRow,
+            column: inputSnapshot.cursorColumn
+        ))
+        feed("abc", into: state.terminal)
+        let snapshot = try #require(harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID))
+        let controller = harness.view.ideCursorController
+        let targetColumn = Int(snapshot.cursorColumn) - 2
+        let targetInView = CGPoint(
+            x: controller.leftPadding + controller.cellWidth * CGFloat(targetColumn) + 1,
+            y: controller.topPadding
+                + controller.cellHeight * CGFloat(controller.promptRow)
+                + 1
+        )
+        let targetInWindow = CGPoint(
+            x: targetInView.x,
+            y: harness.view.bounds.maxY - targetInView.y
+        )
+
+        harness.view.mouseDown(with: makeMouseEvent(type: .leftMouseDown, location: targetInWindow))
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(output.data.isEmpty)
+
+        harness.view.mouseUp(with: makeMouseEvent(type: .leftMouseUp, location: targetInWindow))
+        let expected = Data("\u{1B}[D\u{1B}[D".utf8)
+        try await waitUntil { output.data.containsSubsequence(expected) }
+        #expect(output.data.containsSubsequence(expected))
+    }
+
+    @Test("active selection at release aborts prompt cursor movement")
+    func activeSelectionAtReleaseAbortsPromptCursorMovement() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+        feed("\u{1B}]133;A;cl=m\u{07}\u{1B}]133;B\u{07}abc", into: state.terminal)
+        let snapshot = try #require(harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID))
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: snapshot.cursorScreenRow,
+            absoluteRow: snapshot.cursorAbsoluteRow,
+            column: 0
+        ))
+        let controller = harness.view.ideCursorController
+        let targetInView = CGPoint(
+            x: controller.leftPadding + controller.cellWidth + 1,
+            y: controller.topPadding + 1
+        )
+        let targetInWindow = CGPoint(
+            x: targetInView.x,
+            y: harness.view.bounds.maxY - targetInView.y
+        )
+
+        harness.view.mouseDown(with: makeMouseEvent(type: .leftMouseDown, location: targetInWindow))
+        harness.bridge.setSelection(
+            for: harness.surfaceID,
+            startRow: snapshot.cursorAbsoluteRow,
+            startCol: 0,
+            endRow: snapshot.cursorAbsoluteRow,
+            endCol: 1
+        )
+        harness.view.mouseUp(with: makeMouseEvent(type: .leftMouseUp, location: targetInWindow))
+        for _ in 0..<1_500 where harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active != true { try await Task.sleep(nanoseconds: 10_000_000) }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active == true)
+        #expect(output.data.isEmpty)
     }
 
     @Test("scroll wheel forwards events when terminal mouse mode is enabled")
@@ -1249,6 +1837,144 @@ struct CocxyCoreViewTests {
         #expect(!output.data.containsSubsequence(Data([0x1B, 0x5B, 0x4D, 0x60, 0x21, 0x21])))
     }
 
+    @Test("alt screen tracking forwards wheel input when local history is empty")
+    func altScreenTrackingForwardsWheelWhenHistoryIsEmpty() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("\u{001B}[?1049h\u{001B}[?1000h\u{001B}[?1006h", into: state.terminal)
+        harness.view.prefersLocalScrollInMouseTrackingMode = { true }
+
+        let snapshot = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
+        #expect(snapshot.isAltScreen == true)
+        #expect(snapshot.historyMaxVisibleStart == 0)
+        #expect(snapshot.mouseTrackingMode > 0)
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 24))
+
+        let expected = Data("\u{001B}[<64;1;1M".utf8)
+        try await waitUntil {
+            output.data.containsSubsequence(expected)
+        }
+        #expect(output.data.containsSubsequence(expected))
+    }
+
+    @Test("alternate scroll emits DECCKM application arrows through the PTY")
+    func alternateScrollEmitsDECCKMApplicationArrows() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+
+        feed("\u{001B}[?1049h\u{001B}[?1h", into: state.terminal)
+        let snapshot = try #require(
+            harness.bridge.terminalViewportSnapshot(for: harness.surfaceID)
+        )
+        #expect(snapshot.isAltScreen)
+        #expect(snapshot.alternateScrollMode)
+        #expect(snapshot.mouseTrackingMode == 0)
+
+        output.data.removeAll()
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 7))
+        let up = Data("\u{001B}OA".utf8)
+        try await waitUntil { output.data.containsSubsequence(up) }
+        #expect(output.data == up)
+
+        output.data.removeAll()
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: -7))
+        let down = Data("\u{001B}OB".utf8)
+        try await waitUntil { output.data.containsSubsequence(down) }
+        #expect(output.data == down)
+    }
+
+    @Test("shift forwards wheel input when local history is available")
+    func shiftForwardsWheelWhenHistoryIsAvailable() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+        feed(numberedTerminalLines(100), into: state.terminal)
+        feed("\u{001B}[?1000h\u{001B}[?1006h", into: state.terminal)
+        harness.view.prefersLocalScrollInMouseTrackingMode = { true }
+
+        let snapshot = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
+        #expect(snapshot.historyMaxVisibleStart > 0)
+        #expect(snapshot.mouseTrackingMode > 0)
+
+        output.data.removeAll()
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 24, modifiers: [.shift]))
+
+        let expected = Data("\u{001B}[<64;1;1M".utf8)
+        try await waitUntil {
+            output.data.containsSubsequence(expected)
+        }
+        #expect(output.data.containsSubsequence(expected))
+    }
+
+    @Test("shift scrolls the main-screen viewport when tracking is disabled")
+    func shiftScrollsMainScreenWithoutTracking() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed(numberedTerminalLines(100), into: state.terminal)
+
+        let snapshot = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
+        #expect(snapshot.isAltScreen == false)
+        #expect(snapshot.mouseTrackingMode == 0)
+        #expect(snapshot.historyMaxVisibleStart > 0)
+        #expect(snapshot.visibleStartRow == snapshot.historyMaxVisibleStart)
+
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 120, modifiers: [.shift]))
+
+        let after = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
+        #expect(after < snapshot.visibleStartRow)
+    }
+
+    @Test("scroll wheel is a clean no-op when neither history nor tracking is available")
+    func scrollWheelIsNoOpWithoutDestination() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+        feed("\u{001B}[3J", into: state.terminal)
+        let before = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
+        #expect(before.historyMaxVisibleStart == 0)
+        #expect(before.mouseTrackingMode == 0)
+
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 24))
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        let after = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
+        #expect(output.data.isEmpty)
+        #expect(after.visibleStartRow == before.visibleStartRow)
+        #expect(after.historyMaxVisibleStart == before.historyMaxVisibleStart)
+    }
+
     @Test("active agent scroll uses local viewport when terminal mouse mode is enabled")
     func activeAgentScrollUsesLocalViewportInMouseMode() throws {
         let harness = try makeViewHarness()
@@ -1288,6 +2014,79 @@ struct CocxyCoreViewTests {
 
         let after = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
         #expect(after < before)
+    }
+
+    @Test("local viewport keyboard commands reach both history bounds")
+    func localViewportKeyboardCommandsReachHistoryBounds() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed(numberedTerminalLines(100), into: state.terminal)
+        let bottom = cocxycore_terminal_history_max_visible_start(state.terminal)
+        #expect(bottom > 0)
+
+        harness.view.performLocalViewportScroll(.top)
+        #expect(harness.bridge.historyVisibleStart(for: harness.surfaceID) == 0)
+        #expect(harness.view.historyPillView?.linesAbove == bottom)
+        #expect(harness.view.historyPillView?.isHidden == false)
+
+        harness.view.performLocalViewportScroll(.bottom)
+        #expect(harness.bridge.historyVisibleStart(for: harness.surfaceID) == bottom)
+        #expect(harness.view.historyPillView?.linesAbove == 0)
+        #expect(harness.view.historyPillView?.isHidden == true)
+    }
+
+    @Test("Shift+PageUp scrolls locally without writing the shortcut to the PTY")
+    func shiftPageUpScrollsLocallyWithoutPTYBytes() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed(numberedTerminalLines(100), into: state.terminal)
+        feed("\u{001B}[?1000h\u{001B}[?1006h", into: state.terminal)
+        let before = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
+
+        let application = NSApplication.shared
+        let oldMenu = application.mainMenu
+        let target = MenuActionTarget()
+        target.onTerminalScroll = {
+            harness.view.performLocalViewportScroll(.pageUp)
+        }
+        let mainMenu = NSMenu(title: "Main")
+        let viewItem = NSMenuItem()
+        let viewMenu = NSMenu(title: "View")
+        let scrollItem = NSMenuItem(
+            title: "Scroll Terminal Page Up",
+            action: #selector(MenuActionTarget.scrollTerminalPageUp(_:)),
+            keyEquivalent: ""
+        )
+        scrollItem.target = target
+        MenuKeybindingsBinder.tag(scrollItem, with: KeybindingActionCatalog.terminalScrollPageUp)
+        viewMenu.addItem(scrollItem)
+        viewItem.submenu = viewMenu
+        mainMenu.addItem(viewItem)
+        application.mainMenu = mainMenu
+        defer { application.mainMenu = oldMenu }
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        let pageUpCharacter = String(Character(UnicodeScalar(NSPageUpFunctionKey)!))
+
+        harness.view.keyDown(with: makeKeyEvent(
+            characters: pageUpCharacter,
+            modifiers: [.shift],
+            keyCode: 116
+        ))
+        for _ in 0..<1_500 where (harness.bridge.historyVisibleStart(for: harness.surfaceID) ?? before) >= before { try await Task.sleep(nanoseconds: 10_000_000) }
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        let after = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
+        #expect(after < before)
+        #expect(target.didInvokeTerminalScroll == true)
+        #expect(output.data.isEmpty)
     }
 
     @Test("selection highlight remains anchored after local history scroll")
@@ -1400,8 +2199,8 @@ struct CocxyCoreViewTests {
         #expect(handledPayload == payload)
     }
 
-    @Test("command block overlay restores rows and routes actions")
-    func commandBlockOverlayRestoresRowsAndRoutesActions() async throws {
+    @Test("restored command blocks stay hidden without live row mapping and route actions")
+    func restoredCommandBlocksStayHiddenAndRouteActions() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")
         defer { harness.bridge.destroySurface(harness.surfaceID) }
         let clipboard = RecordingClipboardService(readText: nil)
@@ -1432,8 +2231,8 @@ struct CocxyCoreViewTests {
         harness.view.refreshCommandBlockOverlay()
 
         let overlay = try #require(harness.view.commandBlockOverlayView)
-        #expect(overlay.isHidden == false)
-        #expect(overlay.subviews.isEmpty == false)
+        #expect(overlay.isHidden)
+        #expect(overlay.subviews.isEmpty)
 
         overlay.onCopyBlockOutput?(block)
         #expect(clipboard.writtenText == "overlay output")
@@ -1455,6 +2254,134 @@ struct CocxyCoreViewTests {
 
         overlay.onToggleBookmark?(block)
         #expect(toggledIDs == [41])
+    }
+
+    @Test("command block overlay caches metadata but always refreshes row mappings")
+    func commandBlockOverlayCachesDataAcrossGeometryRefreshes() throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed(
+            "\u{001B}]133;A\u{0007}\u{001B}]133;B\u{0007}echo cached-overlay\r\n" +
+                "\u{001B}]133;C\u{0007}cached output\r\n\u{001B}]133;D;0\u{0007}",
+            into: state.terminal
+        )
+        var restoredReadCount = 0
+        var metadataReadCount = 0
+        var rowMappingCount = 0
+        harness.view.restoredCommandBlocksProvider = {
+            restoredReadCount += 1
+            return []
+        }
+        harness.bridge.commandBlockMetadataLoadObserver = { metadataReadCount += 1 }
+        harness.bridge.commandBlockVisibleRowMapObserver = { _ in rowMappingCount += 1 }
+
+        harness.view.invalidateCommandBlockOverlayData()
+        let reloadCount = harness.view.commandBlockDataReloadCount
+        let providerReadCount = restoredReadCount
+        let cachedMetadataReadCount = metadataReadCount
+        let initialRowMappingCount = rowMappingCount
+
+        harness.view.refreshCommandBlockOverlay()
+        #expect(rowMappingCount == initialRowMappingCount + 2)
+        harness.view.refreshCommandBlockOverlay()
+
+        #expect(harness.view.commandBlockDataReloadCount == reloadCount)
+        #expect(restoredReadCount == providerReadCount)
+        #expect(metadataReadCount == cachedMetadataReadCount)
+        #expect(rowMappingCount == initialRowMappingCount + 4)
+
+        harness.view.setNeedsTerminalDisplay()
+        harness.view.refreshCommandBlockOverlay()
+
+        #expect(harness.view.commandBlockDataReloadCount == reloadCount)
+        #expect(restoredReadCount == providerReadCount)
+        #expect(metadataReadCount == cachedMetadataReadCount)
+        #expect(rowMappingCount == initialRowMappingCount + 6)
+
+        feed(
+            "\u{001B}]133;A\u{0007}\u{001B}]133;B\u{0007}echo marker\r\n" +
+                "\u{001B}]133;C\u{0007}marker\r\n\u{001B}]133;D;0\u{0007}",
+            into: state.terminal
+        )
+        harness.view.refreshCommandBlockOverlay()
+
+        #expect(harness.view.commandBlockDataReloadCount == reloadCount + 1)
+        #expect(restoredReadCount == providerReadCount + 1)
+        #expect(metadataReadCount > cachedMetadataReadCount)
+        #expect(rowMappingCount > initialRowMappingCount + 6)
+    }
+
+    @Test("command block dismissal survives alternate screen and resets on teardown")
+    func commandBlockDismissalSurvivesAlternateScreen() throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let block = makeCommandBlock(
+            id: 52,
+            command: "dismissed-overlay",
+            output: "dismissed output",
+            startRow: 0,
+            endRow: 1
+        )
+        harness.view.restoredCommandBlocksProvider = { [block] }
+        let overlay = try #require(harness.view.commandBlockOverlayView)
+        overlay.update(
+            blocks: [block],
+            visibleStartRow: 0,
+            visibleRowCount: 24,
+            cellHeight: 16,
+            padding: .zero,
+            showOnlyOnHover: false
+        )
+        #expect(overlay.dismissAllVisible() == 1)
+        #expect(overlay.dismissedBlockIDs == [52])
+
+        feed("\u{001B}[?1049h", into: state.terminal)
+        harness.view.updateInteractionMetrics()
+        #expect(overlay.isHidden)
+        #expect(overlay.dismissedBlockIDs == [52])
+
+        feed("\u{001B}[?1049l", into: state.terminal)
+        harness.view.updateInteractionMetrics()
+        #expect(overlay.isHidden)
+        #expect(overlay.dismissedBlockIDs == [52])
+
+        harness.view.resetCommandBlockOverlayForSurfaceTeardown()
+        #expect(overlay.dismissedBlockIDs.isEmpty)
+    }
+
+    @Test("command block configuration disables rendering without loading data")
+    func commandBlockConfigurationControlsRuntimeRendering() throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed(
+            "\u{001B}]133;A\u{0007}\u{001B}]133;B\u{0007}configured-overlay\r\n" +
+                "\u{001B}]133;C\u{0007}configured output\r\n\u{001B}]133;D;0\u{0007}",
+            into: state.terminal
+        )
+        harness.view.invalidateCommandBlockOverlayData()
+
+        let overlay = try #require(harness.view.commandBlockOverlayView)
+        #expect(!overlay.isHidden)
+        let enabledReloadCount = harness.view.commandBlockDataReloadCount
+
+        harness.view.updateCommandBlockOverlayConfiguration(
+            CommandBlocksConfig(enabled: false, showOnlyOnHover: true)
+        )
+        harness.view.setNeedsTerminalDisplay()
+        harness.view.refreshCommandBlockOverlay()
+
+        #expect(overlay.isHidden)
+        #expect(harness.view.commandBlockDataReloadCount == enabledReloadCount)
+
+        harness.view.updateCommandBlockOverlayConfiguration(
+            CommandBlocksConfig(enabled: true, showOnlyOnHover: false)
+        )
+
+        #expect(!overlay.isHidden)
+        #expect(harness.view.commandBlockDataReloadCount == enabledReloadCount + 1)
     }
 
     @Test("Option-generated printable characters are sent as literal text")
@@ -1539,9 +2466,23 @@ private final class RecordingClipboardService: ClipboardServiceProtocol {
 @MainActor
 private final class MenuActionTarget: NSObject {
     private(set) var didInvoke = false
+    private(set) var didInvokeTerminalScroll = false
+    private(set) var didInvokeDetectedContentHints = false
+    var onTerminalScroll: (() -> Void)?
+    var onDetectedContentHints: (() -> Void)?
 
     @objc func toggleCodeReview(_ sender: Any?) {
         didInvoke = true
+    }
+
+    @objc func scrollTerminalPageUp(_ sender: Any?) {
+        didInvokeTerminalScroll = true
+        onTerminalScroll?()
+    }
+
+    @objc func showDetectedContentHints(_ sender: Any?) {
+        didInvokeDetectedContentHints = true
+        onDetectedContentHints?()
     }
 }
 
@@ -1622,21 +2563,38 @@ private func makeViewHarness(command: String = "/bin/cat") throws -> ViewHarness
     )
 }
 
-private func makeRawCatScript() throws -> (rootDirectory: URL, scriptURL: URL) {
+@MainActor
+private func awaitRawPTYReady(
+    at readyFileURL: URL,
+    output: TestDataSink
+) async throws {
+    try await waitUntil {
+        FileManager.default.fileExists(atPath: readyFileURL.path)
+    }
+    output.data.removeAll()
+}
+
+private func makeRawCatScript() throws -> (
+    rootDirectory: URL,
+    scriptURL: URL,
+    readyFileURL: URL
+) {
     let rootDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("cocxy-raw-cat-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
     let scriptURL = rootDirectory.appendingPathComponent("raw-cat.sh", isDirectory: false)
+    let readyFileURL = rootDirectory.appendingPathComponent("ready", isDirectory: false)
     try """
     #!/bin/sh
     stty raw -echo
+    : > "$(dirname "$0")/ready"
     exec /bin/cat
     """.write(to: scriptURL, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes(
         [.posixPermissions: 0o755],
         ofItemAtPath: scriptURL.path
     )
-    return (rootDirectory, scriptURL)
+    return (rootDirectory, scriptURL, readyFileURL)
 }
 
 private func makeKeyEvent(
@@ -1664,12 +2622,27 @@ private func makeKeyEvent(
 private func makeMouseEvent(
     type: NSEvent.EventType,
     location: NSPoint,
+    modifiers: NSEvent.ModifierFlags = [],
     clickCount: Int = 1
 ) -> NSEvent {
-    NSEvent.mouseEvent(
+    if type == .mouseEntered || type == .mouseExited {
+        return NSEvent.enterExitEvent(
+            with: type,
+            location: location,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 1,
+            trackingNumber: 1,
+            userData: nil
+        )!
+    }
+
+    return NSEvent.mouseEvent(
         with: type,
         location: location,
-        modifierFlags: [],
+        modifierFlags: modifiers,
         timestamp: 0,
         windowNumber: 0,
         context: nil,
@@ -1679,7 +2652,31 @@ private func makeMouseEvent(
     )!
 }
 
-private func makeScrollEvent(deltaY: CGFloat) -> NSEvent {
+@MainActor
+private func selectionMouseLocation(
+    row: UInt16,
+    column: UInt16,
+    harness: ViewHarness
+) throws -> NSPoint {
+    let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+    var metrics = cocxycore_font_metrics()
+    #expect(cocxycore_terminal_get_font_metrics(state.terminal, &metrics))
+    let scale = harness.view.window?.backingScaleFactor
+        ?? NSScreen.main?.backingScaleFactor
+        ?? 2.0
+    let cellWidth = CGFloat(metrics.cell_width) / scale
+    let cellHeight = CGFloat(metrics.cell_height) / scale
+    let viewY = harness.bridge.configuredPaddingY + (CGFloat(row) + 0.25) * cellHeight
+    return NSPoint(
+        x: harness.bridge.configuredPaddingX + (CGFloat(column) + 0.25) * cellWidth,
+        y: harness.view.bounds.maxY - viewY
+    )
+}
+
+private func makeScrollEvent(
+    deltaY: CGFloat,
+    modifiers: NSEvent.ModifierFlags = []
+) -> NSEvent {
     let event = CGEvent(
         scrollWheelEvent2Source: nil,
         units: .pixel,
@@ -1688,6 +2685,12 @@ private func makeScrollEvent(deltaY: CGFloat) -> NSEvent {
         wheel2: 0,
         wheel3: 0
     )!
+    var flags: CGEventFlags = []
+    if modifiers.contains(.shift) { flags.insert(.maskShift) }
+    if modifiers.contains(.control) { flags.insert(.maskControl) }
+    if modifiers.contains(.option) { flags.insert(.maskAlternate) }
+    if modifiers.contains(.command) { flags.insert(.maskCommand) }
+    event.flags = flags
     event.location = NSPoint(x: 10, y: 10)
     return NSEvent(cgEvent: event)!
 }
@@ -1728,6 +2731,8 @@ private func makeCommandBlock(
         durationNs: 100,
         startRow: startRow,
         endRow: endRow,
+        visibleStartRow: startRow,
+        visibleEndRow: endRow,
         streamID: 1,
         blockType: 3
     )

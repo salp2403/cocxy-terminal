@@ -1,71 +1,90 @@
+/* Design tokens. Colors resolve per color-scheme through light-dark():
+   the page follows the system appearance until the visitor picks a theme,
+   which theme-switcher.js stores as data-theme on the root element. */
+
 :root {
-  /* Catppuccin Mocha base palette (dark default) */
-  --crust: #101018;
-  --mantle: #171722;
-  --base: #202030;
-  --surface-0: #2c2d3d;
-  --surface-1: #424457;
-  --surface-2: #5b5e72;
-  --overlay-0: #777b90;
-  --subtext-0: #aab0c6;
-  --subtext-1: #c2c8de;
-  --text: #eef1ff;
-  --blue: #8ab4ff;
-  --green: #9fe3a5;
-  --peach: #f4b184;
-  --yellow: #eed78e;
-  --red: #f08aa4;
-  --teal: #89d9d0;
-  --lavender: #b7c2ff;
+  color-scheme: light dark;
 
-  /* Semantic surface colors */
-  --color-bg: var(--crust);
-  --color-panel: rgba(24, 24, 36, 0.76);
-  --color-panel-solid: #1b1c29;
-  --color-border: rgba(180, 190, 254, 0.17);
-  --color-border-strong: rgba(138, 180, 255, 0.36);
-  --color-fg: var(--text);
-  --color-muted: var(--subtext-0);
-  --color-faint: var(--overlay-0);
-  --color-accent: var(--blue);
-  --color-accent-2: var(--green);
-  --color-accent-3: var(--peach);
+  /* Surfaces */
+  --bg: light-dark(#ffffff, #0b0c10);
+  --bg-band: light-dark(#f5f5f7, #101217);
+  --surface: light-dark(#ffffff, #15171d);
+  --surface-2: light-dark(#f0f1f4, #1b1e25);
+  --surface-sunken: light-dark(#ebecf0, #07080b);
 
-  /* Brand identifiers */
-  --brand-blue: var(--blue);
-  --brand-green: var(--green);
-  --brand-orange: var(--peach);
-  --brand-teal: var(--teal);
+  /* Text: every pair clears WCAG AA on --bg and --bg-band */
+  --fg: light-dark(#1d1d1f, #f4f5f7);
+  --fg-2: light-dark(#515866, #aeb4c1);
+  --fg-3: light-dark(#636979, #8b92a1);
 
-  /* Typography family */
-  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* Hairlines */
+  --line: light-dark(rgb(0 0 0 / 0.09), rgb(255 255 255 / 0.09));
+  --line-strong: light-dark(rgb(0 0 0 / 0.16), rgb(255 255 255 / 0.17));
 
-  /* Typography scale (fixed) */
-  --fs-xs: 0.75rem;
-  --fs-sm: 0.875rem;
-  --fs-base: 1rem;
-  --fs-md: 1.125rem;
-  --fs-lg: 1.25rem;
-  --fs-xl: 1.5rem;
-  --fs-2xl: 2rem;
-  --fs-3xl: 2.7rem;
+  /* Accent and the agent state language shared with the app */
+  --accent: light-dark(#0b5fd8, #7fb2ff);
+  --accent-hover: light-dark(#0a52bb, #9cc3ff);
+  --on-accent: light-dark(#ffffff, #051024);
+  --accent-soft: light-dark(rgb(11 95 216 / 0.09), rgb(127 178 255 / 0.13));
+  --working: light-dark(#0b5fd8, #7fb2ff);
+  --waiting: light-dark(#a15c00, #ffbd59);
+  --done: light-dark(#157a47, #6ee7a0);
+  --idle: var(--fg-3);
 
-  /* Responsive typography scale (fixed breakpoint steps) */
-  --fs-fluid-3xl: 2.4rem;
-  --fs-fluid-2xl: 1.7rem;
-  --fs-fluid-xl: 1.3rem;
+  /* Terminal island: dark in both appearances */
+  --term-bg: #0f1116;
+  --term-bar: #171a21;
+  --term-fg: #e6e8ee;
+  --term-dim: #9aa1b0;
+  --term-accent: #8fbcff;
+  --term-ok: #7ee2a8;
+  --term-line: rgb(255 255 255 / 0.1);
 
-  /* Letter-spacing tracking */
-  --tracking-tight: 0;
-  --tracking-normal: 0;
-  --tracking-wide: 0.04em;
+  /* Materials */
+  --glass: light-dark(rgb(255 255 255 / 0.72), rgb(22 24 30 / 0.66));
+  --glass-nav: light-dark(rgb(255 255 255 / 0.8), rgb(11 12 16 / 0.72));
+  --glass-edge: light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.08));
+  --glass-blur: blur(20px) saturate(180%);
 
-  /* Line heights */
-  --lh-tight: 1.12;
-  --lh-normal: 1.6;
+  /* Aurora wash behind product shots, tinted with the state colors */
+  --aurora-1: light-dark(rgb(11 95 216 / 0.14), rgb(127 178 255 / 0.2));
+  --aurora-2: light-dark(rgb(21 122 71 / 0.1), rgb(110 231 160 / 0.08));
+  --aurora-3: light-dark(rgb(161 92 0 / 0.08), rgb(255 189 89 / 0.06));
 
-  /* Spacing scale */
+  /* Depth */
+  --icon-edge: light-dark(rgb(0 0 0 / 0.12), rgb(255 255 255 / 0.3));
+  --shadow-color: light-dark(rgb(16 24 40 / 0.1), rgb(0 0 0 / 0.5));
+  --shadow-deep: light-dark(rgb(16 24 40 / 0.22), rgb(0 0 0 / 0.7));
+  --shadow-sm: 0 1px 2px var(--shadow-color);
+  --shadow-md: 0 1px 2px var(--shadow-color), 0 12px 28px -10px var(--shadow-color);
+  --shadow-window: 0 0 0 1px var(--line), 0 2px 4px var(--shadow-color), 0 28px 60px -18px var(--shadow-deep), 0 60px 120px -40px var(--shadow-color);
+
+  /* Typography: the system face carries optical sizing and tracking tables on Apple platforms */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-hero: clamp(2.5rem, 1.45rem + 4.1vw, 4.625rem);
+  --text-title: clamp(2rem, 1.4rem + 2.6vw, 3.375rem);
+  --text-heading: clamp(1.3125rem, 1.15rem + 0.7vw, 1.75rem);
+  --text-lede: clamp(1.1875rem, 1.08rem + 0.45vw, 1.4375rem);
+  --text-body: 1.0625rem;
+  --text-small: 0.9375rem;
+  --text-caption: 0.8125rem;
+
+  --track-hero: -0.032em;
+  --track-title: -0.03em;
+  --track-heading: -0.02em;
+  --track-lede: -0.012em;
+  --track-body: -0.006em;
+  --track-caption: 0.01em;
+
+  --leading-hero: 1.02;
+  --leading-title: 1.07;
+  --leading-heading: 1.18;
+  --leading-body: 1.55;
+
+  /* Spacing */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -76,122 +95,50 @@
   --space-10: 2.5rem;
   --space-12: 3rem;
   --space-16: 4rem;
+  --space-section: clamp(4.5rem, 2.8rem + 6vw, 8.5rem);
+  --gutter: clamp(1rem, 0.6rem + 1.8vw, 2rem);
+  --container: 1200px;
+  --container-narrow: 760px;
+  --header-height: 3.5rem;
+  --tap: 2.75rem;
 
-  /* Border radii */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-  --radius-2xl: 20px;
-  --radius-pill: 999px;
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 26px;
+  --radius-window: 12px;
 
-  /* Elevation shadows */
-  --shadow-1: 0 8px 26px rgba(0, 0, 0, 0.22);
-  --shadow-2: 0 22px 70px rgba(0, 0, 0, 0.34);
-  --shadow-3: 0 36px 120px rgba(0, 0, 0, 0.42);
-  --shadow-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-
-  /* Glow halos */
-  --glow-soft: 0 0 24px rgba(137, 180, 255, 0.18);
-  --glow-strong: 0 0 36px rgba(137, 180, 255, 0.36);
-  --glow-success: 0 0 28px rgba(159, 227, 165, 0.30);
-  --glow-warn: 0 0 28px rgba(244, 177, 132, 0.30);
-  --glow-accent: 0 0 28px rgba(137, 180, 255, 0.28);
-
-  /* Liquid Glass intensity */
-  --glass-blur: 24px;
-  --glass-blur-strong: 36px;
-  --glass-blur-subtle: 12px;
-  --glass-saturate: 145%;
-  --glass-saturate-strong: 160%;
-  --glass-saturate-subtle: 120%;
-  --glass-tint-mix: 15%;
-  --glass-sheen: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.06) 50%, transparent 70%);
-
-  /* Gradient stops */
-  --grad-hero-mesh-1: rgba(137, 180, 255, 0.10);
-  --grad-hero-mesh-2: rgba(159, 227, 165, 0.07);
-  --grad-hero-mesh-3: rgba(244, 177, 132, 0.05);
-  --grad-button-primary: linear-gradient(135deg, var(--color-accent) 0%, color-mix(in srgb, var(--color-accent) 70%, var(--color-accent-2)) 100%);
-  --grad-section-band: radial-gradient(ellipse at 50% 0%, rgba(137, 180, 255, 0.04), transparent 60%);
-  --grad-text-accent: linear-gradient(135deg, var(--color-fg), color-mix(in srgb, var(--color-fg) 60%, var(--color-accent)));
-
-  /* Container */
-  --container: 1180px;
-
-  /* Motion easings */
-  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in: cubic-bezier(0.4, 0, 1, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-
-  /* Motion durations */
-  --dur: 180ms;
-  --dur-fast: 120ms;
-  --dur-base: 180ms;
-  --dur-slow: 320ms;
-  --dur-slower: 600ms;
-  --dur-ambient: 24s;
-
-  /* Z-index layers */
-  --z-base: 0;
-  --z-overlay: 10;
-  --z-sticky: 50;
-  --z-modal: 100;
-  --z-skip-link: 999;
+  /* Motion: critically damped curves, no overshoot */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-press: 110ms;
+  --dur-quick: 180ms;
+  --dur-base: 260ms;
+  --dur-reveal: 700ms;
 }
 
 :root[data-theme="light"] {
-  --crust: #fafbff;
-  --mantle: #f0f3fb;
-  --base: #ffffff;
-  --surface-0: #e6e9f3;
-  --surface-1: #cfd5e5;
-  --surface-2: #9aa3b8;
-  --overlay-0: #697287;
-  --subtext-0: #526078;
-  --subtext-1: #344057;
-  --text: #121827;
-  --color-bg: #fafbff;
-  --color-panel: rgba(255, 255, 255, 0.82);
-  --color-panel-solid: #ffffff;
-  --color-border: rgba(42, 62, 100, 0.18);
-  --color-border-strong: rgba(54, 99, 190, 0.32);
-  --color-accent: #315fcd;
-  --color-accent-2: #187a45;
-  --color-accent-3: #a45a20;
-  --brand-blue: #315fcd;
-  --brand-green: #187a45;
-  --brand-orange: #a45a20;
-  --brand-teal: #1b837a;
-
-  /* Light theme overrides for new tokens */
-  --glow-soft: 0 0 24px rgba(49, 95, 205, 0.16);
-  --glow-strong: 0 0 36px rgba(49, 95, 205, 0.28);
-  --glow-success: 0 0 28px rgba(24, 122, 69, 0.22);
-  --glow-warn: 0 0 28px rgba(164, 90, 32, 0.24);
-  --glow-accent: 0 0 28px rgba(49, 95, 205, 0.22);
-  --grad-hero-mesh-1: rgba(49, 95, 205, 0.08);
-  --grad-hero-mesh-2: rgba(24, 122, 69, 0.06);
-  --grad-hero-mesh-3: rgba(164, 90, 32, 0.05);
-  --grad-section-band: radial-gradient(ellipse at 50% 0%, rgba(49, 95, 205, 0.05), transparent 60%);
-  --glass-sheen: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.50) 50%, transparent 70%);
-  --shadow-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  color-scheme: light;
 }
 
-@media (min-width: 760px) {
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@media (prefers-contrast: more) {
   :root {
-    --fs-fluid-3xl: 3.2rem;
-    --fs-fluid-2xl: 2.1rem;
-    --fs-fluid-xl: 1.45rem;
+    --fg-2: light-dark(#30343d, #d3d7df);
+    --fg-3: light-dark(#474c58, #b9bfca);
+    --line: light-dark(rgb(0 0 0 / 0.3), rgb(255 255 255 / 0.32));
+    --line-strong: light-dark(rgb(0 0 0 / 0.5), rgb(255 255 255 / 0.5));
   }
 }
 
-@media (min-width: 1200px) {
+@media (prefers-reduced-transparency: reduce) {
   :root {
-    --fs-fluid-3xl: 4rem;
-    --fs-fluid-2xl: 2.5rem;
-    --fs-fluid-xl: 1.6rem;
+    --glass: var(--surface);
+    --glass-nav: var(--bg);
+    --glass-blur: none;
   }
 }

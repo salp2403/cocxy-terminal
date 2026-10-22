@@ -75,11 +75,19 @@ struct RemoteSessionListView: View {
 
     @ObservedObject var viewModel: RemoteSessionListViewModel
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    var onAttachSession: ((TmuxSessionInfo) -> Bool)?
+    @State private var errorMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             headerSection
             createSessionSection
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             sessionListSection
         }
         .padding(16)
@@ -124,11 +132,11 @@ struct RemoteSessionListView: View {
             )
                 .textFieldStyle(.roundedBorder)
                 .onSubmit {
-                    Task { try? await viewModel.createSession() }
+                    createSession()
                 }
 
             Button(localized("common.create", fallback: "Create")) {
-                Task { try? await viewModel.createSession() }
+                createSession()
             }
             .disabled(viewModel.newSessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
@@ -190,6 +198,27 @@ struct RemoteSessionListView: View {
 
             Spacer()
 
+            if let onAttachSession {
+                Button(action: {
+                    if onAttachSession(session) {
+                        errorMessage = nil
+                    } else {
+                        errorMessage = localized(
+                            "remoteWorkspace.sessions.attach.failed",
+                            fallback: "The session could not be opened. Reconnect the profile and try again."
+                        )
+                    }
+                }) {
+                    Image(systemName: "arrow.forward.circle")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .help(localized("remoteWorkspace.sessions.attach.help", fallback: "Open session in a terminal tab"))
+                .accessibilityLabel(
+                    localized("remoteWorkspace.sessions.attach.help", fallback: "Open session in a terminal tab")
+                )
+            }
+
             // Copy attach command.
             if let command = viewModel.attachCommand(sessionName: session.name) {
                 Button(action: {
@@ -205,7 +234,7 @@ struct RemoteSessionListView: View {
 
             // Kill session.
             Button(action: {
-                Task { try? await viewModel.killSession(named: session.name) }
+                killSession(named: session.name)
             }) {
                 Image(systemName: "xmark.circle")
                     .font(.caption)
@@ -218,6 +247,28 @@ struct RemoteSessionListView: View {
         .padding(.vertical, 8)
         .background(Color.primary.opacity(0.04))
         .cornerRadius(6)
+    }
+
+    private func createSession() {
+        Task { @MainActor in
+            do {
+                errorMessage = nil
+                try await viewModel.createSession()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func killSession(named name: String) {
+        Task { @MainActor in
+            do {
+                errorMessage = nil
+                try await viewModel.killSession(named: name)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     private func localized(_ key: String, fallback: String) -> String {

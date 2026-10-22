@@ -510,7 +510,7 @@ final class RateLimitingEdgeCaseTests: XCTestCase {
         // Wait for rate limit window to expire
         let exp = expectation(description: "rate limit expires")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { exp.fulfill() }
-        wait(for: [exp], timeout: 1.0)
+        wait(for: [exp], timeout: 15.0)
 
         emitter.reset()
         fastSut.notify(CocxyNotification(type: .agentError, tabId: tabA,

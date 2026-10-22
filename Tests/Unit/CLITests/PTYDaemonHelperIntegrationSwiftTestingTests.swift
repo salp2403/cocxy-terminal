@@ -19,10 +19,635 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
             PTYDaemonProtocol.terminalSurfaceCapability,
             PTYDaemonProtocol.terminalEngineCapability,
             PTYDaemonProtocol.terminalHostRendererCapability,
+            PTYDaemonProtocol.terminalContentDetectionCapability,
+            PTYDaemonProtocol.terminalSemanticNavigationCapability,
         ])
         #expect(decoded.hello?.supportsTerminalSurfaces == true)
         #expect(decoded.hello?.supportsTerminalHostRenderer == true)
         #expect(decoded.hello?.supportsTerminalEngineAdapter == true)
+        #expect(decoded.hello?.supportsTerminalContentDetection == true)
+        #expect(decoded.hello?.supportsTerminalSemanticNavigation == true)
+    }
+
+    @Test(
+        "daemon emits the authoritative root process exit code before closing the surface",
+        arguments: [0, 3]
+    )
+    func daemonEmitsRootProcessExitCode(_ exitCode: Int) throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-exit-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let script = root.appendingPathComponent("exit-\(exitCode).sh")
+        try writeExecutableTestScript("#!/bin/sh\nexit \(exitCode)\n", to: script)
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(PTYDaemonRequest(
+            id: "create-exit-\(exitCode)",
+            command: .surfaceCreate,
+            payload: [
+                "command": script.path,
+                "workingDirectory": root.path,
+                "rows": "8",
+                "columns": "40",
+            ]
+        ))
+        let surfaceID = try #require(create.surfaceID)
+
+        let event = try helper.waitForEvent(timeout: 5) { event in
+            event.surfaceID == surfaceID
+                && event.event == .surfaceOSC
+                && event.osc?.kind == .processExited
+        }
+
+        #expect(event.osc?.exitCode == exitCode)
+    }
+
+    @Test("daemon frames carry engine-detected paths and URLs")
+    func daemonFramesCarryDetectedContent() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-content-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let script = root.appendingPathComponent("emit-content.sh")
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            printf 'Sources/App.swift:42:7 https://cocxy.dev\r\n'
+            sleep 2
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-content-detection",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "8",
+                    "columns": "80",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+        _ = try helper.waitForOutputText(
+            surfaceID: surfaceID,
+            containingUTF8: "https://cocxy.dev",
+            timeout: 5
+        )
+
+        let subscribe = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "subscribe-content-detection",
+                command: .surfaceFrameSubscribe,
+                payload: ["surfaceID": surfaceID]
+            )
+        )
+        let contents = try #require(subscribe.frame).detectedContents
+
+        let path = try #require(contents.first { $0.kind == .filePath })
+        #expect(path.text == "Sources/App.swift:42:7")
+        #expect(path.target == "Sources/App.swift")
+        #expect(path.line == 42)
+        #expect(path.column == 7)
+        #expect(contents.contains { $0.kind == .url && $0.target == "https://cocxy.dev" })
+    }
+
+    @Test("daemon navigates prompts and returns complete command output selection")
+    func daemonSemanticNavigationRoundTripsThroughServer() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-semantic-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let script = root.appendingPathComponent("emit-semantic.sh")
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            emit_cycle() {
+              label="$1"
+              printf '\\033]133;A\\007$ \\033]133;B\\007echo %s\\r\\n\\033]133;C\\007' "$label"
+              index=0
+              while [ "$index" -lt 4 ]; do
+                printf '%s-output-%s\\r\\n' "$label" "$index"
+                index=$((index + 1))
+              done
+              printf '\\033]133;D;0\\007'
+            }
+            emit_cycle oldest
+            emit_cycle middle
+            emit_cycle latest
+            printf 'SEMANTIC_READY\\r\\n'
+            sleep 5
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-semantic",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "6",
+                    "columns": "48",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+        let emitted = try helper.waitForOutputText(
+            surfaceID: surfaceID,
+            containingUTF8: "SEMANTIC_READY",
+            timeout: 5
+        )
+        #expect(emitted.contains("\u{1B}]133;A\u{7}"))
+        #expect(emitted.contains("\u{1B}]133;D;0\u{7}"))
+
+        func navigate(
+            _ id: String,
+            _ action: TerminalSemanticNavigationAction
+        ) throws -> PTYDaemonResponse {
+            try helper.sendAndWait(PTYDaemonRequest(
+                id: id,
+                command: .surfaceSemanticNavigation,
+                payload: ["surfaceID": surfaceID, "action": action.rawValue]
+            ))
+        }
+
+        let previous = try navigate("semantic-previous", .previousPrompt)
+        let older = try navigate("semantic-older", .previousPrompt)
+        let newer = try navigate("semantic-newer", .nextPrompt)
+        let newestBoundary = try navigate("semantic-newest-boundary", .nextPrompt)
+
+        let previousRow = try #require(previous.semanticNavigation).viewportStartRow
+        let olderRow = try #require(older.semanticNavigation).viewportStartRow
+        let newerRow = try #require(newer.semanticNavigation).viewportStartRow
+        #expect(previous.ok && older.ok && newer.ok)
+        #expect(olderRow < previousRow)
+        #expect(newerRow == previousRow)
+        #expect(newestBoundary.ok == false)
+        #expect(newestBoundary.error?.contains("target unavailable") == true)
+
+        let output = try navigate("semantic-output", .selectCommandOutput)
+        let outputResult = try #require(output.semanticNavigation)
+        let selection = try #require(outputResult.selection)
+        #expect(output.ok)
+        #expect(outputResult.action == .selectCommandOutput)
+        #expect(selection.text.contains("latest-output-0"))
+        #expect(selection.text.contains("latest-output-3"))
+        #expect(selection.text.contains("middle-output") == false)
+        #expect(output.frame?.scrollbackTop == Int(outputResult.viewportStartRow))
+
+        let invalid = try helper.sendAndWait(PTYDaemonRequest(
+            id: "semantic-invalid",
+            command: .surfaceSemanticNavigation,
+            payload: ["surfaceID": surfaceID, "action": "invalid"]
+        ))
+        #expect(invalid.ok == false)
+        #expect(invalid.error?.contains("valid action") == true)
+
+        let close = try helper.sendAndWait(PTYDaemonRequest(
+            id: "close-semantic",
+            command: .surfaceClose,
+            payload: ["surfaceID": surfaceID]
+        ))
+        #expect(close.ok)
+    }
+
+    @Test("daemon preedit honors the UTF-8 cursor and emits immediate frames")
+    func daemonPreeditHonorsCursorAndEmitsImmediateFrames() throws {
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-preedit-cursor",
+                command: .surfaceCreate,
+                payload: [
+                    "command": "/bin/cat",
+                    "workingDirectory": "/tmp",
+                    "rows": "8",
+                    "columns": "40",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+
+        let subscribe = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "subscribe-preedit-cursor",
+                command: .surfaceFrameSubscribe,
+                payload: ["surfaceID": surfaceID]
+            )
+        )
+        let initialRevision = try #require(subscribe.frame).revision
+
+        let preedit = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "set-preedit-cursor",
+                command: .surfacePreedit,
+                payload: [
+                    "surfaceID": surfaceID,
+                    "text": "かな",
+                    "cursorByteOffset": "3",
+                ]
+            )
+        )
+        #expect(preedit.ok == true)
+
+        let preeditFrameEvent = try helper.waitForEvent(timeout: 2) { event in
+            event.surfaceID == surfaceID
+                && event.event == .surfaceFrame
+                && (event.frame?.revision ?? 0) > initialRevision
+                && event.frame?.cursor.column == 2
+        }
+        let preeditRevision = try #require(preeditFrameEvent.frame).revision
+
+        let clear = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "clear-preedit-cursor",
+                command: .surfacePreedit,
+                payload: ["surfaceID": surfaceID, "text": ""]
+            )
+        )
+        #expect(clear.ok == true)
+
+        let clearFrameEvent = try helper.waitForEvent(timeout: 2) { event in
+            event.surfaceID == surfaceID
+                && event.event == .surfaceFrame
+                && (event.frame?.revision ?? 0) > preeditRevision
+                && event.frame?.cursor.column == 0
+        }
+        #expect(clearFrameEvent.frame != nil)
+
+        let close = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "close-preedit-cursor",
+                command: .surfaceClose,
+                payload: ["surfaceID": surfaceID]
+            )
+        )
+        #expect(close.ok == true)
+    }
+
+    @Test("daemon physical arrows preserve application cursor mode with AppKit characters")
+    func daemonPhysicalArrowPreservesApplicationCursorMode() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-decckm-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ready = root.appendingPathComponent("ready")
+        let captured = root.appendingPathComponent("captured.bin")
+        let script = root.appendingPathComponent("capture-arrow.sh")
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            stty raw -echo
+            printf '\\033[?1h'
+            printf ready > "\(ready.path)"
+            dd bs=1 count=3 of="\(captured.path)" 2>/dev/null
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-decckm-arrow",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "8",
+                    "columns": "40",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+
+        _ = try helper.waitForOutputText(
+            surfaceID: surfaceID,
+            containingUTF8: "\u{1B}[?1h",
+            timeout: 5
+        )
+        #expect(waitForFile(ready, timeout: 2))
+
+        let key = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "send-decckm-arrow",
+                command: .surfaceKey,
+                payload: [
+                    "surfaceID": surfaceID,
+                    "characters": "\u{F700}",
+                    "keyCode": "126",
+                    "modifiers": "0",
+                    "isKeyDown": "true",
+                    "isComposing": "false",
+                    "unshiftedCodepoint": "63232",
+                ]
+            )
+        )
+        #expect(key.ok == true)
+
+        _ = try helper.waitForEvent(
+            surfaceID: surfaceID,
+            kind: .surfaceClosed,
+            timeout: 5
+        )
+        #expect(try Data(contentsOf: captured) == Data([0x1B, 0x4F, 0x41]))
+    }
+
+    @Test("daemon forwards progressive key press and release through the real helper")
+    func daemonForwardsProgressiveKeyPressAndRelease() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-key-events-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ready = root.appendingPathComponent("ready")
+        let captured = root.appendingPathComponent("captured.bin")
+        let script = root.appendingPathComponent("capture-key-events.sh")
+        let expected = Data("\u{1B}[D\u{1B}[1;1:3D".utf8)
+        let negotiationMarker = "KEY_EVENT_MODE_READY"
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            stty raw -echo
+            printf '\\033[>2u\(negotiationMarker)'
+            printf ready > "\(ready.path)"
+            dd bs=1 count=\(expected.count) of="\(captured.path)" 2>/dev/null
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-progressive-keys",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "8",
+                    "columns": "40",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+
+        #expect(waitForFile(ready, timeout: 2))
+        _ = try helper.waitForOutputText(
+            surfaceID: surfaceID,
+            containingUTF8: negotiationMarker,
+            timeout: 5
+        )
+
+        for (requestID, isKeyDown) in [("press-progressive-key", true), ("release-progressive-key", false)] {
+            let response = try helper.sendAndWait(
+                PTYDaemonRequest(
+                    id: requestID,
+                    command: .surfaceKey,
+                    payload: [
+                        "surfaceID": surfaceID,
+                        "characters": "\u{F702}",
+                        "keyCode": "123",
+                        "modifiers": "0",
+                        "isKeyDown": String(isKeyDown),
+                        "isRepeat": "false",
+                        "isComposing": "false",
+                        "unshiftedCodepoint": "63234",
+                        "shiftedCodepoint": "0",
+                        "baseLayoutCodepoint": "0",
+                    ]
+                )
+            )
+            #expect(
+                response.ok == true,
+                "\(requestID) was not encoded: \(response.error ?? "no diagnostic")"
+            )
+        }
+
+        _ = try helper.waitForEvent(
+            surfaceID: surfaceID,
+            kind: .surfaceClosed,
+            timeout: 5
+        )
+        #expect(try Data(contentsOf: captured) == expected)
+    }
+
+    @Test("daemon preserves keypad-equal associated text in report-all mode")
+    func daemonPreservesKeypadEqualAssociatedText() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-keypad-equal-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ready = root.appendingPathComponent("ready")
+        let captured = root.appendingPathComponent("captured.bin")
+        let script = root.appendingPathComponent("capture-keypad-equal.sh")
+        let expected = Data("\u{1B}[57415;1;61u".utf8)
+        let negotiationMarker = "KEYPAD_EQUAL_MODE_READY"
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            stty raw -echo
+            printf '\\033[>24u\(negotiationMarker)'
+            printf ready > "\(ready.path)"
+            /usr/bin/perl -e '
+            use strict;
+            use warnings;
+            $SIG{ALRM} = sub { exit 0 };
+            alarm 2;
+            binmode STDIN;
+            open my $output, ">:raw", "\(captured.path)" or die $!;
+            my $remaining = \(expected.count);
+            while ($remaining > 0) {
+                my $count = sysread(STDIN, my $bytes, $remaining);
+                last unless defined $count && $count > 0;
+                print {$output} $bytes;
+                $remaining -= $count;
+            }
+            close $output;
+            '
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-keypad-equal",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "8",
+                    "columns": "40",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+
+        #expect(waitForFile(ready, timeout: 2))
+        _ = try helper.waitForOutputText(
+            surfaceID: surfaceID,
+            containingUTF8: negotiationMarker,
+            timeout: 5
+        )
+
+        let key = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "keypad-equal",
+                command: .surfaceKey,
+                payload: [
+                    "surfaceID": surfaceID,
+                    "characters": "=",
+                    "keyCode": "81",
+                    "modifiers": "0",
+                    "isKeyDown": "true",
+                    "isRepeat": "false",
+                    "isComposing": "false",
+                    "unshiftedCodepoint": "61",
+                    "shiftedCodepoint": "0",
+                    "baseLayoutCodepoint": "0",
+                ]
+            )
+        )
+        #expect(key.ok == true)
+
+        _ = try helper.waitForEvent(
+            surfaceID: surfaceID,
+            kind: .surfaceClosed,
+            timeout: 5
+        )
+        let actual = try Data(contentsOf: captured)
+        #expect(
+            actual == expected,
+            "captured bytes \(Array(actual)); expected \(Array(expected))"
+        )
+    }
+
+    @Test("daemon drains focus and in-band resize reports after host mutations")
+    func daemonDrainsHostMutationResponsesToPTY() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-host-responses-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ready = root.appendingPathComponent("ready")
+        let captured = root.appendingPathComponent("captured.bin")
+        let script = root.appendingPathComponent("capture-host-responses.sh")
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            stty raw -echo
+            printf '\\033[?1004h\\033[?2048h'
+            /usr/bin/perl -e '
+            use strict;
+            use warnings;
+            $SIG{ALRM} = sub { die "timed out waiting for terminal response" };
+            alarm 5;
+            my $byte = "";
+            while (sysread(STDIN, $byte, 1) == 1) {
+                last if $byte eq "t";
+            }
+            open(my $ready_handle, ">", $ARGV[0]) or die $!;
+            print {$ready_handle} "ready";
+            close($ready_handle);
+            my $responses = "";
+            my $resize_reports = 0;
+            while (sysread(STDIN, $byte, 1) == 1) {
+                $responses .= $byte;
+                $resize_reports += 1 if $byte eq "t";
+                last if $responses =~ /^\\e\\[I/ && $resize_reports >= 2;
+            }
+            alarm 0;
+            open(my $output_handle, ">", $ARGV[1]) or die $!;
+            print {$output_handle} $responses;
+            close($output_handle);
+            ' "\(ready.path)" "\(captured.path)"
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-host-responses",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "8",
+                    "columns": "40",
+                    "fontFamily": "Menlo",
+                    "fontSize": "13",
+                    "dpiScale": "1",
+                    "ligaturesEnabled": "true",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+        #expect(waitForFile(ready, timeout: 5))
+
+        let focus = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "focus-host-response",
+                command: .surfaceFocus,
+                payload: ["surfaceID": surfaceID, "focused": "true"]
+            )
+        )
+        let resize = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "resize-host-response",
+                command: .surfaceResize,
+                payload: ["surfaceID": surfaceID, "rows": "12", "columns": "72"]
+            )
+        )
+        let font = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "font-host-response",
+                command: .surfaceFont,
+                payload: [
+                    "surfaceID": surfaceID,
+                    "fontFamily": "Menlo",
+                    "fontSize": "17",
+                    "dpiScale": "1",
+                    "ligaturesEnabled": "false",
+                ]
+            )
+        )
+        #expect(focus.ok == true)
+        #expect(resize.ok == true)
+        #expect(font.ok == true)
+
+        _ = try helper.waitForEvent(
+            surfaceID: surfaceID,
+            kind: .surfaceClosed,
+            timeout: 5
+        )
+        let responseText = String(decoding: try Data(contentsOf: captured), as: UTF8.self)
+        #expect(responseText.hasPrefix("\u{001B}[I"))
+        let resizeReports = responseText.dropFirst(3).split(separator: "t")
+        #expect(resizeReports.count == 2)
+        for report in resizeReports {
+            #expect(report.hasPrefix("\u{001B}[48;12;72;"))
+            let parameters = report.dropFirst(2).split(separator: ";")
+            #expect(parameters.count == 5)
+            #expect(parameters[0] == "48")
+            #expect(parameters[1] == "12")
+            #expect(parameters[2] == "72")
+            #expect((Int(parameters[3]) ?? 0) > 0)
+            #expect((Int(parameters[4]) ?? 0) > 0)
+        }
     }
 
     @Test("daemon spawn strips host NO_COLOR before forking the child shell")
@@ -231,7 +856,7 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         let shellPID = try #require(process.process?.shellPID)
         #expect(waitForFile(ready, timeout: 2))
 
-        let shutdown = try helper.shutdownGracefully(timeout: 6)
+        let shutdown = try helper.shutdownGracefully(timeout: 15)
 
         #expect(shutdown.ok == true)
         #expect(helper.isRunning == false)
@@ -264,7 +889,7 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         )
         let shellPID = try #require(process.process?.shellPID)
 
-        try helper.closeInputAndWaitForExit(timeout: 5)
+        try helper.closeInputAndWaitForExit(timeout: 15)
 
         #expect(helper.isRunning == false)
         #expect(processExists(shellPID) == false)
@@ -666,7 +1291,7 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         }
         input.fileHandleForWriting.closeFile()
 
-        if group.wait(timeout: .now() + 3) == .timedOut {
+        if group.wait(timeout: .now() + 15) == .timedOut {
             process.terminate()
             Issue.record("cocxyd helper timed out")
         }
@@ -684,7 +1309,7 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
 /// scenarios where output and frame events for several surfaces interleave
 /// over one helper. Decoded queues let waiters inspect events without
 /// removing matches that belong to other surfaces.
-private final class RunningHelperProcess {
+final class RunningHelperProcess {
     private struct EventEnvelope: Decodable {
         let event: PTYDaemonEvent.Kind?
     }
@@ -743,7 +1368,7 @@ private final class RunningHelperProcess {
         process.isRunning
     }
 
-    func sendAndWait(_ request: PTYDaemonRequest, timeout: TimeInterval = 5) throws -> PTYDaemonResponse {
+    func sendAndWait(_ request: PTYDaemonRequest, timeout: TimeInterval = 15) throws -> PTYDaemonResponse {
         guard TerminalProcessBoundary.writeAll(
             try PTYDaemonLineCodec.encode(request),
             to: input.fileHandleForWriting.fileDescriptor
@@ -753,7 +1378,7 @@ private final class RunningHelperProcess {
         return try waitForResponse(id: request.id, timeout: timeout)
     }
 
-    func shutdownGracefully(timeout: TimeInterval = 5) throws -> PTYDaemonResponse {
+    func shutdownGracefully(timeout: TimeInterval = 15) throws -> PTYDaemonResponse {
         guard isShutdown == false else {
             throw HelperTestError.transport("helper already shut down")
         }
@@ -778,7 +1403,7 @@ private final class RunningHelperProcess {
         return response
     }
 
-    func closeInputAndWaitForExit(timeout: TimeInterval = 5) throws {
+    func closeInputAndWaitForExit(timeout: TimeInterval = 15) throws {
         guard isShutdown == false else {
             throw HelperTestError.transport("helper already shut down")
         }

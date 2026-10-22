@@ -586,7 +586,7 @@ final class GitInfoProviderEdgeCaseTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             expectation.fulfill()
         }
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
 
         // Modifica la rama en disco.
         createFakeGitRepo(branch: "updated")

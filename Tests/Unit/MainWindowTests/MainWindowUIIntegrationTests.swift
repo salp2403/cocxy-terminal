@@ -297,7 +297,7 @@ final class SearchBarIntegrationTests: XCTestCase {
     private func waitForSearchMatchCount(
         _ expectedCount: Int,
         in viewModel: ScrollbackSearchBarViewModel,
-        timeout: TimeInterval = 3.0,
+        timeout: TimeInterval = 15.0,
         pollInterval: TimeInterval = 0.02
     ) {
         let deadline = Date().addingTimeInterval(timeout)

@@ -3,6 +3,7 @@
 
 import Foundation
 import Combine
+import CocxyShared
 
 // MARK: - Config Providing Protocol
 
@@ -37,6 +38,9 @@ protocol ConfigProviding: AnyObject, Sendable {
     /// Useful after programmatic config changes or for testing.
     /// - Throws: `ConfigError` if the file cannot be read or parsed.
     func reload() throws
+
+    /// Persists the user's one-time Voice consent response atomically.
+    func updateVoiceConsent(enabled: Bool?, consentPrompted: Bool) throws
 }
 
 // MARK: - Configuration Model
@@ -53,6 +57,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let agentDetection: AgentDetectionConfig
     let inputClassifier: InputClassifierConfig
     let commandCorrections: CommandCorrectionsConfig
+    let commandBlocks: CommandBlocksConfig
     let security: SecurityConfig
     let uxPolish: UXPolishConfig
     let agent: AgentModeConfig
@@ -88,6 +93,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         agentDetection: AgentDetectionConfig,
         inputClassifier: InputClassifierConfig = .defaults,
         commandCorrections: CommandCorrectionsConfig = .defaults,
+        commandBlocks: CommandBlocksConfig = .defaults,
         security: SecurityConfig = .defaults,
         uxPolish: UXPolishConfig = .defaults,
         agent: AgentModeConfig = .defaults,
@@ -122,6 +128,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.agentDetection = agentDetection
         self.inputClassifier = inputClassifier
         self.commandCorrections = commandCorrections
+        self.commandBlocks = commandBlocks
         self.security = security
         self.uxPolish = uxPolish
         self.agent = agent
@@ -164,6 +171,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             agentDetection: .defaults,
             inputClassifier: .defaults,
             commandCorrections: .defaults,
+            commandBlocks: .defaults,
             security: .defaults,
             uxPolish: .defaults,
             agent: .defaults,
@@ -201,7 +209,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, updates, appearance, terminal, agentDetection, inputClassifier, commandCorrections, security, uxPolish, agent, vault, hooks, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
+        case general, updates, appearance, terminal, agentDetection, inputClassifier, commandCorrections, commandBlocks, security, uxPolish, agent, vault, hooks, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
         case notifications, quickTerminal, keybindings, sessions, rateLimit, worktree, github, gitAssistant, notes, lsp, vim
         case richInput
         case experimental
@@ -218,6 +226,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.inputClassifier = try container.decodeIfPresent(InputClassifierConfig.self, forKey: .inputClassifier)
             ?? .defaults
         self.commandCorrections = try container.decodeIfPresent(CommandCorrectionsConfig.self, forKey: .commandCorrections)
+            ?? .defaults
+        self.commandBlocks = try container.decodeIfPresent(CommandBlocksConfig.self, forKey: .commandBlocks)
             ?? .defaults
         self.security = try container.decodeIfPresent(SecurityConfig.self, forKey: .security)
             ?? .defaults
@@ -361,6 +371,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             terminal: terminal,
             agentDetection: agentDetection,
             inputClassifier: inputClassifier,
+            commandCorrections: commandCorrections,
+            commandBlocks: commandBlocks,
             security: security,
             uxPolish: uxPolish,
             // Built-in Agent Mode is a global user preference. Project
@@ -924,6 +936,8 @@ struct TerminalConfig: Codable, Sendable, Equatable {
     let mouseHideWhileTyping: Bool
     /// Whether to auto-copy selected text to the clipboard.
     let copyOnSelect: Bool
+    /// Whether clicking editable shell input synthesizes cursor movement.
+    let cursorClickToMove: Bool
     /// Whether to show a confirmation dialog when pasting text with newlines.
     let clipboardPasteProtection: Bool
     /// Policy for OSC 52 clipboard read requests initiated by terminal programs.
@@ -953,6 +967,7 @@ struct TerminalConfig: Codable, Sendable, Equatable {
         cursorOpacity: Double,
         mouseHideWhileTyping: Bool,
         copyOnSelect: Bool,
+        cursorClickToMove: Bool = true,
         clipboardPasteProtection: Bool,
         clipboardReadAccess: ClipboardReadAccess,
         clipboardWriteAccess: ClipboardWriteAccess = .prompt,
@@ -970,6 +985,7 @@ struct TerminalConfig: Codable, Sendable, Equatable {
         self.cursorOpacity = cursorOpacity
         self.mouseHideWhileTyping = mouseHideWhileTyping
         self.copyOnSelect = copyOnSelect
+        self.cursorClickToMove = cursorClickToMove
         self.clipboardPasteProtection = clipboardPasteProtection
         self.clipboardReadAccess = clipboardReadAccess
         self.clipboardWriteAccess = clipboardWriteAccess
@@ -990,6 +1006,7 @@ struct TerminalConfig: Codable, Sendable, Equatable {
             cursorOpacity: 0.8,
             mouseHideWhileTyping: true,
             copyOnSelect: true,
+            cursorClickToMove: true,
             clipboardPasteProtection: true,
             clipboardReadAccess: .prompt,
             clipboardWriteAccess: .prompt,
@@ -1010,6 +1027,7 @@ struct TerminalConfig: Codable, Sendable, Equatable {
         case cursorOpacity
         case mouseHideWhileTyping
         case copyOnSelect
+        case cursorClickToMove
         case clipboardPasteProtection
         case clipboardReadAccess
         case clipboardWriteAccess
@@ -1038,6 +1056,8 @@ struct TerminalConfig: Codable, Sendable, Equatable {
                 ?? defaults.mouseHideWhileTyping,
             copyOnSelect: try container.decodeIfPresent(Bool.self, forKey: .copyOnSelect)
                 ?? defaults.copyOnSelect,
+            cursorClickToMove: try container.decodeIfPresent(Bool.self, forKey: .cursorClickToMove)
+                ?? defaults.cursorClickToMove,
             clipboardPasteProtection: try container.decodeIfPresent(Bool.self, forKey: .clipboardPasteProtection)
                 ?? defaults.clipboardPasteProtection,
             clipboardReadAccess: try container.decodeIfPresent(ClipboardReadAccess.self, forKey: .clipboardReadAccess)
@@ -1193,6 +1213,23 @@ struct CommandCorrectionsConfig: Codable, Sendable, Equatable {
 
     static func clampedSuggestionsShown(_ value: Int) -> Int {
         min(max(value, minSuggestionsShown), maxSuggestionsShownLimit)
+    }
+}
+
+// MARK: - Command Blocks Config
+
+/// `[command-blocks]` presentation settings for terminal command metadata.
+struct CommandBlocksConfig: Codable, Sendable, Equatable {
+    let enabled: Bool
+    let showOnlyOnHover: Bool
+
+    init(enabled: Bool = true, showOnlyOnHover: Bool = true) {
+        self.enabled = enabled
+        self.showOnlyOnHover = showOnlyOnHover
+    }
+
+    static var defaults: CommandBlocksConfig {
+        CommandBlocksConfig()
     }
 }
 
@@ -1764,11 +1801,13 @@ struct HookIntegrationConfig: Codable, Sendable, Equatable {
     static let builtInAgents = HookIntegrationAgent.allCases
 
     let enabled: Bool
+    let debugLog: Bool
     let agents: [HookIntegrationAgent: HookIntegrationAgentConfig]
 
     static var defaults: HookIntegrationConfig {
         HookIntegrationConfig(
             enabled: true,
+            debugLog: false,
             agents: Dictionary(
                 uniqueKeysWithValues: builtInAgents.map { ($0, HookIntegrationAgentConfig(enabled: true)) }
             )
@@ -1777,14 +1816,17 @@ struct HookIntegrationConfig: Codable, Sendable, Equatable {
 
     init(
         enabled: Bool = true,
+        debugLog: Bool = false,
         agents: [HookIntegrationAgent: HookIntegrationAgentConfig] = [:]
     ) {
         self.enabled = enabled
+        self.debugLog = debugLog
         self.agents = Self.normalizedAgents(agents)
     }
 
     private enum CodingKeys: String, CodingKey {
         case enabled
+        case debugLog
         case agents
     }
 
@@ -1797,6 +1839,8 @@ struct HookIntegrationConfig: Codable, Sendable, Equatable {
         self.init(
             enabled: try container.decodeIfPresent(Bool.self, forKey: .enabled)
                 ?? Self.defaults.enabled,
+            debugLog: try container.decodeIfPresent(Bool.self, forKey: .debugLog)
+                ?? Self.defaults.debugLog,
             agents: decodedAgents.map(Self.agentConfigsByIdentifier) ?? Self.defaults.agents
         )
     }
@@ -1804,6 +1848,7 @@ struct HookIntegrationConfig: Codable, Sendable, Equatable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(enabled, forKey: .enabled)
+        try container.encode(debugLog, forKey: .debugLog)
         let keyedAgents = Dictionary(
             uniqueKeysWithValues: Self.builtInAgents.map { agent in
                 (agent.rawValue, agents[agent] ?? HookIntegrationAgentConfig(enabled: true))
@@ -1822,6 +1867,9 @@ struct HookIntegrationConfig: Codable, Sendable, Equatable {
         ]
         if !enabled {
             environment[Self.globalDisabledEnvironmentKey] = "1"
+        }
+        if debugLog {
+            environment[HookIntegrationDebugLog.enabledEnvironmentKey] = "1"
         }
         for agent in Self.builtInAgents where !isAgentEnabled(agent) {
             environment[agent.disabledEnvironmentKey] = "1"
@@ -2221,26 +2269,62 @@ struct SessionReplayPolicy: Codable, Sendable, Equatable {
 
 /// `[voice]` section for local Voice input.
 ///
-/// Disabled by default and locale-aware without introducing a backend
-/// dependency. The `"system"` sentinel means Cocxy resolves against the
-/// user's current macOS locale and the locales supported by Speech on the
-/// current machine; any explicit locale is a manual override.
+/// Enabled by default and locale-aware without introducing a backend
+/// dependency. Recognition still starts only from an explicit user action
+/// and remains gated by the macOS Speech and microphone permissions. The
+/// `"system"` sentinel means Cocxy resolves against the user's current macOS
+/// locale and the locales supported by Speech on the current machine; any
+/// explicit locale is a manual override.
 struct VoiceConfig: Codable, Sendable, Equatable {
     static let systemLocaleIdentifier = "system"
 
     let enabled: Bool
     let localeIdentifier: String
+    /// Whether a transcript routed to a detected terminal agent also sends Return.
+    let autoSendToAgent: Bool
+    /// Whether the one-time local Voice notice has received a response.
+    let consentPrompted: Bool
 
     static var defaults: VoiceConfig {
-        VoiceConfig(enabled: false, localeIdentifier: systemLocaleIdentifier)
+        VoiceConfig(
+            enabled: true,
+            localeIdentifier: systemLocaleIdentifier,
+            autoSendToAgent: false,
+            consentPrompted: false
+        )
     }
 
     init(
-        enabled: Bool = false,
-        localeIdentifier: String = systemLocaleIdentifier
+        enabled: Bool = true,
+        localeIdentifier: String = systemLocaleIdentifier,
+        autoSendToAgent: Bool = false,
+        consentPrompted: Bool = false
     ) {
         self.enabled = enabled
         self.localeIdentifier = Self.normalizedLocaleIdentifier(localeIdentifier)
+        self.autoSendToAgent = autoSendToAgent
+        self.consentPrompted = consentPrompted
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case localeIdentifier
+        case autoSendToAgent
+        case consentPrompted
+    }
+
+    init(from decoder: Decoder) throws {
+        let defaults = Self.defaults
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled,
+            localeIdentifier: try container.decodeIfPresent(String.self, forKey: .localeIdentifier)
+                ?? defaults.localeIdentifier,
+            autoSendToAgent: try container.decodeIfPresent(Bool.self, forKey: .autoSendToAgent)
+                ?? defaults.autoSendToAgent,
+            consentPrompted: try container.decodeIfPresent(Bool.self, forKey: .consentPrompted)
+                ?? defaults.consentPrompted
+        )
     }
 
     static func normalizedLocaleIdentifier(_ rawValue: String) -> String {
@@ -2397,10 +2481,9 @@ enum WorktreeOnClose: String, Codable, Sendable, Equatable {
 /// `[worktree]` section of the configuration.
 ///
 /// Controls the per-agent git worktree feature introduced in v0.1.81.
-/// Every field has a safe default so existing users see no behavioural
-/// change after the upgrade — in particular, `enabled` defaults to
-/// `false`, which causes every worktree CLI verb to refuse with an
-/// actionable error until the user opts in.
+/// Every field has a conservative default. The feature is available by
+/// default, but no repository or filesystem mutation occurs until the user
+/// explicitly creates a worktree or launches a task that requests one.
 struct WorktreeConfig: Codable, Sendable, Equatable {
     /// Master toggle for the worktree feature. When `false`, CLI verbs
     /// and palette actions refuse with a message pointing the user to
@@ -2454,7 +2537,7 @@ struct WorktreeConfig: Codable, Sendable, Equatable {
 
     static var defaults: WorktreeConfig {
         WorktreeConfig(
-            enabled: false,
+            enabled: true,
             basePath: "~/.cocxy/worktrees",
             branchTemplate: "cocxy/{agent}/{id}",
             baseRef: "HEAD",

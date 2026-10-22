@@ -26,7 +26,7 @@ import Combine
 ///
 /// ## Behavior
 ///
-/// - Toggle with Cmd+Shift+B.
+/// - Toggle with Cmd+Option+B.
 /// - Fixed width: 480pt when used as the slide-over panel.
 /// - Flexible width when embedded as a workspace split pane.
 /// - Slides in from the right edge.
@@ -646,7 +646,7 @@ struct BrowserPanelView: View {
     private var navigationButtons: some View {
         HStack(spacing: 2) {
             Button(action: { viewModel.goBack() }) {
-                Image(systemName: "chevron.left")
+                Image(systemName: "chevron.backward")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(
                         viewModel.canGoBack
@@ -665,7 +665,7 @@ struct BrowserPanelView: View {
             )
 
             Button(action: { viewModel.goForward() }) {
-                Image(systemName: "chevron.right")
+                Image(systemName: "chevron.forward")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(
                         viewModel.canGoForward

@@ -34,6 +34,7 @@ extension AppDelegate {
                     tab.workingDirectory = url
                 }
                 if let tab = controller.tabManager.tab(for: activeTabID) {
+                    controller.observeProjectDirectory(tab.workingDirectory)
                     registerSession(for: tab, in: controller)
                 }
             }

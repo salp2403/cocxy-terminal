@@ -5,6 +5,7 @@ import Foundation
 
 public enum UnifiedQuickSwitchItemKind: String, Codable, Sendable, Equatable, CaseIterable {
     case tab
+    case project
     case browserTab
     case worktree
     case note
@@ -116,6 +117,7 @@ public enum UnifiedQuickSwitchRanker {
     private static func kindBias(_ kind: UnifiedQuickSwitchItemKind) -> Int {
         switch kind {
         case .tab: return 40
+        case .project: return 35
         case .worktree: return 30
         case .browserTab: return 20
         case .note: return 10

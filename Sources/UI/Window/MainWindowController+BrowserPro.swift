@@ -162,18 +162,21 @@ extension MainWindowController {
             localizer: appLocalizer()
         )
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
 
         let panelWidth: CGFloat = 320
         let containerBounds = overlayContainer.bounds
-        let targetX = containerBounds.width - panelWidth
+        let targetX = trailingPanelOrigin(
+            containerWidth: containerBounds.width,
+            panelWidth: panelWidth
+        )
 
         hostingView.frame = NSRect(
             x: targetX, y: 0,
             width: panelWidth, height: containerBounds.height
         )
-        hostingView.autoresizingMask = [.height, .minXMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
         self.browserHistoryHostingView = hostingView
 
         overlayContainer.addSubview(hostingView)
@@ -191,7 +194,10 @@ extension MainWindowController {
 
         isBrowserHistoryVisible = false
 
-        let targetX = overlayContainer.bounds.width
+        let targetX = trailingPanelExitOrigin(
+            containerWidth: overlayContainer.bounds.width,
+            panelWidth: hostingView.frame.width
+        )
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -238,18 +244,21 @@ extension MainWindowController {
             localizer: appLocalizer()
         )
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
 
         let panelWidth: CGFloat = 320
         let containerBounds = overlayContainer.bounds
-        let targetX = containerBounds.width - panelWidth
+        let targetX = trailingPanelOrigin(
+            containerWidth: containerBounds.width,
+            panelWidth: panelWidth
+        )
 
         hostingView.frame = NSRect(
             x: targetX, y: 0,
             width: panelWidth, height: containerBounds.height
         )
-        hostingView.autoresizingMask = [.height, .minXMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
         self.browserBookmarksHostingView = hostingView
 
         overlayContainer.addSubview(hostingView)
@@ -267,7 +276,10 @@ extension MainWindowController {
 
         isBrowserBookmarksVisible = false
 
-        let targetX = overlayContainer.bounds.width
+        let targetX = trailingPanelExitOrigin(
+            containerWidth: overlayContainer.bounds.width,
+            panelWidth: hostingView.frame.width
+        )
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)

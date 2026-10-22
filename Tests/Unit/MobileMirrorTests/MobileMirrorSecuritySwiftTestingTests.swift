@@ -1,0 +1,502 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+
+import Foundation
+import Testing
+@testable import CocxyTerminal
+
+@Suite("Mobile mirror security")
+struct MobileMirrorSecuritySwiftTestingTests {
+    @Test("session keys match fixed WebCrypto vectors")
+    func sessionKeysMatchFixedVectors() throws {
+        let channelID = try #require(UUID(uuidString: "00112233-4455-6677-8899-aabbccddeeff"))
+        let keys = MobileMirrorSessionKeys.derive(
+            pairingSecret: Data((0..<32).map(UInt8.init)),
+            channelID: channelID
+        )
+        let expectedActionKey = try data(
+            hex: "85c0044305e1a7fd5b4a223a4ccd79da0570de68830f8a83056e15fcf9f67d8d"
+        )
+        let expectedTerminalKey = try data(
+            hex: "06999873580e00273a89c9990aca2d0269d1396bae9244c9a40ba7cfa832ad8a"
+        )
+        let expectedTerminalInputKey = try data(
+            hex: "48bdf0ebf64e911297b80a0a6906a249e35afc894b27a7d1045dbb9bf4e95fdb"
+        )
+        #expect(keys.actionToken.secret == expectedActionKey)
+        #expect(keys.terminalEncryptionKey == expectedTerminalKey)
+        #expect(keys.terminalInputEncryptionKey == expectedTerminalInputKey)
+
+        let body = Data(
+            "{\"kind\":\"select-session\",\"sessionID\":\"s\",\"surfaceID\":\"u\"}".utf8
+        )
+        let payload = MobileMirrorSessionKeys.canonicalActionPayload(
+            method: "POST",
+            path: "/mobile/api/action",
+            body: body,
+            timestamp: "1720000000",
+            nonce: "11111111-2222-4333-8444-555555555555"
+        )
+        let expectedSignature = try data(
+            hex: "3793bf1bf1cf4446b73ace8ced341fbebe64cf7236e75ef70f9dfc4b4626bd45"
+        )
+        #expect(keys.actionToken.sign(payload) == expectedSignature)
+    }
+
+    @Test("pairing token is consumed once and requires desktop approval")
+    func pairingTokenIsOneUse() throws {
+        let clock = MobileMirrorTestClock(Date(timeIntervalSince1970: 2_000_000_000))
+        let authority = MobileMirrorPairingAuthority(clock: { clock.now })
+        let identity = MobileMirrorClientIdentity(
+            remoteAddress: "192.168.1.23",
+            userAgent: "Mobile Browser"
+        )
+        let offer = authority.makeOffer()
+        let pending = try authority.consumeOffer(token: offer.token, identity: identity)
+
+        #expect(pending.channelID == offer.id)
+        #expect(throws: MobileMirrorError.invalidPairingToken) {
+            try authority.consumeOffer(token: offer.token, identity: identity)
+        }
+        #expect(try authority.poll(pendingID: pending.id, identity: identity) == .pending)
+
+        let active = try #require(try authority.decide(pendingID: pending.id, approve: true))
+        guard case .confirmed(let cookie) = try authority.poll(
+            pendingID: pending.id,
+            identity: identity
+        ) else {
+            Issue.record("Expected confirmed pairing")
+            return
+        }
+        let credentials = try authority.credentials(cookie: cookie)
+        #expect(credentials.channelID == active.channelID)
+        #expect(credentials.terminalEncryptionKey.count == 32)
+        #expect(offer.pairingSecret.utf8.count >= 43)
+        #expect(authority.activePairing(cookie: "wrong") == nil)
+        #expect(authority.activePairing(cookie: cookie)?.identity == identity)
+    }
+
+    @Test("pairing token expires before it can create a pending client")
+    func pairingTokenExpires() throws {
+        let clock = MobileMirrorTestClock(Date(timeIntervalSince1970: 2_000_000_000))
+        let authority = MobileMirrorPairingAuthority(clock: { clock.now })
+        let offer = authority.makeOffer(ttl: 5)
+        clock.now = clock.now.addingTimeInterval(6)
+
+        #expect(throws: MobileMirrorError.pairingExpired) {
+            try authority.consumeOffer(
+                token: offer.token,
+                identity: MobileMirrorClientIdentity(remoteAddress: "10.0.0.4", userAgent: "Phone")
+            )
+        }
+    }
+
+    @Test("encrypted actions accept bounded reordering and reject duplicates or stale sequences")
+    func encryptedActionsUseBoundedReplayWindow() throws {
+        let authority = MobileMirrorPairingAuthority()
+        let identity = MobileMirrorClientIdentity(remoteAddress: "10.0.0.8", userAgent: "Phone")
+        let offer = authority.makeOffer()
+        let pending = try authority.consumeOffer(token: offer.token, identity: identity)
+        _ = try authority.decide(pendingID: pending.id, approve: true)
+        guard case .confirmed(let cookie) = try authority.poll(
+            pendingID: pending.id,
+            identity: identity
+        ) else {
+            Issue.record("Expected confirmed pairing")
+            return
+        }
+        let credentials = try authority.credentials(cookie: cookie)
+        let pairingSecret = try #require(
+            MobileMirrorPairingAuthority.decodeBase64URL(offer.pairingSecret)
+        )
+        let sessionKeys = MobileMirrorSessionKeys.derive(
+            pairingSecret: pairingSecret,
+            channelID: offer.id
+        )
+        #expect(credentials.terminalEncryptionKey == sessionKeys.terminalEncryptionKey)
+        let plaintext = Data("{\"kind\":\"select-session\"}".utf8)
+        let body = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            plaintext: plaintext,
+            key: sessionKeys.terminalInputEncryptionKey,
+            sequence: 0
+        )
+        let wrongToken = RelayToken(secret: Data(repeating: 0xA5, count: 32))
+
+        #expect(throws: MobileMirrorError.invalidSignature) {
+            try openAction(
+                authority: authority,
+                cookie: cookie,
+                body: plaintext,
+                actionToken: sessionKeys.actionToken,
+                signingToken: wrongToken
+            )
+        }
+        #expect(throws: MobileMirrorEncryptedActionEnvelopeError.invalidEnvelope) {
+            try openAction(
+                authority: authority,
+                cookie: cookie,
+                body: plaintext,
+                actionToken: sessionKeys.actionToken
+            )
+        }
+        #expect(throws: MobileMirrorError.invalidSignature) {
+            try openAction(
+                authority: authority,
+                cookie: cookie,
+                body: body,
+                actionToken: sessionKeys.actionToken,
+                signingToken: wrongToken
+            )
+        }
+
+        let opened = try openAction(
+            authority: authority,
+            cookie: cookie,
+            body: body,
+            actionToken: sessionKeys.actionToken
+        )
+        #expect(opened.channelID == credentials.channelID)
+        #expect(opened.body == plaintext)
+
+        #expect(throws: MobileMirrorError.replayDetected) {
+            try openAction(
+                authority: authority,
+                cookie: cookie,
+                body: body,
+                actionToken: sessionKeys.actionToken
+            )
+        }
+
+        let wrongKeyBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            plaintext: plaintext,
+            key: Data(repeating: 0x5A, count: 32),
+            sequence: 1
+        )
+        #expect(throws: MobileMirrorEncryptedActionEnvelopeError.invalidEnvelope) {
+            try openAction(
+                authority: authority,
+                cookie: cookie,
+                body: wrongKeyBody,
+                actionToken: sessionKeys.actionToken
+            )
+        }
+
+        let advancedBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            plaintext: plaintext,
+            key: sessionKeys.terminalInputEncryptionKey,
+            sequence: 2
+        )
+        _ = try openAction(
+            authority: authority,
+            cookie: cookie,
+            body: advancedBody,
+            actionToken: sessionKeys.actionToken
+        )
+
+        let reorderedBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            plaintext: plaintext,
+            key: sessionKeys.terminalInputEncryptionKey,
+            sequence: 1
+        )
+        let reordered = try openAction(
+            authority: authority,
+            cookie: cookie,
+            body: reorderedBody,
+            actionToken: sessionKeys.actionToken
+        )
+        #expect(reordered.body == plaintext)
+        #expect(throws: MobileMirrorError.replayDetected) {
+            try openAction(
+                authority: authority,
+                cookie: cookie,
+                body: reorderedBody,
+                actionToken: sessionKeys.actionToken
+            )
+        }
+
+        let farAdvancedBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            plaintext: plaintext,
+            key: sessionKeys.terminalInputEncryptionKey,
+            sequence: 68
+        )
+        _ = try openAction(
+            authority: authority,
+            cookie: cookie,
+            body: farAdvancedBody,
+            actionToken: sessionKeys.actionToken
+        )
+        let staleBody = try MobileMirrorEncryptedActionTestSupport.requestBody(
+            plaintext: plaintext,
+            key: sessionKeys.terminalInputEncryptionKey,
+            sequence: 3
+        )
+        #expect(throws: MobileMirrorError.replayDetected) {
+            try openAction(
+                authority: authority,
+                cookie: cookie,
+                body: staleBody,
+                actionToken: sessionKeys.actionToken
+            )
+        }
+    }
+
+    @Test("HTTP parser accepts exact content length and rejects duplicate signature headers")
+    func boundedHTTPParser() throws {
+        let body = "{\"kind\":\"project-create\",\"name\":\"Demo\"}"
+        let request = Data((
+            "POST /mobile/api/action HTTP/1.1\r\n"
+                + "Host: 192.168.1.2:42100\r\n"
+                + "Content-Type: application/json\r\n"
+                + "Content-Length: \(body.utf8.count)\r\n\r\n"
+                + body
+        ).utf8)
+        let parsed = try #require(try MobileMirrorHTTPRequest.parseIfComplete(request))
+        #expect(parsed.method == "POST")
+        #expect(parsed.path == "/mobile/api/action")
+        #expect(parsed.body == Data(body.utf8))
+
+        let duplicate = Data((
+            "POST /mobile/api/action HTTP/1.1\r\n"
+                + "Host: local\r\n"
+                + "X-Cocxy-Signature: one\r\n"
+                + "X-Cocxy-Signature: two\r\n"
+                + "Content-Length: 0\r\n\r\n"
+        ).utf8)
+        #expect(throws: MobileMirrorHTTPError.duplicateSecurityHeader) {
+            try MobileMirrorHTTPRequest.parseIfComplete(duplicate)
+        }
+    }
+
+    @Test("HTTP parser preserves an exact one MiB terminal paste body")
+    func HTTPParserPreservesMaximumPaste() throws {
+        let action = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            surfaceID: UUID().uuidString,
+            controlType: "paste",
+            text: String(
+                repeating: "é",
+                count: MobileMirrorTerminalControl.maximumPasteUTF8Bytes / 2
+            )
+        )
+        let body = try JSONEncoder().encode(action)
+        var request = Data((
+            "POST /mobile/api/action HTTP/1.1\r\n"
+                + "Host: local\r\n"
+                + "Content-Type: application/json\r\n"
+                + "Content-Length: \(body.count)\r\n\r\n"
+        ).utf8)
+        request.append(body)
+
+        let parsed = try #require(try MobileMirrorHTTPRequest.parseIfComplete(request))
+        let decoded = try JSONDecoder().decode(MobileMirrorAction.self, from: parsed.body)
+
+        #expect(decoded.controlType == "paste")
+        #expect(decoded.text?.utf8.count == MobileMirrorTerminalControl.maximumPasteUTF8Bytes)
+    }
+
+    @Test("terminal action permits bounded viewport scroll but rejects browser mouse controls")
+    func terminalActionValidatesViewportNavigation() throws {
+        let surfaceID = UUID().uuidString
+        let action = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
+            controlType: "mouse",
+            mouseAction: "press",
+            row: 1,
+            col: 1,
+            button: 1
+        )
+        #expect(throws: MobileMirrorError.invalidAction) {
+            try action.validate()
+        }
+
+        let viewportScroll = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
+            controlType: "viewport-scroll",
+            scrollDelta: 4
+        )
+        try viewportScroll.validate()
+
+        let unboundedScroll = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
+            controlType: "viewport-scroll",
+            scrollDelta: 65
+        )
+        #expect(throws: MobileMirrorError.invalidAction) {
+            try unboundedScroll.validate()
+        }
+
+        let paste = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
+            controlType: "paste",
+            text: String(repeating: "p", count: MobileMirrorTerminalControl.maximumPasteUTF8Bytes)
+        )
+        try paste.validate()
+        let oversizedPaste = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
+            controlType: "paste",
+            text: paste.text! + "x"
+        )
+        #expect(throws: MobileMirrorError.invalidAction) {
+            try oversizedPaste.validate()
+        }
+
+        let ambiguous = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
+            controlType: "key",
+            key: "enter",
+            text: "unexpected"
+        )
+        #expect(throws: MobileMirrorError.invalidAction) {
+            try ambiguous.validate()
+        }
+
+        let pollutedSelection = MobileMirrorAction(
+            kind: .selectSession,
+            sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
+            text: "unexpected"
+        )
+        #expect(throws: MobileMirrorError.invalidAction) {
+            try pollutedSelection.validate()
+        }
+    }
+
+    @Test("action audit stores a target digest without sensitive content")
+    func actionAuditRedactsContent() throws {
+        let projectName = "Private Project"
+        let response = "secret response"
+        let action = MobileMirrorAction(
+            kind: .projectCreate,
+            text: nil,
+            name: projectName
+        )
+        let event = MobileMirrorActionAudit.event(
+            action: action,
+            channelID: UUID(),
+            identity: MobileMirrorClientIdentity(
+                remoteAddress: "SSH workstation",
+                userAgent: response
+            ),
+            accepted: true
+        )
+        let data = try JSONSerialization.data(withJSONObject: event.toJSON())
+        let json = String(decoding: data, as: UTF8.self)
+
+        #expect(event.typeName == "mobileAction")
+        #expect(json.contains("project-create"))
+        #expect(json.contains(projectName) == false)
+        #expect(json.contains(response) == false)
+        #expect(json.contains(MobileMirrorPairingAuthority.digest(Data(projectName.utf8))))
+    }
+
+    @Test("action audit distinguishes queued and partial effects")
+    func actionAuditTracksDeferredOutcomes() throws {
+        let action = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            surfaceID: UUID().uuidString,
+            controlType: "paste",
+            text: "content"
+        )
+        let identity = MobileMirrorClientIdentity(
+            remoteAddress: "local relay",
+            userAgent: "Phone"
+        )
+
+        for outcome in [
+            MobileMirrorActionAudit.Outcome.queued,
+            MobileMirrorActionAudit.Outcome.partial,
+        ] {
+            let event = MobileMirrorActionAudit.event(
+                action: action,
+                channelID: UUID(),
+                identity: identity,
+                outcome: outcome
+            )
+            let data = try JSONSerialization.data(withJSONObject: event.toJSON())
+            let json = String(decoding: data, as: UTF8.self)
+            #expect(json.contains("\"outcome\":\"\(outcome.rawValue)\""))
+            #expect(!json.contains("content"))
+        }
+    }
+
+    private func openAction(
+        authority: MobileMirrorPairingAuthority,
+        cookie: String,
+        body: Data,
+        actionToken: RelayToken,
+        signingToken: RelayToken? = nil
+    ) throws -> MobileMirrorOpenedAction {
+        let timestamp = String(UInt64(Date().timeIntervalSince1970))
+        let nonce = UUID().uuidString
+        let signature = MobileMirrorEncryptedActionTestSupport.signature(
+            body: body,
+            timestamp: timestamp,
+            nonce: nonce,
+            actionToken: signingToken ?? actionToken
+        )
+        return try authority.openAction(
+            cookie: cookie,
+            method: "POST",
+            path: "/mobile/api/action",
+            timestamp: timestamp,
+            nonce: nonce,
+            signature: signature,
+            body: body
+        )
+    }
+
+    private func data(hex: String) throws -> Data {
+        guard hex.count.isMultiple(of: 2) else { throw MobileMirrorTestDataError.invalidHex }
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(hex.count / 2)
+        var index = hex.startIndex
+        while index < hex.endIndex {
+            let end = hex.index(index, offsetBy: 2)
+            guard let byte = UInt8(hex[index..<end], radix: 16) else {
+                throw MobileMirrorTestDataError.invalidHex
+            }
+            bytes.append(byte)
+            index = end
+        }
+        return Data(bytes)
+    }
+}
+
+private enum MobileMirrorTestDataError: Error {
+    case invalidHex
+}
+
+private final class MobileMirrorTestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedNow: Date
+
+    init(_ now: Date) {
+        storedNow = now
+    }
+
+    var now: Date {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedNow
+        }
+        set {
+            lock.lock()
+            storedNow = newValue
+            lock.unlock()
+        }
+    }
+}

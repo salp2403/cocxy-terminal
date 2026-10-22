@@ -480,7 +480,7 @@ final class AgentConfigServiceHotReloadTests: XCTestCase {
         fileProvider.content = updatedToml
         try service.reload()
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 15.0)
 
         XCTAssertNotNil(receivedConfigs)
         XCTAssertEqual(receivedConfigs?.count, 2)

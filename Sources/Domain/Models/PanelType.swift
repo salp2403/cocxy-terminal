@@ -47,6 +47,9 @@ enum PanelType: String, Codable, Sendable, Equatable {
     /// A local DB/cloud helper panel that runs user-triggered local CLIs.
     case dbCloud = "db-cloud"
 
+    /// A project-scoped home panel backed by a local project root.
+    case projectHome = "project-home"
+
     /// A live subagent activity panel.
     case subagent
 }
@@ -64,7 +67,7 @@ struct PanelInfo: Codable, Equatable, Sendable {
     /// Optional initial URL for browser panels.
     let initialURL: URL?
 
-    /// Optional file path for document-backed panels.
+    /// Optional file or project root for filesystem-backed panels.
     let filePath: URL?
 
     /// Subagent identifier for linking the panel to dashboard data.
@@ -112,6 +115,9 @@ struct PanelInfo: Codable, Equatable, Sendable {
     }
     static func dbCloud(workingDirectory: URL? = nil) -> PanelInfo {
         PanelInfo(type: .dbCloud, filePath: workingDirectory)
+    }
+    static func projectHome(projectRoot: URL) -> PanelInfo {
+        PanelInfo(type: .projectHome, filePath: projectRoot)
     }
     static func subagent(id: String, sessionId: String) -> PanelInfo {
         PanelInfo(type: .subagent, subagentId: id, sessionId: sessionId)

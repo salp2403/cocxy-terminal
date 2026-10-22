@@ -26,6 +26,14 @@ struct ComputerUseScreenshot: Sendable, Equatable {
     let fileURL: URL
     let width: Int
     let height: Int
+    let scaleFactor: Double
+
+    init(fileURL: URL, width: Int, height: Int, scaleFactor: Double) {
+        self.fileURL = fileURL
+        self.width = width
+        self.height = height
+        self.scaleFactor = max(1, scaleFactor)
+    }
 }
 
 enum ComputerUseAction: Sendable, Equatable {
@@ -38,7 +46,7 @@ enum ComputerUseResult: Sendable, Equatable {
     case mouseMoved(x: Double, y: Double)
     case mouseClicked(x: Double, y: Double, button: ComputerUseMouseButton, clickCount: Int)
     case keyboardTyped(characters: Int)
-    case screenshot(fileURL: URL, width: Int, height: Int)
+    case screenshot(fileURL: URL, width: Int, height: Int, scaleFactor: Double)
 }
 
 enum ComputerUseError: Error, Sendable, Equatable {

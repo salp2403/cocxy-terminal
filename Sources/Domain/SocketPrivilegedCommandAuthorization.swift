@@ -85,6 +85,7 @@ struct SocketPrivilegedCommandContext: Equatable, @unchecked Sendable {
         case localExecution = "local-execution"
         case computeCell = "compute-cell"
         case remoteConnection = "remote-connection"
+        case project
         case internalTrusted = "internal-trusted"
     }
 
@@ -368,7 +369,6 @@ enum SocketPrivilegedCommandExecutionContext {
     private static var currentSession: SocketPrivilegedCommandExecutionSession? {
         (Thread.current.threadDictionary[threadKey] as? SessionBox)?.session
     }
-
     private final class SessionBox: NSObject {
         let session: SocketPrivilegedCommandExecutionSession
 
@@ -384,11 +384,12 @@ enum SocketPrivilegedCommandSecurity {
     static let maxParameterValueBytes = 32_768
     static let maxApprovalPreviewBytes = 49_152
     static let maxBoundLocalResourceBytes = 1 * 1_024 * 1_024
-
     static func policy(for command: CLICommandName) -> SocketCommandAuthorizationPolicy {
         switch command {
         case .send,
              .sendKey,
+             .handoffExport,
+             .handoffImport,
              .timelineShow,
              .timelineExport,
              .search,
@@ -472,6 +473,12 @@ enum SocketPrivilegedCommandSecurity {
              .browserImportRun,
              .agentTeamLaunch,
              .agentTeamStop,
+             .taskRun,
+             .taskRunPromote,
+             .taskEnqueue,
+             .taskCancel,
+             .taskRerun,
+             .taskRemove,
              .webStart,
              .webStop,
              .webStatus,
@@ -506,7 +513,9 @@ enum SocketPrivilegedCommandSecurity {
              .workflowRun,
              .gitAssistantCommitMessage,
              .gitAssistantPRDraft,
-             .gitAssistantReleaseNotes:
+             .gitAssistantReleaseNotes,
+             .projectOpen,
+             .projectClone:
             guard let category = CocxyPrivilegedSocketCommandPolicy.category(
                 forRawCommand: command.rawValue
             ) else {
@@ -572,6 +581,14 @@ enum SocketPrivilegedCommandSecurity {
              .browserSplit,
              .browserInitScriptAdd,
              .agentTeamList,
+             .taskRunList,
+             .taskList,
+             .projectList,
+             .projectPin,
+             .projectUnpin,
+             .projectAlias,
+             .projectForget,
+             .projectTasks,
              .windowNew,
              .windowList,
              .windowFocus,
@@ -610,12 +627,10 @@ enum SocketPrivilegedCommandSecurity {
             return .ordinary
         }
     }
-
     static func category(for command: CLICommandName) -> SocketPrivilegedCommandCategory? {
         guard case .privileged(let category) = policy(for: command) else { return nil }
         return category
     }
-
     static func hasBoundedParameters(_ params: [String: String]) -> Bool {
         guard params.count <= maxParameterCount else { return false }
         return params.allSatisfy { key, value in
@@ -626,7 +641,6 @@ enum SocketPrivilegedCommandSecurity {
                 && !value.contains("\0")
         }
     }
-
     static func approvalPreview(_ request: SocketPrivilegedCommandAuthorizationRequest) -> String {
         approvalPreview(
             command: request.command,
@@ -634,7 +648,6 @@ enum SocketPrivilegedCommandSecurity {
             params: request.params
         )
     }
-
     static func approvalPreview(
         command: CLICommandName,
         category: SocketPrivilegedCommandCategory,
@@ -649,12 +662,29 @@ enum SocketPrivilegedCommandSecurity {
         } else {
             lines.append("Parameters:")
             for key in params.keys.sorted() {
-                lines.append("\(escapedPreview(key)):\n\(escapedPreview(params[key] ?? ""))")
+                let value = params[key] ?? ""
+                if command == .handoffImport, key == "artifact" {
+                    let data = Data(value.utf8)
+                    lines.append(
+                        "artifact: \(data.count) UTF-8 bytes; sha256 \(digest(data: data))"
+                    )
+                } else if command == .taskEnqueue, key == "prompt" {
+                    let data = Data(value.utf8)
+                    let promptPreview = boundedApprovalText(value)
+                    lines.append(
+                        "prompt (\(data.count) UTF-8 bytes):\n\(escapedPreview(promptPreview.text))"
+                    )
+                    if promptPreview.wasTruncated {
+                        lines.append("prompt: preview truncated to \(promptPreview.text.utf8.count) UTF-8 bytes")
+                    }
+                    lines.append("prompt sha256: \(digest(data: data))")
+                } else {
+                    lines.append("\(escapedPreview(key)):\n\(escapedPreview(value))")
+                }
             }
         }
         return lines.joined(separator: "\n")
     }
-
     static func digest(
         command: CLICommandName,
         category: SocketPrivilegedCommandCategory,
@@ -674,13 +704,11 @@ enum SocketPrivilegedCommandSecurity {
             .map { String(format: "%02x", $0) }
             .joined()
     }
-
     static func digest(data: Data) -> String {
         SHA256.hash(data: data)
             .map { String(format: "%02x", $0) }
             .joined()
     }
-
     static func boundedFileDigest(
         at url: URL,
         maximumBytes: Int = maxBoundLocalResourceBytes,
@@ -767,5 +795,24 @@ enum SocketPrivilegedCommandSecurity {
             }
         }
         return preview
+    }
+
+    private static func boundedApprovalText(
+        _ value: String,
+        maximumUTF8Bytes: Int = 1_024
+    ) -> (text: String, wasTruncated: Bool) {
+        guard value.utf8.count > maximumUTF8Bytes else {
+            return (value, false)
+        }
+        var result = ""
+        result.reserveCapacity(maximumUTF8Bytes)
+        var usedBytes = 0
+        for character in value {
+            let characterBytes = String(character).utf8.count
+            guard usedBytes + characterBytes <= maximumUTF8Bytes else { break }
+            result.append(character)
+            usedBytes += characterBytes
+        }
+        return (result, true)
     }
 }

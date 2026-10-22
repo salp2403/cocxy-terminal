@@ -83,6 +83,9 @@ jobs:
       - name: Test launchd process containment
         run: ./scripts/run-filtered-swift-testing.sh NotebookProcessRunnerSwiftTestingTests
 
+      - name: Test contained notebook and workflow runs over the socket
+        run: ./scripts/run-filtered-swift-testing.sh SocketLocalExecutionIntegrationSwiftTestingTests
+
   trusted-bundle-audit:
     name: Full Bundle Audit (Trusted Main)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

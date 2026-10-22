@@ -7,22 +7,21 @@
   <meta name="description" content="This guide moved into the documentation hub.">
   <meta name="author" content="Said Arturo Lopez">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
-  <meta name="theme-color" content="#101018">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b0c10" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="/css/style.css?v=0.0.0">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cocxy Terminal">
   <meta property="og:title" content="First Run - Cocxy Terminal">
   <meta property="og:description" content="This guide moved into the documentation hub.">
   <meta property="og:url" content="https://cocxy.dev/getting-started.html">
-  <meta property="og:image" content="https://cocxy.dev/og/og-getting-started.png">
+  <meta property="og:image" content="https://cocxy.dev/og/og-getting-started.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="First Run - Cocxy Terminal">
   <meta property="og:locale" content="en_US">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="First Run - Cocxy Terminal">
-  <meta name="twitter:description" content="This guide moved into the documentation hub.">
-  <meta name="twitter:image" content="https://cocxy.dev/og/og-getting-started.png">
   <link rel="canonical" href="https://cocxy.dev/getting-started.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/getting-started.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/getting-started.html">
@@ -30,43 +29,35 @@
   <link rel="icon" type="image/svg+xml" href="/images/icon.svg">
   <link rel="apple-touch-icon" href="/images/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
-  <script>
-  (() => {
-    try {
-      const saved = localStorage.getItem('cocxy-theme');
-      if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
-    } catch (_) {}
-  })();
-  </script>
+  <script>(() => { const root = document.documentElement; root.classList.add('js'); try { const saved = localStorage.getItem('cocxy-theme'); if (saved === 'light' || saved === 'dark') root.dataset.theme = saved; } catch (_) {} })();</script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to main content</a>
 <header class="site-header">
   <nav class="nav container" aria-label="Main navigation">
     <a class="nav-logo" href="/" aria-label="Cocxy Terminal">
-      <picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="32" height="32" alt=""></picture>
+      <img src="/images/icon-192.png" width="28" height="28" alt="">
       <span>Cocxy</span>
     </a>
-    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
-      <span></span><span></span><span></span>
-      <span class="sr-only">Open navigation</span>
-    </button>
     <div class="nav-links" id="site-menu">
       <a  href="/features.html">Features</a>
       <a  href="/features/agents.html">Agents</a>
       <a  href="/privacy.html">Privacy</a>
       <a  href="/security.html">Security</a>
       <a aria-current="page" href="/docs/">Docs</a>
-      <a class="nav-cta" href="/#download">Download</a>
-      <button class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
-        <span class="theme-toggle__sun" aria-hidden="true">☀</span>
-        <span class="theme-toggle__moon" aria-hidden="true">◐</span>
-      </button>
       <a href="/es/getting-started.html" hreflang="es" lang="es">Español</a>
       <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a class="nav-cta" href="/#download">Download</a>
+    </div>
+    <div class="nav-actions">
+      <button class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+        <span class="theme-toggle__sun"></span>
+        <span class="theme-toggle__moon"></span>
+      </button>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
+        <span></span><span></span><span></span>
+        <span class="sr-only">Open navigation</span>
+      </button>
     </div>
   </nav>
 </header>
@@ -75,15 +66,17 @@
     <p class="eyebrow">Moved</p>
     <h1>First Run now lives in Docs</h1>
     <p>The server redirects this URL to the new guide so existing links keep working.</p>
-  </div></section><section class="section"><div class="container"><a class="button button-primary" href="/docs/first-run.html">Open guide</a></div></section><section class="section"><div class="container docs-layout">
-  <nav class="toc" aria-label="First run contents"><strong>Contents</strong><a href="#install" class="sidebar-link">Install</a><a href="#visual-tour" class="sidebar-link">Visual Tour</a><a href="#concepts" class="sidebar-link">Concepts</a><a href="#configuration" class="sidebar-link">Configuration</a><a href="#keyboard-shortcuts" class="sidebar-link">Keyboard Shortcuts</a><a href="#agent-detection" class="sidebar-link">Agent Detection</a><a href="#code-review" class="sidebar-link">Code Review</a><a href="#markdown" class="sidebar-link">Markdown</a><a href="#quicklook" class="sidebar-link">Quick Look</a><a href="#browser" class="sidebar-link">Browser</a><a href="#remote-workspaces" class="sidebar-link">Remote Workspaces</a><a href="#web-terminal" class="sidebar-link">Web Terminal</a><a href="#shell-integration" class="sidebar-link">Shell Integration</a><a href="#per-project-config" class="sidebar-link">Per-project Config</a><a href="#applescript" class="sidebar-link">AppleScript</a><a href="#plugin-system" class="sidebar-link">Plugin System</a><a href="#splits" class="sidebar-link">Splits</a><a href="#quick-terminal" class="sidebar-link">Quick Terminal</a><a href="#notifications" class="sidebar-link">Notifications</a><a href="#command-palette" class="sidebar-link">Command Palette</a><a href="#sessions" class="sidebar-link">Sessions</a><a href="#local-backups" class="sidebar-link">Local Backups</a><a href="#input-classifier" class="sidebar-link">Input Classifier</a><a href="#command-signatures" class="sidebar-link">Command Signatures</a><a href="#sandbox-controls" class="sidebar-link">Sandbox Controls</a><a href="#command-corrections" class="sidebar-link">Command Corrections</a><a href="#cli-companion" class="sidebar-link">CLI Companion</a><a href="#themes" class="sidebar-link">Themes</a><a href="#agents-toml" class="sidebar-link">agents.toml</a><a href="#migration-guide" class="sidebar-link">Migration Guide</a><a href="#troubleshooting" class="sidebar-link">Troubleshooting</a></nav>
+    <div class="page-hero__actions"><a class="button button-primary" href="/docs/first-run.html">Open guide</a></div>
+  </div></section>
+<section class="section section--tight"><div class="container docs-layout">
+  <nav class="toc" aria-label="First run contents"><strong>Contents</strong><a href="#install">Install</a><a href="#visual-tour">Visual Tour</a><a href="#concepts">Concepts</a><a href="#configuration">Configuration</a><a href="#keyboard-shortcuts">Keyboard Shortcuts</a><a href="#agent-detection">Agent Detection</a><a href="#code-review">Code Review</a><a href="#markdown">Markdown</a><a href="#quicklook">Quick Look</a><a href="#browser">Browser</a><a href="#remote-workspaces">Remote Workspaces</a><a href="#web-terminal">Web Terminal</a><a href="#shell-integration">Shell Integration</a><a href="#per-project-config">Per-project Config</a><a href="#applescript">AppleScript</a><a href="#plugin-system">Plugin System</a><a href="#splits">Splits</a><a href="#quick-terminal">Quick Terminal</a><a href="#notifications">Notifications</a><a href="#command-palette">Command Palette</a><a href="#sessions">Sessions</a><a href="#local-backups">Local Backups</a><a href="#input-classifier">Input Classifier</a><a href="#command-signatures">Command Signatures</a><a href="#sandbox-controls">Sandbox Controls</a><a href="#command-corrections">Command Corrections</a><a href="#cli-companion">CLI Companion</a><a href="#themes">Themes</a><a href="#agents-toml">agents.toml</a><a href="#migration-guide">Migration Guide</a><a href="#troubleshooting">Troubleshooting</a></nav>
   <article class="prose">
-    <h2 id="install">Install</h2><p>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</p>
+    <h2 id="install">Install</h2><div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</span></code></pre></div>
 <h2 id="visual-tour">Visual Tour</h2><p>Open the sidebar, browser, and Vault to confirm local state.</p>
 <h2 id="concepts">Concepts</h2><p>Tabs, panes, sessions, agents, and Vault live on your Mac.</p>
-<h2 id="configuration">Configuration</h2><p>.cocxy.toml controls themes, hooks, agents, and security per project.</p>
+<h2 id="configuration">Configuration</h2><p><code>.cocxy.toml</code> controls themes, hooks, agents, and security per project.</p>
 <h2 id="keyboard-shortcuts">Keyboard Shortcuts</h2><p>Use the command palette to discover actions without memorizing shortcuts.</p>
-<h2 id="agent-detection">Agent Detection</h2><p>cocxy setup-hooks installs local hooks and cocxy status verifies state.</p>
+<h2 id="agent-detection">Agent Detection</h2><p><code>cocxy setup-hooks</code> installs local hooks and <code>cocxy status</code> verifies state.</p>
 <h2 id="code-review">Code Review</h2><p>Review diffs, inline comments, and changes before returning feedback.</p>
 <h2 id="markdown">Markdown</h2><p>Open documents, preview, and export without leaving the local workspace.</p>
 <h2 id="quicklook">Quick Look</h2><p>Preview content offline with sanitization.</p>
@@ -99,74 +92,60 @@
 <h2 id="notifications">Notifications</h2><p>Local alerts are based on visible events.</p>
 <h2 id="command-palette">Command Palette</h2><p>Search actions, windows, and commands from one place.</p>
 <h2 id="sessions">Sessions</h2><p>Resume work from local Vault history.</p>
-<h2 id="local-backups">Local Backups</h2><p>Preferences &gt; Backups lets you Restore only the selected artifact.</p>
-<h2 id="input-classifier">Input Classifier</h2><pre class="code-block"><code>[input-classifier]
+<h2 id="local-backups">Local Backups</h2><p><span class="ui-path">Preferences &gt; Backups</span> lets you review local backups. Restore only the selected artifact.</p>
+<h2 id="input-classifier">Input Classifier</h2><div class="code-block install install--config"><div class="install__bar"><span>TOML</span></div><pre><code>[input-classifier]
 dangerous-command-warning = true
 auto-route-natural-language = false
-foundation-models-fallback = true
-cocxy classify
-dangerous-command
-natural-language</code><button class="copy-button" type="button">Copy</button></pre>
-<h2 id="command-signatures">Command Signatures</h2><pre class="code-block"><code>[security]
+foundation-models-fallback = true</code></pre></div><div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>cocxy classify</span></code></pre></div><ul class="term-list"><li><code>dangerous-command</code></li><li><code>natural-language</code></li></ul>
+<h2 id="command-signatures">Command Signatures</h2><div class="code-block install install--config"><div class="install__bar"><span>TOML</span></div><pre><code>[security]
 require-signed-templates = false
 require-signed-macros = false
 require-signed-plugins = false
 warn-on-unsigned = true
-trust-on-first-use = false
-cocxy keys generate --author
-cocxy sign template
-cocxy verify template
-verified
-unsigned
-invalid signature</code><button class="copy-button" type="button">Copy</button></pre>
-<h2 id="sandbox-controls">Sandbox Controls</h2><pre class="code-block"><code>[security.sandbox]
+trust-on-first-use = false</code></pre></div><div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>cocxy keys generate --author</span>
+<span>cocxy sign template</span>
+<span>cocxy verify template</span></code></pre></div><ul class="label-list"><li>verified</li><li>unsigned</li><li>invalid signature</li></ul>
+<h2 id="sandbox-controls">Sandbox Controls</h2><div class="code-block install install--config"><div class="install__bar"><span>TOML</span></div><pre><code>[security.sandbox]
 plugins-strict = true
 agents-isolated = true
 mcp-isolated = true
 audit-log-enabled = true
-warn-on-grant = true
-cocxy sandbox list-grants
-cocxy sandbox revoke
-Sandbox Inspector
-Agent command tools run with workspace-scoped read/write access</code><button class="copy-button" type="button">Copy</button></pre>
-<h2 id="command-corrections">Command Corrections</h2><pre class="code-block"><code>[command-corrections]
+warn-on-grant = true</code></pre></div><div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>cocxy sandbox list-grants</span>
+<span>cocxy sandbox revoke</span></code></pre></div><ul class="label-list"><li>Sandbox Inspector</li></ul><p>Agent command tools run with workspace-scoped read/write access</p>
+<h2 id="command-corrections">Command Corrections</h2><div class="code-block install install--config"><div class="install__bar"><span>TOML</span></div><pre><code>[command-corrections]
 edit-distance-threshold = 2
 foundation-models-enabled = true
 agent-fallback = false
 auto-show-on-failure = true
-show-confidence-badge = true
-cocxy correct
-gti status
-pyhton -m venv .
-Tab
-Esc</code><button class="copy-button" type="button">Copy</button></pre>
-<h2 id="cli-companion">CLI Companion</h2><p>cocxy --help lists commands for local automation.</p>
+show-confidence-badge = true</code></pre></div><div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>cocxy correct</span></code></pre></div><ul class="term-list"><li><code>gti status</code></li><li><code>pyhton -m venv .</code></li></ul><p class="key-list"><kbd>Tab</kbd> <kbd>Esc</kbd></p>
+<h2 id="cli-companion">CLI Companion</h2><p><code>cocxy --help</code> lists commands for local automation.</p>
 <h2 id="themes">Themes</h2><p>Configure colors, font, and contrast from preferences.</p>
 <h2 id="agents-toml">agents.toml</h2><p>Define custom agents, patterns, and resume rules.</p>
-<h2 id="migration-guide">Migration from v0.x</h2><p>~/.config/cocxy/ keeps configuration; use brew update &amp;&amp; brew upgrade --cask cocxy.</p>
-<h2 id="troubleshooting">Troubleshooting</h2><p>Run cocxy doctor and inspect local permissions.</p>
+<h2 id="migration-guide">Migration from v0.x</h2><p><code>~/.config/cocxy/</code> keeps configuration; use <code>brew update &amp;&amp; brew upgrade --cask cocxy</code>.</p>
+<h2 id="troubleshooting">Troubleshooting</h2><p>Run <code>cocxy doctor</code> and inspect local permissions.</p>
   </article>
-</div></section><section class="section section-band" id="download" aria-labelledby="download-title">
+</div></section>
+<section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
-    <div class="section-header" data-reveal="fade-up">
+    <div class="section-header section-header--center" data-reveal="fade-up">
       <p class="eyebrow">Download</p>
-      <h2 id="download-title">Install Cocxy on macOS</h2>
-      <p>The site keeps version placeholders so the release workflow can rewrite them when publishing.</p>
+      <h2 id="download-title">Install Cocxy on your Mac</h2>
+      <p>Signed with a Developer ID and notarized by Apple. Updates arrive through the built-in updater.</p>
     </div>
     <div class="download-grid" data-reveal="stagger">
-      <article class="card">
-        <h3>DMG</h3>
-        <p>Direct download from GitHub Releases.</p>
+      <article class="card download-card download-card--primary">
+        <h3>Direct download</h3>
+        <p>The signed disk image from GitHub Releases.</p>
         <a class="button button-primary" href="https://github.com/salp2403/cocxy-terminal/releases/download/v0.0.0/CocxyTerminal-0.0.0.dmg">Download v0.0.0</a>
       </article>
-      <article class="card">
+      <article class="card download-card">
         <h3>Homebrew</h3>
-        <p>Reproducible install from the official tap.</p>
-        <pre class="code-block"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code><button class="copy-button" type="button">Copy</button></pre>
+        <p>Install and upgrade from the official tap.</p>
+        <div class="code-block install"><div class="install__bar"><span>Terminal</span></div><pre><code><span>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</span></code></pre></div>
       </article>
-      <article class="card">
-        <h3>Channels</h3>
-        <p>Stable, preview, and nightly are documented with clear risk levels.</p>
+      <article class="card download-card">
+        <h3>Release channels</h3>
+        <p>Stable for daily work; preview and nightly for early testing.</p>
         <a class="button button-secondary" href="/channels.html">View channels</a>
       </article>
     </div>
@@ -174,36 +153,24 @@ Esc</code><button class="copy-button" type="button">Copy</button></pre>
 </section>
 </main>
 <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "BreadcrumbList",
-  "itemListElement": [
-    {
-      "@type": "ListItem",
-      "position": 1,
-      "name": "Home",
-      "item": "https://cocxy.dev/"
-    },
-    {
-      "@type": "ListItem",
-      "position": 2,
-      "name": "First Run",
-      "item": "https://cocxy.dev/getting-started.html"
-    }
-  ]
-}
+{"@context": "https://schema.org","@type": "BreadcrumbList","itemListElement": [{"@type": "ListItem","position": 1,"name": "Home","item": "https://cocxy.dev/"},{"@type": "ListItem","position": 2,"name": "First Run","item": "https://cocxy.dev/getting-started.html"}]}
 </script>
 <footer class="site-footer">
   <div class="container footer-grid">
     <div>
-      <a class="footer-brand" href="/"><picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="28" height="28" alt=""></picture><span>Cocxy Terminal</span></a>
+      <a class="footer-brand" href="/"><img src="/images/icon-192.png" width="28" height="28" alt=""><span>Cocxy Terminal</span></a>
       <p>Native macOS terminal, local-first, MIT licensed, and zero telemetry.</p>
     </div>
     <nav aria-label="Footer links">
+      <a href="/features.html">Features</a>
+      <a href="/features/agents.html">Agents</a>
+      <a href="/docs/">Docs</a>
       <a href="/privacy.html">Privacy</a>
       <a href="/security.html">Security</a>
       <a href="/releases.html">Releases</a>
-      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT</a>
+      <a href="/channels.html">Channels</a>
+      <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
     </nav>
     <p class="footer-note">Made by Said Arturo Lopez.</p>
   </div>

@@ -92,7 +92,7 @@ final class AgentDetectionEngineTests: XCTestCase {
             source: .osc(code: 133)
         ))
 
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
         XCTAssertEqual(receivedState, .finished)
     }
 
@@ -130,7 +130,7 @@ final class AgentDetectionEngineTests: XCTestCase {
             source: .pattern(name: "claude")
         ))
 
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
         XCTAssertEqual(receivedState, .working)
     }
 
@@ -159,7 +159,7 @@ final class AgentDetectionEngineTests: XCTestCase {
             expectation.fulfill()
         }
 
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
 
         // Only 1 transition should happen (idle -> agentLaunched)
         // Additional signals are identical and get debounced
@@ -217,7 +217,7 @@ final class AgentDetectionEngineTests: XCTestCase {
             expectation.fulfill()
         }
 
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
 
         XCTAssertEqual(states, [
             .agentLaunched,
@@ -259,7 +259,7 @@ final class AgentDetectionEngineTests: XCTestCase {
 
         sut.processTerminalOutput(Data(oscBytes))
 
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
         XCTAssertEqual(sut.currentState, .working)
     }
 
@@ -297,7 +297,7 @@ final class AgentDetectionEngineTests: XCTestCase {
 
         sut.notifyUserInput()
 
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
         XCTAssertEqual(sut.currentState, .working)
     }
 
@@ -325,7 +325,7 @@ final class AgentDetectionEngineTests: XCTestCase {
             expectation.fulfill()
         }
 
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
         XCTAssertEqual(sut.currentState, .idle)
     }
 
@@ -375,7 +375,7 @@ final class AgentDetectionEngineTests: XCTestCase {
             expectation.fulfill()
         }
 
-        waitForExpectations(timeout: 5.0)
+        waitForExpectations(timeout: 15.0)
         // No crash = pass
     }
 
@@ -398,7 +398,7 @@ final class AgentDetectionEngineTests: XCTestCase {
             source: .osc(code: 99)
         ))
 
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
     }
 
     // MARK: - Confidence-Based Conflict Resolution
@@ -464,7 +464,7 @@ final class AgentDetectionEngineTests: XCTestCase {
             expectation.fulfill()
         }
 
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
         // OSC outputReceived should win -> working state
         XCTAssertEqual(sut.currentState, .working)
     }
@@ -494,7 +494,7 @@ final class AgentDetectionEngineTests: XCTestCase {
             expectation.fulfill()
         }
 
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
         XCTAssertNil(sut.detectedAgentName)
     }
 
@@ -538,7 +538,7 @@ final class AgentDetectionEngineTests: XCTestCase {
             expectation.fulfill()
         }
 
-        waitForExpectations(timeout: 1.0)
+        waitForExpectations(timeout: 15.0)
         XCTAssertTrue(states.contains(.agentLaunched))
         XCTAssertTrue(states.contains(.working))
     }

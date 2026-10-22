@@ -79,6 +79,7 @@ extension MainWindowController {
                     case .templates: icon = "square.grid.2x2"
                     case .macros: icon = "keyboard"
                     case .dbCloud: icon = "externaldrive.connected.to.line.below"
+                    case .projectHome: icon = "house"
                     case .subagent: icon = "person.2"
                     }
                 } else {
@@ -119,6 +120,9 @@ extension MainWindowController {
                     case .dbCloud:
                         title = Self.localizedPanelTitle(.dbCloud, using: localizer)
                         icon = "externaldrive.connected.to.line.below"
+                    case .projectHome:
+                        title = Self.localizedPanelTitle(.projectHome, using: localizer)
+                        icon = "house"
                     case .subagent:
                         title = Self.localizedPanelTitle(.subagent, using: localizer)
                         icon = "person.2"
@@ -167,6 +171,8 @@ extension MainWindowController {
             return localizer.string("workspaceToolbar.panel.macros", fallback: "Macros")
         case .dbCloud:
             return localizer.string("workspaceToolbar.panel.dbCloud", fallback: "DB/Cloud")
+        case .projectHome:
+            return localizer.string("workspaceToolbar.panel.projectHome", fallback: "Project Home")
         case .subagent:
             return localizer.string("workspaceToolbar.panel.subagent", fallback: "Agent")
         }

@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Extension that manages the Remote Workspace overlay panel.
 ///
-/// The panel slides in from the right edge of the window, following the
+/// The panel slides in from the trailing edge of the window, following the
 /// same pattern as the Dashboard and Timeline panels in +Overlays.swift.
 ///
 /// Triggered by Cmd+Shift+R from the menu bar or Command Palette.
@@ -52,7 +52,33 @@ extension MainWindowController {
         viewModel.updateLocalizer(appLocalizer())
 
         remoteWorkspaceHostingView?.removeFromSuperview()
-        var swiftUIView = RemoteConnectionView(
+        var swiftUIView = makeRemoteConnectionView(viewModel: viewModel)
+        swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
+        hostingView.wantsLayer = true
+
+        let panelWidth: CGFloat = RemoteConnectionView.panelWidth
+        let containerBounds = overlayContainer.bounds
+
+        let targetX = trailingPanelOrigin(
+            containerWidth: containerBounds.width,
+            panelWidth: panelWidth
+        )
+        hostingView.frame = NSRect(
+            x: targetX,
+            y: 0,
+            width: panelWidth,
+            height: containerBounds.height
+        )
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
+        self.remoteWorkspaceHostingView = hostingView
+
+        overlayContainer.addSubview(hostingView)
+        isRemoteWorkspaceVisible = true
+    }
+
+    func makeRemoteConnectionView(viewModel: RemoteConnectionViewModel) -> RemoteConnectionView {
+        RemoteConnectionView(
             viewModel: viewModel,
             onDismiss: { [weak self] in self?.dismissRemoteWorkspacePanel() },
             localizer: appLocalizer(),
@@ -61,27 +87,25 @@ extension MainWindowController {
             remotePortScanner: remotePortScanner,
             onOpenRemoteBrowser: { [weak self] profile, suggestion in
                 await self?.openRemoteBrowser(profile: profile, suggestion: suggestion) ?? false
+            },
+            onAttachTmuxSession: { [weak self] profileID, session in
+                self?.openRemoteTmuxSession(profileID: profileID, session: session) ?? false
+            },
+            onAttachDaemonSession: { [weak self] profileID, session in
+                guard let self else { throw CancellationError() }
+                _ = try await self.openRemoteDaemonSession(
+                    profileID: profileID,
+                    session: session
+                )
+            },
+            onCreateDaemonSession: { [weak self] profileID, title in
+                guard let self else { throw CancellationError() }
+                _ = try await self.createRemoteDaemonSession(
+                    profileID: profileID,
+                    title: title
+                )
             }
         )
-        swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
-        let hostingView = NSHostingView(rootView: swiftUIView)
-        hostingView.wantsLayer = true
-
-        let panelWidth: CGFloat = RemoteConnectionView.panelWidth
-        let containerBounds = overlayContainer.bounds
-
-        let targetX = containerBounds.width - panelWidth
-        hostingView.frame = NSRect(
-            x: targetX,
-            y: 0,
-            width: panelWidth,
-            height: containerBounds.height
-        )
-        hostingView.autoresizingMask = [.height, .minXMargin]
-        self.remoteWorkspaceHostingView = hostingView
-
-        overlayContainer.addSubview(hostingView)
-        isRemoteWorkspaceVisible = true
     }
 
     func dismissRemoteWorkspacePanel() {
@@ -95,7 +119,10 @@ extension MainWindowController {
 
         isRemoteWorkspaceVisible = false
 
-        let targetX = overlayContainer.bounds.width
+        let targetX = trailingPanelExitOrigin(
+            containerWidth: overlayContainer.bounds.width,
+            panelWidth: hostingView.frame.width
+        )
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)

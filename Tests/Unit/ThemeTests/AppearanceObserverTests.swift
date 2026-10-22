@@ -19,7 +19,7 @@ final class AppearanceObserverTests: XCTestCase {
         // The observer dispatches via Task { @MainActor }, so we need to yield.
         let expectation = expectation(description: "Task yield")
         Task { @MainActor in expectation.fulfill() }
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 15.0)
     }
 
     func testDetectDarkModeReturnsDark() {

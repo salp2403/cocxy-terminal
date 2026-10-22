@@ -526,16 +526,14 @@ struct WorktreeServiceTests {
 
         let plan = try await service.mergedCleanupPlan(
             originRepoPath: origin,
-            baseRef: "HEAD",
-            store: store
+            baseRef: "HEAD", restrictingToIDs: nil, store: store
         )
         #expect(Set(plan.removable.map(\.id)) == Set([second.id, third.id]))
         #expect(!FileManager.default.fileExists(atPath: marker.path))
 
         let cleanup = try await service.cleanupMergedWorktrees(
             originRepoPath: origin,
-            baseRef: "HEAD",
-            store: store
+            baseRef: "HEAD", restrictingToIDs: nil, store: store
         )
         #expect(Set(cleanup.removed.map(\.id)) == Set([second.id, third.id]))
         #expect(!FileManager.default.fileExists(atPath: marker.path))
@@ -572,8 +570,7 @@ struct WorktreeServiceTests {
 
         let result = try await service.cleanupMergedWorktrees(
             originRepoPath: origin,
-            baseRef: "HEAD",
-            store: store
+            baseRef: "HEAD", restrictingToIDs: nil, store: store
         )
 
         #expect(Set(result.plan.removable.map(\.id)) == Set([first.id, second.id]))
@@ -609,8 +606,7 @@ struct WorktreeServiceTests {
 
         let blockedPlan = try await service.mergedCleanupPlan(
             originRepoPath: origin,
-            baseRef: "HEAD",
-            store: store
+            baseRef: "HEAD", restrictingToIDs: nil, store: store
         )
 
         #expect(blockedPlan.removable.isEmpty)
@@ -623,9 +619,7 @@ struct WorktreeServiceTests {
 
         let forced = try await service.cleanupMergedWorktrees(
             originRepoPath: origin,
-            baseRef: "HEAD",
-            force: true,
-            store: store
+            baseRef: "HEAD", force: true, restrictingToIDs: nil, store: store
         )
 
         #expect(forced.removed.map(\.id) == [entry.id])
@@ -674,8 +668,7 @@ struct WorktreeServiceTests {
 
         let plan = try await service.mergedCleanupPlan(
             originRepoPath: origin,
-            baseRef: "HEAD",
-            store: store
+            baseRef: "HEAD", restrictingToIDs: nil, store: store
         )
 
         #expect(plan.removable.isEmpty)

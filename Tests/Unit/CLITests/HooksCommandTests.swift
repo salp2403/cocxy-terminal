@@ -2,6 +2,7 @@
 // HooksCommandTests.swift - Tests for hooks install/uninstall/status and hook-handler CLI commands.
 
 import XCTest
+import CocxyShared
 @testable import CocxyCLILib
 
 // MARK: - Claude Settings Manager Tests
@@ -73,6 +74,12 @@ final class ClaudeSettingsManagerTests: XCTestCase {
         XCTAssertEqual(
             hookCommands[0]["command"] as? String,
             ClaudeSettingsManager.claudeHookCommand
+        )
+
+        let fileChangedHooks = hooks["FileChanged"] as! [[String: Any]]
+        XCTAssertEqual(
+            fileChangedHooks.first?["matcher"] as? String,
+            ClaudeFileChangedMatcher.value
         )
     }
 

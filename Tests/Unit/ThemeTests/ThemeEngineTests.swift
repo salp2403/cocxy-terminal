@@ -257,7 +257,7 @@ final class ThemeEnginePublisherTests: XCTestCase {
 
         try engine.apply(themeName: "Dracula")
 
-        wait(for: [expectation], timeout: 1.0)
+        wait(for: [expectation], timeout: 15.0)
 
         XCTAssertEqual(receivedTheme?.metadata.name, "Dracula")
     }

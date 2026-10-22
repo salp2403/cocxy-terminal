@@ -115,9 +115,18 @@ app.use((req, res, next) => {
   return next();
 });
 
+function sendNotFound(req, res) {
+  const notFoundPage = req.path.startsWith("/es/") ? "es/404.html" : "404.html";
+  res.status(404).sendFile(path.join(PUBLIC_ROOT, notFoundPage), (error) => {
+    if (error && !res.headersSent) {
+      res.status(404).type("text/plain").send("Not found");
+    }
+  });
+}
+
 app.use((req, res, next) => {
   if (!isPublicRequestPath(req.path)) {
-    return res.status(404).type("text/plain").send("Not found");
+    return sendNotFound(req, res);
   }
   return next();
 });
@@ -136,13 +145,7 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-app.use((_req, res) => {
-  res.status(404).sendFile(path.join(PUBLIC_ROOT, "index.html"), (error) => {
-    if (error && !res.headersSent) {
-      res.status(404).type("text/plain").send("Not found");
-    }
-  });
-});
+app.use(sendNotFound);
 
 app.listen(PORT, () => {
   console.log(`Cocxy web running on http://localhost:${PORT}`);

@@ -172,6 +172,32 @@ final class AgentDashboardViewModelTests: XCTestCase {
         XCTAssertFalse(sut.isVisible)
     }
 
+    func testTaskRunUsesOneGroupedDashboardSession() throws {
+        let request = try TaskRunRequest.make(
+            prompt: "Compare implementations",
+            agents: "claude,codex"
+        )
+        var run = TaskRun(
+            id: "grouped-run",
+            request: request,
+            originRepoPath: URL(fileURLWithPath: "/tmp/project"),
+            baseCommit: "abc123"
+        )
+        run.markRunning()
+
+        let fallbackTabID = UUID()
+        sut.syncTaskRun(run, fallbackTabId: fallbackTabID)
+
+        XCTAssertEqual(sut.sessions.count, 1)
+        XCTAssertEqual(sut.sessions.first?.id, "grouped-run")
+        XCTAssertEqual(sut.sessions.first?.tabId, fallbackTabID)
+        XCTAssertEqual(sut.sessions.first?.subagents.count, 2)
+        XCTAssertEqual(
+            sut.sessions.first?.subagents.compactMap(\.type),
+            ["Claude Code", "Codex CLI"]
+        )
+    }
+
     // MARK: - ViewModel Tests: Hook SessionStart
 
     func testSessionStartCreatesNewSession() {
@@ -332,6 +358,28 @@ final class AgentDashboardViewModelTests: XCTestCase {
         XCTAssertEqual(sut.sessions.first?.lastActivity, "Task completed successfully")
     }
 
+    func testUserPromptSubmitRestartsFinishedSession() {
+        sut.processHookEvent(makeHookEvent(
+            type: .sessionStart,
+            sessionId: "sess-next-turn",
+            data: .sessionStart(SessionStartData())
+        ))
+        sut.processHookEvent(makeHookEvent(
+            type: .stop,
+            sessionId: "sess-next-turn",
+            data: .stop(StopData(reason: "end_turn"))
+        ))
+        XCTAssertEqual(sut.sessions.first?.state, .finished)
+
+        sut.processHookEvent(makeHookEvent(
+            type: .userPromptSubmit,
+            sessionId: "sess-next-turn",
+            data: .generic
+        ))
+
+        XCTAssertEqual(sut.sessions.first?.state, .working)
+    }
+
     // MARK: - ViewModel Tests: Hook PostToolUseFailure
 
     func testPostToolUseFailureSetsStateToError() {
@@ -446,9 +494,7 @@ final class AgentDashboardViewModelTests: XCTestCase {
                 executable: "/usr/local/bin/codex",
                 arguments: [],
                 environment: [:],
-                workingDirectory: "/tmp/cocxy-project",
-                mutatesUserConfiguration: false,
-                requiresPreviewBeforeLaunch: true
+                workingDirectory: "/tmp/cocxy-project"
             )
         }
         let run = AgentTeamRunState(config: config, launchSpecs: launchSpecs)
@@ -734,6 +780,65 @@ final class AgentDashboardViewModelTests: XCTestCase {
         XCTAssertTrue(sut.sessions.allSatisfy { $0.tabId == tabId })
         XCTAssertTrue(sut.sessions.contains { $0.id.contains(claudeSurfaceID.rawValue.uuidString) })
         XCTAssertTrue(sut.sessions.contains { $0.id.contains(codexSurfaceID.rawValue.uuidString) })
+    }
+
+    func testHookSessionSuppressesPatternMirrorForSameTabAndSurface() {
+        let tabID = UUID()
+        let surfaceID = SurfaceID()
+        sut.tabIdResolver = { _, _ in tabID }
+        sut.surfaceIDForHookSessionProvider = { sessionID in
+            sessionID == "hook-session" ? surfaceID : nil
+        }
+
+        sut.processDetectionSignal(
+            agentName: "Claude Code",
+            state: .working,
+            tabId: tabID,
+            surfaceID: surfaceID,
+            workingDirectory: "/Users/test/project"
+        )
+        sut.processHookEvent(makeHookEvent(
+            type: .sessionStart,
+            sessionId: "hook-session",
+            data: .sessionStart(SessionStartData(
+                agentType: "claude-code",
+                workingDirectory: "/Users/test/project"
+            ))
+        ))
+
+        XCTAssertEqual(sut.sessionDataStore.count, 2)
+        XCTAssertEqual(sut.sessions.map(\.id), ["hook-session"])
+    }
+
+    func testRemoveSessionsForClosedTabPrunesHookAndPatternRows() {
+        let closingTabID = UUID()
+        let remainingTabID = UUID()
+        sut.processDetectionSignal(
+            agentName: "Claude Code",
+            state: .working,
+            tabId: closingTabID,
+            surfaceID: SurfaceID()
+        )
+        sut.processDetectionSignal(
+            agentName: "Codex",
+            state: .working,
+            tabId: remainingTabID,
+            surfaceID: SurfaceID()
+        )
+        sut.tabIdResolver = { sessionID, _ in
+            sessionID == "closing-hook" ? closingTabID : nil
+        }
+        sut.processHookEvent(makeHookEvent(
+            type: .sessionStart,
+            sessionId: "closing-hook",
+            data: .sessionStart(SessionStartData())
+        ))
+
+        sut.removeSessions(forTabID: closingTabID)
+
+        XCTAssertFalse(sut.sessionDataStore.values.contains { $0.tabId == closingTabID })
+        XCTAssertEqual(sut.sessions.count, 1)
+        XCTAssertEqual(sut.sessions.first?.tabId, remainingTabID)
     }
 
     func testSurfaceStoreSyncCreatesOneDashboardSessionPerActiveSurface() {

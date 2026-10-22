@@ -85,7 +85,7 @@ struct CLIVaultCommandSwiftTestingTests {
     @Test("vault search pin unpin and export use local encrypted store")
     func vaultSearchPinUnpinAndExportUseLocalStore() throws {
         let directory = try temporaryDirectory()
-        let defaults = try #require(UserDefaults(suiteName: "CLIVaultCommandTests-\(UUID().uuidString)"))
+        let defaults = try #require(UserDefaults(suiteName: directory.appendingPathComponent("defaults").path))
         let store = VaultSessionStore(
             storageURL: directory.appendingPathComponent("vault.enc"),
             keyProvider: StaticVaultKeyProvider(keyData: Data(repeating: 10, count: 32))

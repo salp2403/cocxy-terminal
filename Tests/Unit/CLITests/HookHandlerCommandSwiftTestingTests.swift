@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
+import Foundation
 import Testing
 @testable import CocxyCLILib
 
@@ -35,6 +36,11 @@ struct HookHandlerCommandSwiftTestingTests {
         ]))
         #expect(!HookHandlerCommand.shouldForwardHook(environment: [
             "COCXY_CLAUDE_HOOKS": "1",
+            "CLAUDE_CODE_SESSION_ID": "claude-session",
+            "COCXY_CLAUDE_HOOKS_DISABLED": "1"
+        ]))
+        #expect(!HookHandlerCommand.shouldForwardHook(environment: [
+            "COCXY_CLAUDE_HOOKS": "1",
             "PI_SESSION_ID": "pi-session",
             "COCXY_PI_HOOKS_DISABLED": "1"
         ]))
@@ -47,5 +53,23 @@ struct HookHandlerCommandSwiftTestingTests {
             "COCXY_CLAUDE_HOOKS": "1",
             "PI_SESSION_ID": "pi-session"
         ]))
+    }
+
+    @Test("debug record uses canonical Claude and filesystem fields")
+    func debugRecordUsesCanonicalFields() {
+        let data = Data(#"{"hook_event_name":"FileChanged","session_id":"payload-session","new_cwd":"/tmp/new","file_path":"/tmp/new/App.swift","event":"change"}"#.utf8)
+
+        let record = HookHandlerCommand.debugRecord(
+            stage: "received",
+            data: data,
+            environment: ["CLAUDE_CODE_SESSION_ID": "environment-session"]
+        )
+
+        #expect(record.contains("stage=received"))
+        #expect(record.contains("source=claude"))
+        #expect(record.contains("event=FileChanged"))
+        #expect(record.contains("session=payload-session"))
+        #expect(record.contains("cwd=/tmp/new"))
+        #expect(record.contains("file=/tmp/new/App.swift"))
     }
 }

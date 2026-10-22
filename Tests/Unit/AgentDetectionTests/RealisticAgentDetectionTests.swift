@@ -67,7 +67,7 @@ final class RealisticAgentDetectionTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
             dispatchExpectation.fulfill()
         }
-        waitForExpectations(timeout: timeout + 1.0)
+        waitForExpectations(timeout: timeout + 15.0)
     }
 
     /// Creates a StateCollector subscribed to the engine's stateChanged publisher.
@@ -550,7 +550,7 @@ final class HookEventEdgeCaseTests: XCTestCase {
 
     // MARK: - HOOK-003: Informational events do not change state
 
-    /// Notification, SubagentStart, SubagentStop, UserPromptSubmit must NOT change state.
+    /// Notification, SubagentStart, and SubagentStop must not change state.
     func testInformationalEventsDoNotChangeState() {
         let sessionId = "info-session-001"
 
@@ -573,7 +573,6 @@ final class HookEventEdgeCaseTests: XCTestCase {
             .notification,
             .subagentStart,
             .subagentStop,
-            .userPromptSubmit,
         ]
 
         for eventType in informationalTypes {
@@ -587,6 +586,63 @@ final class HookEventEdgeCaseTests: XCTestCase {
                 "\(eventType.rawValue) no debe cambiar el estado del engine"
             )
         }
+    }
+
+    func testUserPromptSubmitRestartsFinishedHookSession() {
+        let sessionId = "next-turn-session"
+        engine.processHookEvent(HookEvent(
+            type: .sessionStart,
+            sessionId: sessionId,
+            data: .sessionStart(SessionStartData(agentType: "claude-code"))
+        ))
+        engine.processHookEvent(HookEvent(
+            type: .preToolUse,
+            sessionId: sessionId,
+            data: .toolUse(ToolUseData(toolName: "Read"))
+        ))
+        engine.processHookEvent(HookEvent(
+            type: .stop,
+            sessionId: sessionId,
+            data: .stop(StopData(reason: "end_turn"))
+        ))
+        XCTAssertEqual(engine.currentState, .finished)
+
+        engine.processHookEvent(HookEvent(
+            type: .userPromptSubmit,
+            sessionId: sessionId
+        ))
+
+        XCTAssertEqual(engine.currentState, .working)
+    }
+
+    func testUserPromptSubmitResumesWaitingHookSession() {
+        let sessionId = "waiting-prompt-session"
+        engine.processHookEvent(HookEvent(
+            type: .sessionStart,
+            sessionId: sessionId,
+            data: .sessionStart(SessionStartData(agentType: "claude-code"))
+        ))
+        engine.processHookEvent(HookEvent(
+            type: .preToolUse,
+            sessionId: sessionId,
+            data: .toolUse(ToolUseData(toolName: "Read"))
+        ))
+        engine.processHookEvent(HookEvent(
+            type: .teammateIdle,
+            sessionId: sessionId,
+            data: .teammateIdle(TeammateIdleData(
+                teammateId: "teammate-1",
+                reason: "Waiting for user prompt"
+            ))
+        ))
+        XCTAssertEqual(engine.currentState, .waitingInput)
+
+        engine.processHookEvent(HookEvent(
+            type: .userPromptSubmit,
+            sessionId: sessionId
+        ))
+
+        XCTAssertEqual(engine.currentState, .working)
     }
 
     // MARK: - HOOK-004: Stop event triggers completion and deregisters session

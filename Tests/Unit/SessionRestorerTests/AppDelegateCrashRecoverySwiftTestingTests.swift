@@ -120,20 +120,9 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         #expect(controller.window?.childWindows?.contains { $0 === offer.window } == true)
     }
 
-    @Test(
-        "crash recovery offer controller floats above parent instead of becoming a sheet",
-        .disabled(
-            if: ProcessInfo.processInfo.environment["CI"] != nil,
-            "Allocates a real titled NSWindow; CI runners without a window server abort the suite."
-        )
-    )
+    @Test("crash recovery offer controller floats above parent instead of becoming a sheet")
     func crashRecoveryOfferControllerFloatsAboveParentInsteadOfSheet() throws {
-        let parent = NSWindow(
-            contentRect: NSRect(x: 120, y: 120, width: 900, height: 600),
-            styleMask: [.titled, .resizable],
-            backing: .buffered,
-            defer: false
-        )
+        let parent = makeParentWindow()
         defer { parent.close() }
         let copy = AppAlertCopy(
             messageText: "Restore Previous Session?",
@@ -152,20 +141,9 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         #expect(offer.window?.isOpaque == true)
     }
 
-    @Test(
-        "restore action keeps the recovery offer visible through the restore handoff",
-        .disabled(
-            if: ProcessInfo.processInfo.environment["CI"] != nil,
-            "Allocates a real titled NSWindow; CI runners without a window server abort the suite."
-        )
-    )
+    @Test("restore action keeps the recovery offer visible through the restore handoff")
     func restoreActionKeepsRecoveryOfferVisibleThroughRestoreHandoff() async throws {
-        let parent = NSWindow(
-            contentRect: NSRect(x: 120, y: 120, width: 900, height: 600),
-            styleMask: [.titled, .resizable],
-            backing: .buffered,
-            defer: false
-        )
+        let parent = makeParentWindow()
         defer { parent.close() }
         let copy = AppAlertCopy(
             messageText: "Restore Previous Session?",
@@ -192,7 +170,12 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         offer.show(over: parent)
         let restoreButton = try #require(button(titled: "Restore", in: offer.window?.contentView))
 
-        restoreButton.performClick(nil)
+        let action = try #require(restoreButton.action)
+        #expect(NSApplication.shared.sendAction(
+            action,
+            to: restoreButton.target,
+            from: restoreButton
+        ))
 
         #expect(completionObservedVisibleOffer == true)
         #expect(completionObservedChildOffer == true)
@@ -260,12 +243,27 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
     private func waitForOfferDetachment(
         from parent: NSWindow,
         window: NSWindow?,
-        timeout: TimeInterval = 5.0
+        timeout: TimeInterval = 15.0
     ) async {
         let deadline = Date().addingTimeInterval(timeout)
         while parent.childWindows?.contains(where: { $0 === window }) == true, Date() < deadline {
             try? await Task.sleep(nanoseconds: 10_000_000)
         }
+    }
+
+    /// A standalone `NSWindow(contentRect:)` releases itself on `close()` by
+    /// default. Under ARC that extra release frees the window while AppKit's
+    /// ordering animation still holds it, and the process crashes later when
+    /// the animation is drained.
+    private func makeParentWindow() -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 120, y: 120, width: 900, height: 600),
+            styleMask: [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        return window
     }
 
     private func localizationBundle() -> Bundle? {

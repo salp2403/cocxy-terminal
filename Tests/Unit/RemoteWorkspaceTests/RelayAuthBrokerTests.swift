@@ -102,7 +102,7 @@ private final class RelayLoopbackEchoServer {
 }
 
 @MainActor
-private func sendRelayTestPayload(_ data: Data, to port: UInt16) async throws {
+func sendRelayTestPayload(_ data: Data, to port: UInt16) async throws {
     let connection = NWConnection(
         host: .ipv4(.loopback),
         port: NWEndpoint.Port(rawValue: port)!,
@@ -148,8 +148,8 @@ private func sendRelayTestPayload(_ data: Data, to port: UInt16) async throws {
 }
 
 @MainActor
-private func waitForRelayEffect(
-    within timeout: Duration = .seconds(5),
+func waitForRelayEffect(
+    within timeout: Duration = .seconds(15),
     _ condition: @MainActor () -> Bool
 ) async -> Bool {
     // These effects come from tasks the scheduler must place, so a fixed sleep

@@ -638,7 +638,10 @@ final class CLIArgumentParserTests: XCTestCase {
         XCTAssertEqual(try CLIArgumentParser.parse(["tmux", "list-sessions"]), .splitList)
         XCTAssertEqual(try CLIArgumentParser.parse(["tmux", "attach", "-t", "abc"]), .focusTab(id: "abc"))
         XCTAssertEqual(try CLIArgumentParser.parse(["tmux", "kill-session", "-t", "abc"]), .closeTab(id: "abc"))
-        XCTAssertEqual(try CLIArgumentParser.parse(["tmux", "send-keys", "echo hello", "Enter"]), .send(text: "echo hello\n"))
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["tmux", "send-keys", "echo hello", "Enter"]),
+            .send(text: "echo hello\n", tabID: nil, orchestrationSession: nil)
+        )
     }
 
     func testParseWindowNewWithEnginePreference() throws {
@@ -2184,7 +2187,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 232)
+        XCTAssertEqual(CLICommand.allCases.count, 250)
     }
 
     // MARK: - 39. Raw values match server protocol

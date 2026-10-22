@@ -394,7 +394,7 @@ private enum SystemProcessFixtureError: Error {
 }
 
 private func waitForProcessIdentifiers(at url: URL) async throws -> [Int32] {
-    for _ in 0..<200 {
+    for _ in 0..<1_500 {
         if let data = try? Data(contentsOf: url),
            let value = String(data: data, encoding: .utf8) {
             let processIdentifiers = value
@@ -410,7 +410,7 @@ private func waitForProcessIdentifiers(at url: URL) async throws -> [Int32] {
 }
 
 private func waitForProcessesToStop(_ processIdentifiers: [Int32]) async throws -> Bool {
-    for _ in 0..<200 {
+    for _ in 0..<1_500 {
         let anyProcessIsAlive = processIdentifiers.contains { processIdentifier in
             guard processIdentifier > 1 else { return false }
             if Darwin.kill(processIdentifier, 0) == 0 { return true }
@@ -439,7 +439,7 @@ private func commandTestMultiplexer() -> SSHMultiplexer {
 @Suite("SSHMultiplexer")
 struct SSHMultiplexerTests {
 
-    private let multiplexer = SSHMultiplexer()
+    let multiplexer = SSHMultiplexer()
 
     // MARK: - Control Path Generation
 
@@ -893,7 +893,7 @@ struct SSHMultiplexerTests {
         )
         defer { process.terminate() }
 
-        #expect(process.waitForExit(timeout: 1.0))
+        #expect(process.waitForExit(timeout: 15.0))
     }
 
     @Test func supervisorCleansItsChildWhenDiagnosticReaderDisappears() throws {

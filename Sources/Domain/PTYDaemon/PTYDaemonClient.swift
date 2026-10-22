@@ -3,6 +3,9 @@
 
 import Foundation
 import CocxyShared
+#if canImport(AppKit)
+import AppKit
+#endif
 
 @MainActor
 protocol PTYDaemonClientConnection: AnyObject {
@@ -210,13 +213,11 @@ final class PTYDaemonProcessMessageBuffer: @unchecked Sendable {
         }
     }
 
+    /// Replies and events already completed stay deliverable until `reset()`:
+    /// a helper that answers and exits at once must not lose that answer to
+    /// whichever thread happens to observe end-of-stream first.
     private func disconnect(_ state: inout State) {
         state.pendingBytes.removeAll(keepingCapacity: false)
-        state.responses.removeAll(keepingCapacity: false)
-        state.responseBytes = 0
-        state.events.removeAll(keepingCapacity: false)
-        state.eventHead = 0
-        state.eventBytes = 0
         state.disconnected = true
     }
 
@@ -410,7 +411,7 @@ final class PTYDaemonProcessConnection: PTYDaemonClientConnection {
 }
 
 @MainActor
-final class PTYDaemonClient: TerminalEngine {
+final class PTYDaemonClient: DescriptorBoundTerminalEngine {
     private let connection: PTYDaemonClientConnection
     private var initialized = false
     private var liveSurfaces = Set<SurfaceID>()
@@ -418,6 +419,12 @@ final class PTYDaemonClient: TerminalEngine {
     private var outputHandlers: [SurfaceID: @Sendable (Data) -> Void] = [:]
     private var oscHandlers: [SurfaceID: @Sendable (OSCNotification) -> Void] = [:]
     private var frameHandlers: [SurfaceID: @Sendable (PTYDaemonSurfaceFrame) -> Void] = [:]
+    private var latestFrameRevisions: [SurfaceID: UInt64] = [:]
+    private var latestFrames: [SurfaceID: PTYDaemonSurfaceFrame] = [:]
+    private var engineConfig: TerminalEngineConfig?
+    private var surfaceBackingScales: [SurfaceID: Double] = [:]
+    private var lastReportedFocus: [SurfaceID: Bool] = [:]
+    private var supportsSemanticNavigation = false
 
     init(connection: PTYDaemonClientConnection) {
         self.connection = connection
@@ -440,6 +447,8 @@ final class PTYDaemonClient: TerminalEngine {
                 reason: "PTY daemon lacks the complete terminal engine and host renderer capability set"
             )
         }
+        engineConfig = config
+        supportsSemanticNavigation = hello.supportsTerminalSemanticNavigation
         initialized = true
     }
 
@@ -448,18 +457,58 @@ final class PTYDaemonClient: TerminalEngine {
         workingDirectory: URL?,
         command: String?
     ) throws -> SurfaceID {
-        guard initialized else {
+        try createSurface(
+            in: view,
+            workingDirectory: workingDirectory,
+            verifiedWorkingDirectory: nil,
+            command: command
+        )
+    }
+
+    func createSurface(
+        in view: NativeTerminalView,
+        verifiedWorkingDirectory: ProjectDirectoryRoot,
+        command: String?
+    ) throws -> SurfaceID {
+        try createSurface(
+            in: view,
+            workingDirectory: nil,
+            verifiedWorkingDirectory: verifiedWorkingDirectory,
+            command: command
+        )
+    }
+
+    private func createSurface(
+        in view: NativeTerminalView,
+        workingDirectory: URL?,
+        verifiedWorkingDirectory: ProjectDirectoryRoot?,
+        command: String?
+    ) throws -> SurfaceID {
+        guard initialized, let engineConfig else {
             throw TerminalEngineError.surfaceCreationFailed(reason: "PTY daemon client is not initialized")
+        }
+
+        let backingScale = Self.backingScale(for: view)
+        let verifiedURL = try verifiedWorkingDirectory?.descriptorBoundURL()
+        var payload = [
+            "workingDirectory": verifiedURL?.path ?? workingDirectory?.path ?? "",
+            "command": command ?? "",
+            "fontFamily": engineConfig.fontFamily,
+            "fontSize": "\(engineConfig.fontSize)",
+            "dpiScale": "\(backingScale)",
+            "ligaturesEnabled": "\(engineConfig.ligaturesEnabled)",
+        ]
+        if let verifiedWorkingDirectory {
+            payload["workingDirectoryDevice"] = "\(verifiedWorkingDirectory.identity.device)"
+            payload["workingDirectoryInode"] = "\(verifiedWorkingDirectory.identity.inode)"
+            payload["workingDirectoryFileType"] = "\(verifiedWorkingDirectory.identity.fileType)"
         }
 
         let response = try connection.send(
             PTYDaemonRequest(
                 id: UUID().uuidString,
                 command: .surfaceCreate,
-                payload: [
-                    "workingDirectory": workingDirectory?.path ?? "",
-                    "command": command ?? "",
-                ]
+                payload: payload
             )
         )
         guard response.ok,
@@ -474,20 +523,30 @@ final class PTYDaemonClient: TerminalEngine {
         let surfaceID = SurfaceID(rawValue: uuid)
         liveSurfaces.insert(surfaceID)
         stalledSurfaces.remove(surfaceID)
+        latestFrameRevisions[surfaceID] = nil
+        latestFrames[surfaceID] = nil
+        surfaceBackingScales[surfaceID] = backingScale
+        lastReportedFocus[surfaceID] = nil
         return surfaceID
     }
 
     func destroySurface(_ id: SurfaceID) {
+        sendPreeditText("", cursorByteOffset: 0, to: id)
         _ = try? sendSurfaceRequest(id, command: .surfaceClose)
         liveSurfaces.remove(id)
         stalledSurfaces.remove(id)
         outputHandlers[id] = nil
         oscHandlers[id] = nil
         frameHandlers[id] = nil
+        latestFrameRevisions[id] = nil
+        latestFrames[id] = nil
+        surfaceBackingScales[id] = nil
+        lastReportedFocus[id] = nil
     }
 
     @discardableResult
     func sendKeyEvent(_ event: KeyEvent, to surface: SurfaceID) -> Bool {
+        guard event.isComposing == false else { return false }
         let response = try? sendSurfaceRequest(
             surface,
             command: .surfaceKey,
@@ -499,27 +558,37 @@ final class PTYDaemonClient: TerminalEngine {
                 "isRepeat": "\(event.isRepeat)",
                 "isComposing": "\(event.isComposing)",
                 "unshiftedCodepoint": "\(event.unshiftedCodepoint)",
+                "shiftedCodepoint": "\(event.shiftedCodepoint)",
+                "baseLayoutCodepoint": "\(event.baseLayoutCodepoint)",
                 "consumedModsRaw": "\(event.consumedModsRaw)",
             ]
         )
         return response?.ok == true
     }
 
-    func sendText(_ text: String, to surface: SurfaceID) {
+    @discardableResult func sendText(_ text: String, to surface: SurfaceID) -> Bool {
         sendRawBytes(Data(text.utf8), to: surface)
     }
 
-    func sendRawBytes(_ data: Data, to surface: SurfaceID) {
-        guard data.isEmpty == false else { return }
-        _ = try? sendSurfaceRequest(
+    @discardableResult func sendRawBytes(_ data: Data, to surface: SurfaceID) -> Bool {
+        guard data.isEmpty == false else { return true }
+        return (try? sendSurfaceRequest(
             surface,
             command: .surfaceWrite,
             payload: ["bytesBase64": data.base64EncodedString()]
-        )
+        ))?.ok == true
     }
 
-    func sendPreeditText(_ text: String, to surface: SurfaceID) {
-        _ = try? sendSurfaceRequest(surface, command: .surfacePreedit, payload: ["text": text])
+    func sendPreeditText(
+        _ text: String,
+        cursorByteOffset: Int?,
+        to surface: SurfaceID
+    ) {
+        var payload = ["text": text]
+        if let cursorByteOffset {
+            payload["cursorByteOffset"] = "\(cursorByteOffset)"
+        }
+        _ = try? sendSurfaceRequest(surface, command: .surfacePreedit, payload: payload)
     }
 
     func resize(_ surface: SurfaceID, to size: TerminalSize) {
@@ -533,6 +602,26 @@ final class PTYDaemonClient: TerminalEngine {
                 "pixelHeight": "\(size.pixelHeight)",
             ]
         )
+    }
+
+    func applyFont(family: String, size: Double, to surface: SurfaceID) {
+        guard liveSurfaces.contains(surface), let engineConfig else { return }
+        let scale = surfaceBackingScales[surface] ?? 2.0
+        _ = try? sendSurfaceRequest(
+            surface,
+            command: .surfaceFont,
+            payload: [
+                "fontFamily": family,
+                "fontSize": "\(size)",
+                "dpiScale": "\(scale)",
+                "ligaturesEnabled": "\(engineConfig.ligaturesEnabled)",
+            ]
+        )
+    }
+
+    func updateFontDefaults(family: String, size: Double) {
+        guard let engineConfig else { return }
+        self.engineConfig = engineConfig.replacing(fontFamily: family, fontSize: size)
     }
 
     func tick() {
@@ -566,7 +655,10 @@ final class PTYDaemonClient: TerminalEngine {
 
     func subscribeFrames(for surface: SurfaceID) -> PTYDaemonSurfaceFrame? {
         let response = try? sendSurfaceRequest(surface, command: .surfaceFrameSubscribe)
-        return response?.ok == true ? response?.frame : nil
+        guard response?.ok == true,
+              let frame = response?.frame,
+              acceptFrame(frame, for: surface) else { return nil }
+        return frame
     }
 
     func scrollToSearchResult(surfaceID: SurfaceID, lineNumber: Int) {
@@ -579,7 +671,13 @@ final class PTYDaemonClient: TerminalEngine {
     }
 
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {
-        _ = try? sendSurfaceRequest(surface, command: .surfaceFocus, payload: ["focused": "\(focused)"])
+        guard liveSurfaces.contains(surface), lastReportedFocus[surface] != focused else { return }
+        guard let response = try? sendSurfaceRequest(
+            surface,
+            command: .surfaceFocus,
+            payload: ["focused": "\(focused)"]
+        ), response.ok else { return }
+        lastReportedFocus[surface] = focused
     }
 
     func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
@@ -605,6 +703,40 @@ final class PTYDaemonClient: TerminalEngine {
                 contextAfter: result.contextAfter
             )
         }
+    }
+
+    func detectedContent(
+        atAbsoluteRow row: UInt32,
+        column: UInt16,
+        for surface: SurfaceID
+    ) -> TerminalDetectedContent? {
+        visibleDetectedContents(for: surface).first {
+            $0.contains(absoluteRow: row, column: column)
+        }
+    }
+
+    func visibleDetectedContents(for surface: SurfaceID) -> [TerminalDetectedContent] {
+        latestFrames[surface]?.detectedContents.compactMap(Self.detectedContent(from:)) ?? []
+    }
+
+    func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction,
+        for surface: SurfaceID
+    ) -> TerminalSemanticNavigationResult? {
+        guard supportsSemanticNavigation,
+              let response = try? sendSurfaceRequest(
+                surface,
+                command: .surfaceSemanticNavigation,
+                payload: ["action": action.rawValue]
+              ),
+              response.ok,
+              let result = response.semanticNavigation else {
+            return nil
+        }
+        if let frame = response.frame {
+            deliverFrame(frame, for: surface)
+        }
+        return result
     }
 
     func processMonitorRegistration(for surface: SurfaceID) -> TerminalProcessMonitorRegistration? {
@@ -662,7 +794,7 @@ final class PTYDaemonClient: TerminalEngine {
             return
         }
         if let frame = response.frame {
-            frameHandlers[surfaceID]?(frame)
+            deliverFrame(frame, for: surfaceID)
         }
     }
 
@@ -672,6 +804,8 @@ final class PTYDaemonClient: TerminalEngine {
             let response = try? connection.send(surfaceRequest(surface, command: .surfaceAttach))
             if response?.ok != true {
                 stalledSurfaces.insert(surface)
+                latestFrameRevisions[surface] = nil
+                latestFrames[surface] = nil
             }
         }
     }
@@ -691,11 +825,30 @@ final class PTYDaemonClient: TerminalEngine {
             oscHandlers[surface]?(notification)
         case .surfaceFrame:
             guard let frame = event.frame else { return }
-            frameHandlers[surface]?(frame)
+            deliverFrame(frame, for: surface)
         case .surfaceClosed:
             liveSurfaces.remove(surface)
             stalledSurfaces.insert(surface)
+            surfaceBackingScales[surface] = nil
+            lastReportedFocus[surface] = nil
+            latestFrames[surface] = nil
         }
+    }
+
+    private func deliverFrame(_ frame: PTYDaemonSurfaceFrame, for surface: SurfaceID) {
+        guard acceptFrame(frame, for: surface) else { return }
+        frameHandlers[surface]?(frame)
+    }
+
+    private func acceptFrame(_ frame: PTYDaemonSurfaceFrame, for surface: SurfaceID) -> Bool {
+        guard UUID(uuidString: frame.surfaceID) == surface.rawValue else { return false }
+        if let latestRevision = latestFrameRevisions[surface],
+           frame.revision <= latestRevision {
+            return false
+        }
+        latestFrameRevisions[surface] = frame.revision
+        latestFrames[surface] = frame
+        return true
     }
 
     private func makeOSCNotification(from osc: PTYDaemonOSCNotification) -> OSCNotification? {
@@ -705,9 +858,9 @@ final class PTYDaemonClient: TerminalEngine {
         case .notification:
             return .notification(title: osc.title ?? "", body: osc.body ?? "")
         case .shellPrompt:
-            return .shellPrompt
+            return .shellPrompt(position: nil)
         case .commandStarted:
-            return .commandStarted
+            return .commandStarted(inputPosition: nil)
         case .commandFinished:
             return .commandFinished(exitCode: osc.exitCode)
         case .currentDirectory:
@@ -720,17 +873,8 @@ final class PTYDaemonClient: TerminalEngine {
         case .inlineImage:
             return .inlineImage(osc.text ?? "")
         case .processExited:
-            return .processExited
+            return .processExited(exitCode: osc.exitCode.flatMap(Int32.init(exactly:)))
         }
     }
 
-    private func surfaceRequest(
-        _ surface: SurfaceID,
-        command: PTYDaemonRequest.Command,
-        payload: [String: String] = [:]
-    ) -> PTYDaemonRequest {
-        var payload = payload
-        payload["surfaceID"] = surface.rawValue.uuidString
-        return PTYDaemonRequest(id: UUID().uuidString, command: command, payload: payload)
-    }
 }

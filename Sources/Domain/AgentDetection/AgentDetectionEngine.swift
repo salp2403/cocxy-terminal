@@ -516,7 +516,8 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     /// - PostToolUseFailure -> errorDetected
     /// - TeammateIdle -> promptDetected (waiting for input)
     /// - TaskCompleted -> completionDetected
-    /// - Notification/SubagentStart/SubagentStop/UserPromptSubmit -> no state change
+    /// - UserPromptSubmit -> outputReceived (agent resumes working)
+    /// - Notification/SubagentStart/SubagentStop -> no state change
     ///
     /// - Parameters:
     ///   - event: The parsed hook event.
@@ -556,7 +557,7 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
     /// Maps a hook event type to the corresponding detection signal.
     ///
     /// Returns `nil` for event types that do not trigger state transitions
-    /// (e.g., Notification, SubagentStart/Stop, UserPromptSubmit).
+    /// (e.g., Notification and SubagentStart/Stop).
     private func mapHookEventToSignal(_ event: HookEvent) -> DetectionSignal? {
         let source = DetectionSource.hook(event: event.type.rawValue)
         let confidence: Double = 1.0
@@ -623,7 +624,14 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
                 source: source
             )
 
-        case .notification, .subagentStart, .subagentStop, .userPromptSubmit,
+        case .userPromptSubmit:
+            return DetectionSignal(
+                event: .outputReceived,
+                confidence: confidence,
+                source: source
+            )
+
+        case .notification, .subagentStart, .subagentStop,
              .cwdChanged, .fileChanged, .richInputDraftSubmitted:
             // These events are informational; they do not change agent state.
             // CwdChanged/FileChanged are consumed by TabManager and CodeReview

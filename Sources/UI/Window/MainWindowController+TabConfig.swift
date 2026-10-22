@@ -125,14 +125,20 @@ extension MainWindowController {
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard appDelegate.saveFocusedTabConfigForCLI(
+        guard let result = appDelegate.saveFocusedTabConfigForCLI(
             name: name,
             command: nil,
             theme: nil,
             environment: [:]
-        ) != nil else {
+        ) else {
             showTabConfigError(Self.localizedTabConfigSaveFailureMessage(localizer: appLocalizer()))
             return
+        }
+        if let warning = result.warning {
+            showTabConfigWarning(
+                title: copy.messageText,
+                message: warning
+            )
         }
     }
 
@@ -154,9 +160,15 @@ extension MainWindowController {
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard appDelegate.openTabConfigFromUserInterface(named: name) != nil else {
+        guard let result = appDelegate.openTabConfigFromUserInterface(named: name) else {
             showTabConfigError(Self.localizedTabConfigOpenFailureMessage(localizer: appLocalizer()))
             return
+        }
+        if let warning = result.warning {
+            showTabConfigWarning(
+                title: copy.messageText,
+                message: warning
+            )
         }
     }
 
@@ -168,16 +180,34 @@ extension MainWindowController {
         alert.runModal()
     }
 
+    private func showTabConfigWarning(title: String, message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: appLocalizer().string("common.ok", fallback: "OK"))
+        if let window, window.attachedSheet == nil {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
     @MainActor
     private func tabConfigAuthorizationContextMatches(
         _ request: TabConfigStartupAuthorizationRequest
     ) -> Bool {
         guard request.launchOrigin == .userInterface,
               Date() < request.expiresAt,
-              let tab = tabManager.tab(for: request.destinationTabID) else {
+              tabManager.tab(for: request.destinationTabID) != nil else {
             return false
         }
-        return tab.workingDirectory.standardizedFileURL.path == request.workingDirectory
+        guard let currentWorkingDirectory = tabConfigAuthorizationWorkingDirectory(
+            for: request.destinationTabID
+        ) else { return false }
+        let requestedWorkingDirectory = URL(fileURLWithPath: request.workingDirectory)
+        return ProjectPathCanonicalizer.canonicalURL(currentWorkingDirectory).path
+            == ProjectPathCanonicalizer.canonicalURL(requestedWorkingDirectory).path
     }
 
     @MainActor

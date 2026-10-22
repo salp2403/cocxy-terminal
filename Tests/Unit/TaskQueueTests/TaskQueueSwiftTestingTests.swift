@@ -1,0 +1,494 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+
+import Foundation
+import Testing
+@testable import CocxyTerminal
+
+@Suite("Task queue")
+struct TaskQueueSwiftTestingTests {
+    @Test("persists valid tasks with owner-only permissions and isolates corrupt files")
+    func persistenceIsOwnerOnlyAndCorruptionTolerant() throws {
+        let root = temporaryQueueDirectory()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let store = TaskQueueStore(rootDirectory: root)
+        let item = try makeQueueItem(id: "nightly")
+
+        try store.save(item)
+        try Data("not-json".utf8).write(
+            to: root.appendingPathComponent("broken.task.json"),
+            options: .atomic
+        )
+        try Data(contentsOf: store.fileURL(taskID: item.id)).write(
+            to: root.appendingPathComponent("duplicate.task.json"),
+            options: .atomic
+        )
+        let report = try store.loadAll()
+
+        #expect(report.items == [item])
+        #expect(report.rejectedFiles.map { URL(fileURLWithPath: $0.path).lastPathComponent } == [
+            "broken.task.json",
+            "nightly.task.json",
+        ])
+        let directoryAttributes = try FileManager.default.attributesOfItem(atPath: root.path)
+        let fileAttributes = try FileManager.default.attributesOfItem(
+            atPath: store.fileURL(taskID: item.id).path
+        )
+        #expect((directoryAttributes[.posixPermissions] as? NSNumber)?.intValue == 0o700)
+        #expect((fileAttributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+    }
+
+    @Test("rejects a symbolic queue root")
+    func rejectsSymbolicQueueRoot() throws {
+        let parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-queue-link-\(UUID().uuidString)", isDirectory: true)
+        let destination = parent.appendingPathComponent("real", isDirectory: true)
+        let link = parent.appendingPathComponent("queue", isDirectory: true)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: destination)
+        defer { try? FileManager.default.removeItem(at: parent) }
+
+        let store = TaskQueueStore(rootDirectory: link)
+        #expect(throws: TaskQueueStoreError.symbolicLinkRejected(link.path)) {
+            try store.save(makeQueueItem(id: "linked"))
+        }
+    }
+
+    @Test("legacy queue snapshots without project fields still load")
+    func legacySnapshotWithoutProjectLoads() throws {
+        let root = temporaryQueueDirectory()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let store = TaskQueueStore(rootDirectory: root)
+        let pipeline = try AgentPipeline(
+            id: "legacy-project",
+            steps: [AgentPipelineStep(
+                id: "run",
+                provider: .codex,
+                prompt: "Run",
+                worktree: "/tmp/legacy-project",
+                project: "/tmp/legacy-project"
+            )]
+        )
+        let item = try TaskQueueItem(
+            id: "legacy-project",
+            pipeline: pipeline,
+            project: "/tmp/legacy-project",
+            trigger: .manual,
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+        try store.save(item)
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var object = try #require(
+            JSONSerialization.jsonObject(with: encoder.encode(item)) as? [String: Any]
+        )
+        object.removeValue(forKey: "project")
+        var pipelineObject = try #require(object["pipeline"] as? [String: Any])
+        var steps = try #require(pipelineObject["steps"] as? [[String: Any]])
+        for index in steps.indices {
+            steps[index].removeValue(forKey: "project")
+        }
+        pipelineObject["steps"] = steps
+        object["pipeline"] = pipelineObject
+        try JSONSerialization.data(withJSONObject: object).write(
+            to: store.fileURL(taskID: item.id),
+            options: .atomic
+        )
+
+        let loaded = try #require(store.loadAll().items.first)
+        #expect(loaded.project == nil)
+        #expect(loaded.pipeline.steps.first?.project == nil)
+        #expect(loaded.id == item.id)
+        #expect(loaded.status == item.status)
+    }
+
+    @Test("rejects unusable and oversized task identifiers before persistence")
+    func rejectsInvalidTaskIdentifiers() throws {
+        let pipeline = try AgentPipeline(
+            id: "valid-pipeline",
+            steps: [AgentPipelineStep(id: "run", provider: .codex, prompt: "Run")]
+        )
+        #expect(throws: TaskQueueError.emptyTaskID) {
+            _ = try TaskQueueItem(id: "---", pipeline: pipeline, trigger: .manual)
+        }
+        #expect(throws: TaskQueueError.taskIDTooLong(
+            maximumBytes: TaskQueueItem.maximumIDBytes
+        )) {
+            _ = try TaskQueueItem(
+                id: String(repeating: "t", count: TaskQueueItem.maximumIDBytes + 1),
+                pipeline: pipeline,
+                trigger: .manual
+            )
+        }
+        #expect(throws: TaskQueueError.invalidPersistedState("invalid project path")) {
+            _ = try TaskQueueItem(
+                id: "relative-project",
+                pipeline: pipeline,
+                project: "relative/project",
+                trigger: .manual
+            )
+        }
+    }
+
+    @Test("manual tasks retry after backoff and emit paired lifecycle events")
+    func manualTaskRetriesAfterBackoff() async throws {
+        let clock = LockedQueueClock(now: Date(timeIntervalSince1970: 10_000))
+        let recorder = QueueRunRecorder(failuresBeforeSuccess: 1, clock: clock)
+        let lifecycle = QueueLifecycleRecorder()
+        let queue = try TaskQueue(
+            store: TaskQueueStore(rootDirectory: temporaryQueueDirectory()),
+            retryBaseDelay: 5,
+            clock: { clock.now },
+            runHandler: { item in await recorder.run(item) },
+            lifecycleHandler: { event in await lifecycle.record(event) }
+        )
+        _ = try await queue.start()
+        let item = try makeQueueItem(id: "retry", maximumRetries: 1, now: clock.now)
+
+        _ = try await queue.enqueue(item)
+        let retrying = try await waitForQueueItem(queue, id: item.id) { $0.status == .retrying }
+        #expect(retrying.retryAttempt == 1)
+        #expect(retrying.nextRunAt == clock.now.addingTimeInterval(5))
+
+        clock.advance(by: 5)
+        await queue.tick(at: clock.now)
+        let succeeded = try await waitForQueueItem(queue, id: item.id) { $0.status == .succeeded }
+
+        #expect(succeeded.totalRunCount == 2)
+        #expect(await recorder.runCount == 2)
+        #expect(await lifecycle.kinds == [.started, .finished, .started, .finished])
+    }
+
+    @Test("a failed running-state write prevents pipeline effects")
+    func runningPersistenceFailurePreventsExecution() async throws {
+        let start = Date(timeIntervalSince1970: 1_767_261_570)
+        let clock = LockedQueueClock(now: start)
+        let recorder = QueueRunRecorder(clock: clock)
+        let controlledStore = ControlledTaskQueueStore(
+            base: TaskQueueStore(rootDirectory: temporaryQueueDirectory()),
+            failingSaveAttempts: [3]
+        )
+        let queue = try TaskQueue(
+            store: controlledStore,
+            clock: { clock.now },
+            runHandler: { item in await recorder.run(item) }
+        )
+        _ = try await queue.start()
+        let schedule = try CronSchedule(expression: "0 10 * * *", timeZoneIdentifier: "UTC")
+        let item = try makeQueueItem(id: "durable-start", trigger: .cron(schedule), now: start)
+        _ = try await queue.enqueue(item)
+
+        clock.advance(by: 30)
+        await queue.tick(at: clock.now)
+
+        #expect(await recorder.runCount == 0)
+        #expect(await queue.item(id: item.id)?.status == .queued)
+        #expect(try controlledStore.loadAll().items.first?.status == .queued)
+        #expect(await queue.lastPersistenceError != nil)
+
+        await queue.tick(at: clock.now)
+        _ = try await waitForQueueItem(queue, id: item.id) { $0.status == .scheduled }
+        #expect(await recorder.runCount == 1)
+    }
+
+    @Test("a failed completion write is retried without repeating pipeline effects")
+    func completionPersistenceFailureIsRetriedWithoutRerun() async throws {
+        let clock = LockedQueueClock(now: Date(timeIntervalSince1970: 30_000))
+        let recorder = QueueRunRecorder(clock: clock)
+        let lifecycle = QueueLifecycleRecorder()
+        let controlledStore = ControlledTaskQueueStore(
+            base: TaskQueueStore(rootDirectory: temporaryQueueDirectory()),
+            failingSaveAttempts: [3]
+        )
+        let queue = try TaskQueue(
+            store: controlledStore,
+            clock: { clock.now },
+            runHandler: { item in await recorder.run(item) },
+            lifecycleHandler: { event in await lifecycle.record(event) }
+        )
+        _ = try await queue.start()
+        let item = try makeQueueItem(id: "durable-finish", now: clock.now)
+        _ = try await queue.enqueue(item)
+        _ = try await waitForQueueItem(queue, id: item.id) { $0.status == .succeeded }
+
+        #expect(await recorder.runCount == 1)
+        #expect(try controlledStore.loadAll().items.first?.status == .running)
+        await #expect(throws: TaskQueueError.persistencePending(item.id)) {
+            _ = try await queue.rerun(id: item.id)
+        }
+
+        await queue.tick(at: clock.now)
+
+        #expect(try controlledStore.loadAll().items.first?.status == .succeeded)
+        #expect(await recorder.runCount == 1)
+        #expect(await lifecycle.kinds == [.started, .finished])
+        #expect(await queue.lastPersistenceError == nil)
+    }
+
+    @Test("global run concurrency is bounded and queued work drains")
+    func globalConcurrencyIsBounded() async throws {
+        let gate = QueueConcurrencyGate()
+        let root = temporaryQueueDirectory()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let queue = try TaskQueue(
+            store: TaskQueueStore(rootDirectory: root),
+            maximumConcurrentRuns: 2,
+            runHandler: { item in await gate.run(item) }
+        )
+        _ = try await queue.start()
+
+        for id in ["one", "two", "three"] {
+            _ = try await queue.enqueue(makeQueueItem(id: id))
+        }
+        try await waitUntil { await gate.startedCount == 2 }
+        #expect(await gate.maximumActive == 2)
+
+        await gate.releaseAll()
+        try await waitUntil { await gate.startedCount == 3 }
+        await gate.releaseAll()
+        try await waitUntil {
+            let statuses = await queue.list().map(\.status)
+            return statuses.allSatisfy { $0 == .succeeded }
+        }
+        #expect(await gate.maximumActive == 2)
+    }
+
+    @Test("event triggers are coalesced while a run is active")
+    func eventTriggersCoalesceWhileRunning() async throws {
+        let clock = LockedQueueClock(now: Date(timeIntervalSince1970: 20_000))
+        let gate = QueueConcurrencyGate()
+        let queue = try TaskQueue(
+            store: TaskQueueStore(rootDirectory: temporaryQueueDirectory()),
+            eventRetriggerMinimumInterval: 5,
+            clock: { clock.now },
+            runHandler: { item in await gate.run(item) }
+        )
+        _ = try await queue.start()
+        let trigger = try TaskQueueTrigger.eventTrigger(.tabCreated)
+        let item = try makeQueueItem(id: "on-tab", trigger: trigger, now: clock.now)
+        _ = try await queue.enqueue(item)
+
+        await queue.handlePluginEvent(.sessionStart)
+        #expect(await gate.startedCount == 0)
+        await queue.handlePluginEvent(.tabCreated)
+        try await waitUntil { await gate.startedCount == 1 }
+        await queue.handlePluginEvent(.tabCreated)
+        await queue.handlePluginEvent(.tabCreated)
+
+        await gate.releaseAll()
+        let deferred = try await waitForQueueItem(queue, id: item.id) {
+            $0.status == .queued && !$0.pendingRun
+        }
+        #expect(deferred.nextRunAt == clock.now.addingTimeInterval(5))
+        #expect(await gate.startedCount == 1)
+
+        clock.advance(by: 4)
+        await queue.tick(at: clock.now)
+        #expect(await gate.startedCount == 1)
+        clock.advance(by: 1)
+        await queue.tick(at: clock.now)
+        try await waitUntil { await gate.startedCount == 2 }
+        await gate.releaseAll()
+        let waiting = try await waitForQueueItem(queue, id: item.id) {
+            $0.status == .scheduled && $0.totalRunCount == 2
+        }
+        #expect(!waiting.pendingRun)
+        #expect(waiting.nextRunAt == nil)
+    }
+
+    @Test("event triggers expose only events emitted by the application")
+    func eventTriggersRejectUnavailableEvents() throws {
+        #expect(TaskQueueTrigger.supportedEvents == [
+            .sessionStart,
+            .sessionEnd,
+            .richInputSubmit,
+            .tabCreated,
+            .tabClosed,
+        ])
+        for event in [
+            PluginEvent.agentDetected,
+            .agentStateChanged,
+            .commandComplete,
+            .directoryChanged,
+            .taskRunStarted,
+            .taskRunFinished,
+        ] {
+            #expect(throws: TaskQueueError.unsupportedEventTrigger(event.rawValue)) {
+                _ = try TaskQueueTrigger.eventTrigger(event)
+            }
+        }
+    }
+
+    @Test("cron tasks run only after their computed due date and remain scheduled")
+    func cronTasksRunAtDueDate() async throws {
+        let start = Date(timeIntervalSince1970: 1_767_261_570) // 2026-01-01 09:59:30 UTC
+        let clock = LockedQueueClock(now: start)
+        let recorder = QueueRunRecorder(clock: clock)
+        let queue = try TaskQueue(
+            store: TaskQueueStore(rootDirectory: temporaryQueueDirectory()),
+            clock: { clock.now },
+            runHandler: { item in await recorder.run(item) }
+        )
+        _ = try await queue.start()
+        let schedule = try CronSchedule(expression: "0 10 * * *", timeZoneIdentifier: "UTC")
+        let item = try makeQueueItem(id: "daily", trigger: .cron(schedule), now: start)
+        _ = try await queue.enqueue(item)
+
+        await queue.tick(at: start.addingTimeInterval(29))
+        #expect(await recorder.runCount == 0)
+        clock.advance(by: 30)
+        await queue.tick(at: clock.now)
+        let scheduled = try await waitForQueueItem(queue, id: item.id) {
+            $0.status == .scheduled && $0.totalRunCount == 1
+        }
+
+        #expect(await recorder.runCount == 1)
+        #expect(try #require(scheduled.nextRunAt) > clock.now)
+    }
+
+    @Test("cancelling an active task cancels its runner and persists terminal state")
+    func cancellationStopsActiveRun() async throws {
+        let gate = QueueConcurrencyGate()
+        let root = temporaryQueueDirectory()
+        let store = TaskQueueStore(rootDirectory: root)
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let queue = try TaskQueue(store: store, runHandler: { item in await gate.run(item) })
+        _ = try await queue.start()
+        let item = try makeQueueItem(id: "cancel")
+        _ = try await queue.enqueue(item)
+        try await waitUntil { await gate.startedCount == 1 }
+
+        let cancelled = try await queue.cancel(id: item.id)
+        await gate.releaseAll()
+
+        #expect(cancelled.status == .cancelled)
+        #expect(try store.loadAll().items.first?.status == .cancelled)
+    }
+
+    @Test("rerun accepts terminal tasks and rejects nonterminal tasks")
+    func rerunTerminalTasks() async throws {
+        let root = temporaryQueueDirectory()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let store = TaskQueueStore(rootDirectory: root)
+        for (id, status) in [
+            ("succeeded", TaskQueueItemStatus.succeeded),
+            ("failed", .failed),
+            ("cancelled", .cancelled),
+        ] {
+            var item = try makeQueueItem(id: id, trigger: .event(.tabCreated))
+            item.status = status
+            item.completedAt = item.updatedAt
+            try store.save(item)
+        }
+        let gate = QueueConcurrencyGate()
+        let queue = try TaskQueue(
+            store: store,
+            maximumConcurrentRuns: 1,
+            runHandler: { item in await gate.run(item) }
+        )
+        _ = try await queue.start()
+
+        for id in ["succeeded", "failed", "cancelled"] {
+            let item = try await queue.rerun(id: id)
+            #expect(item.status == .queued)
+            #expect(item.completedAt == nil)
+            #expect(item.retryAttempt == 0)
+            #expect(item.lastError == nil)
+        }
+        await #expect(throws: TaskQueueError.taskNotFinished("succeeded")) {
+            _ = try await queue.rerun(id: "succeeded")
+        }
+        await queue.shutdown()
+    }
+
+    @Test("remove deletes terminal persistence and rejects active records")
+    func removeTerminalTasks() async throws {
+        let root = temporaryQueueDirectory()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let store = TaskQueueStore(rootDirectory: root)
+        var terminal = try makeQueueItem(id: "finished", trigger: .event(.tabCreated))
+        terminal.status = .failed
+        terminal.completedAt = terminal.updatedAt
+        try store.save(terminal)
+        let active = try makeQueueItem(id: "scheduled", trigger: .event(.tabCreated))
+        try store.save(active)
+        let queue = try TaskQueue(store: store, runHandler: { item in
+            AgentPipelineRunSummary(
+                pipelineID: item.pipeline.id,
+                status: .succeeded,
+                stepResults: [],
+                startedAt: Date(),
+                finishedAt: Date()
+            )
+        })
+        _ = try await queue.start()
+
+        let removed = try await queue.remove(id: "finished")
+        #expect(removed.status == .failed)
+        #expect(await queue.item(id: "finished") == nil)
+        #expect(!FileManager.default.fileExists(atPath: store.fileURL(taskID: "finished").path))
+        await #expect(throws: TaskQueueError.taskNotFinished("scheduled")) {
+            _ = try await queue.remove(id: "scheduled")
+        }
+    }
+
+    @Test("publishes a complete ordered snapshot after every mutation")
+    func publishesSnapshotsAfterEveryMutation() async throws {
+        let root = temporaryQueueDirectory()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let recorder = QueueSnapshotRecorder()
+        let queue = try TaskQueue(
+            store: TaskQueueStore(rootDirectory: root),
+            runHandler: { item in
+                AgentPipelineRunSummary(
+                    pipelineID: item.pipeline.id,
+                    status: .succeeded,
+                    stepResults: [],
+                    startedAt: Date(),
+                    finishedAt: Date()
+                )
+            },
+            snapshotHandler: { items in
+                await recorder.record(items)
+            }
+        )
+
+        _ = try await queue.start()
+        let item = try makeQueueItem(id: "observable", trigger: .event(.tabCreated))
+        _ = try await queue.enqueue(item)
+        _ = try await queue.cancel(id: item.id)
+        _ = try await queue.remove(id: item.id)
+
+        let snapshots = await recorder.snapshots
+        #expect(snapshots.count == 4)
+        #expect(snapshots[0].isEmpty)
+        #expect(snapshots[1].map(\.id) == [item.id])
+        #expect(snapshots[1].first?.status == .scheduled)
+        #expect(snapshots[2].first?.status == .cancelled)
+        #expect(snapshots[3].isEmpty)
+    }
+
+    private func makeQueueItem(
+        id: String,
+        trigger: TaskQueueTrigger = .manual,
+        maximumRetries: Int = 0,
+        now: Date = Date(timeIntervalSince1970: 1_000)
+    ) throws -> TaskQueueItem {
+        try TaskQueueItem(
+            id: id,
+            pipeline: AgentPipeline(
+                id: "pipeline-\(id)",
+                steps: [AgentPipelineStep(id: "run", provider: .codex, prompt: "Run \(id)")]
+            ),
+            trigger: trigger,
+            maximumRetries: maximumRetries,
+            now: now
+        )
+    }
+
+    private func temporaryQueueDirectory() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-queue-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("queue", isDirectory: true)
+    }
+}

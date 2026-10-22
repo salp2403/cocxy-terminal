@@ -183,34 +183,6 @@ extension MainWindowController {
         )
     }
 
-    func replayMacroPlaybackPlan(
-        _ plan: MacroPlaybackPlan,
-        preferredSurfaceID: SurfaceID? = nil
-    ) throws -> Int {
-        guard let surfaceID = preferredSurfaceID
-            ?? focusedSplitSurfaceView?.terminalViewModel?.surfaceID
-            ?? activeTerminalSurfaceView?.terminalViewModel?.surfaceID else {
-            throw MacroTerminalInputReplayError.noTargetSurface
-        }
-        let engine = terminalEngine(for: surfaceID)
-        let replayer = MacroTerminalInputReplayer { text in
-            engine.sendText(text, to: surfaceID)
-        }
-        return try replayer.replay(plan)
-    }
-
-    func sendMacroTextToTerminal(
-        _ text: String,
-        preferredSurfaceID: SurfaceID? = nil
-    ) throws {
-        guard let surfaceID = preferredSurfaceID
-            ?? focusedSplitSurfaceView?.terminalViewModel?.surfaceID
-            ?? activeTerminalSurfaceView?.terminalViewModel?.surfaceID else {
-            throw MacroTerminalInputReplayError.noTargetSurface
-        }
-        terminalEngine(for: surfaceID).sendText(text, to: surfaceID)
-    }
-
     // MARK: - Split with Panel
 
     func makeWorkspacePanelView(panel: PanelInfo, contentID: UUID, tabID: TabID?) -> NSView? {
@@ -244,7 +216,7 @@ extension MainWindowController {
                 layout: .splitPane
             )
             browserView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
-            let hostingView = NSHostingView(rootView: browserView)
+            let hostingView = makeShellHostingView(rootView: browserView)
             hostingView.wantsLayer = true
             return hostingView
         case .markdown:
@@ -282,7 +254,7 @@ extension MainWindowController {
             let view = NotebookPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
         case .workflow:
             let workspaceDir = workspaceDirectory(for: tabID)
                 ?? panel.filePath?.deletingLastPathComponent()
@@ -295,7 +267,7 @@ extension MainWindowController {
             let view = WorkflowPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
         case .sessionReplay:
             let config = configService?.current.sessionReplay ?? .defaults
             let viewModel = SessionReplayPanelViewModel(
@@ -310,7 +282,7 @@ extension MainWindowController {
             let view = SessionReplayPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
         case .aiEditHistory:
             let workspaceDir = panel.filePath ?? workspaceDirectory(for: tabID) ?? workspaceDirectoryForCurrentTab()
             let repoRoot = (try? AIEditRepositoryIdentifier.repositoryRoot(for: workspaceDir)) ?? workspaceDir
@@ -325,7 +297,7 @@ extension MainWindowController {
             let view = AIEditHistoryPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
         case .templates:
             let workspaceDir = panel.filePath ?? workspaceDirectory(for: tabID) ?? workspaceDirectoryForCurrentTab()
             let viewModel = ProjectTemplatePanelViewModel(
@@ -336,7 +308,7 @@ extension MainWindowController {
             let view = ProjectTemplatePanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
         case .macros:
             let targetSurfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
             let viewModel = MacroSnippetPanelViewModel(
@@ -358,13 +330,15 @@ extension MainWindowController {
             let view = MacroSnippetPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
         case .dbCloud:
             let viewModel = DBCloudHelperPanelViewModel(localizer: appLocalizer())
             let view = DBCloudHelperPanelView(viewModel: viewModel, localizer: appLocalizer()) { [weak self] in
                 self?.closePanel(contentID: contentID)
             }
-            return NSHostingView(rootView: view)
+            return makeShellHostingView(rootView: view)
+        case .projectHome:
+            return makeProjectHomePanelView(panel: panel, tabID: tabID)
         case .subagent:
             guard let dashboardVM = injectedDashboardViewModel ?? dashboardViewModel,
                   let subagentId = panel.subagentId,
@@ -632,13 +606,18 @@ extension MainWindowController {
         // Create new terminal for the second pane.
         let engine = currentTabID.map { terminalEngine(for: $0) } ?? bridge
         let newViewModel = TerminalViewModel(engine: engine)
-        let configuredFontSize = configService?.current.appearance.fontSize
-            ?? AppearanceConfig.defaults.fontSize
-        newViewModel.setDefaultFontSize(configuredFontSize)
+        let configuredAppearance = currentTabID.map { effectiveConfig(for: $0).appearance }
+            ?? configService?.current.appearance
+            ?? .defaults
+        newViewModel.setDefaultFontSize(configuredAppearance.fontSize)
         let newSurfaceView = TerminalHostViewFactory.make(
             viewModel: newViewModel,
             engine: engine,
             localizer: appLocalizer()
+        )
+        newSurfaceView.applyFont(
+            family: configuredAppearance.fontFamily,
+            size: configuredAppearance.fontSize
         )
 
         let workingDirectory = currentTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
@@ -672,6 +651,11 @@ extension MainWindowController {
                 initialWorkingDirectory: workingDirectory
             )
             startAutomaticSessionReplayIfNeeded(surfaceID: surfaceID, tabID: activeTabID)
+            applyTerminalFont(
+                family: configuredAppearance.fontFamily,
+                size: configuredAppearance.fontSize,
+                to: surfaceID
+            )
         }
 
         // Determine the parent of the focused surface view.
@@ -975,9 +959,9 @@ extension MainWindowController {
         )
         firstChild.frame = childFrames.first
         secondChild.frame = childFrames.second
-
         splitView.addSubview(firstChild)
         splitView.addSubview(secondChild)
+        applyShellLayoutDirection(to: splitView)
         splitView.setHoldingPriority(.defaultLow, forSubviewAt: 0)
         splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
         splitView.adjustSubviews()

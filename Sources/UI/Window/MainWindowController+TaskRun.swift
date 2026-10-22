@@ -1,0 +1,161 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+// MainWindowController+TaskRun.swift - Project Home fan-out command routing.
+
+import AppKit
+import os.log
+
+@MainActor
+extension MainWindowController {
+    private static let taskRunPresentationLogger = Logger(
+        subsystem: "dev.cocxy.terminal",
+        category: "TaskRunPresentation"
+    )
+
+    func showTaskRunLaunchSheet() {
+        guard window != nil,
+              let delegate = NSApp.delegate as? AppDelegate,
+              let context = delegate.focusedTaskRunLaunchContext(),
+              context.windowID == windowID else {
+            presentTaskRunAlert(
+                message: localizedTaskRunString(
+                    "taskRun.error.noTarget",
+                    fallback: "No active repository-backed terminal is available."
+                )
+            )
+            return
+        }
+        guard context.worktreeConfig.enabled else {
+            presentTaskRunAlert(
+                message: localizedTaskRunString(
+                    "taskRun.error.disabled",
+                    fallback: AppDelegate.worktreeEnablementErrorMessage
+                )
+            )
+            return
+        }
+
+        let projectID = projectResolver.resolveProject(
+            for: context.originRepoPath
+        ).groupingID
+        do {
+            let targetTabID = try delegate.showProjectHome(projectID)
+            delegate.projectFanOutCoordinator.presentLaunch(
+                projectID: projectID,
+                targetTabID: targetTabID
+            )
+        } catch {
+            presentTaskRunFailure(error)
+        }
+    }
+
+    func showTaskRunComparisonPicker() {
+        guard let delegate = NSApp.delegate as? AppDelegate else { return }
+        let runs = delegate.taskRunsSnapshot().filter { $0.status == .running }
+        guard !runs.isEmpty else {
+            presentTaskRunAlert(
+                message: localizedTaskRunString(
+                    "taskRun.error.noRunningTasks",
+                    fallback: "No running parallel tasks are available to compare."
+                )
+            )
+            return
+        }
+        if runs.count == 1, let run = runs.first {
+            showTaskRunComparisonSheet(runID: run.id)
+            return
+        }
+
+        let actions = runs.map { run in
+            let repository = run.originRepoPath.lastPathComponent.isEmpty
+                ? run.originRepoPath.path
+                : run.originRepoPath.lastPathComponent
+            let description = String(
+                format: appLocalizer().string(
+                    "taskRun.compare.pickerDescription",
+                    fallback: "%d candidates | %@ | %@"
+                ),
+                run.candidates.count,
+                run.baseRef,
+                run.id
+            )
+            return CommandAction(
+                id: "taskRun.compare.\(run.id)",
+                name: repository,
+                description: description,
+                shortcut: nil,
+                category: .agent,
+                handler: { [weak self, runID = run.id] in
+                    self?.dismissCommandPalette()
+                    self?.showTaskRunComparisonSheet(runID: runID)
+                }
+            )
+        }
+        showTransientCommandPaletteOverlay(
+            engine: StaticCommandPaletteEngine(actions: actions)
+        )
+    }
+
+    func showTaskRunComparisonSheet(runID: String) {
+        guard let delegate = NSApp.delegate as? AppDelegate,
+              let run = delegate.taskRunsSnapshot().first(where: { $0.id == runID }) else {
+            presentTaskRunAlert(
+                message: localizedTaskRunString(
+                    "taskRun.error.notFound",
+                    fallback: "The selected parallel task is no longer available."
+                )
+            )
+            return
+        }
+        do {
+            let targetTabID = try delegate.showProjectHome(run.projectID)
+            delegate.projectFanOutCoordinator.presentComparison(
+                projectID: run.projectID,
+                targetTabID: targetTabID,
+                runID: run.id
+            )
+        } catch {
+            presentTaskRunFailure(error)
+        }
+    }
+
+    static func localizedTaskRunFailureMessage(localizer: AppLocalizer) -> String {
+        localizer.string(
+            "project.error.message",
+            fallback: "The project action could not be completed."
+        )
+    }
+
+    private func presentTaskRunFailure(_ error: any Error) {
+        Self.taskRunPresentationLogger.error(
+            "Task run presentation failed: \(String(describing: error), privacy: .private)"
+        )
+        presentTaskRunAlert(
+            message: Self.localizedTaskRunFailureMessage(localizer: appLocalizer())
+        )
+    }
+
+    private func presentTaskRunAlert(message: String) {
+        if let projectActionAlertPresenter {
+            projectActionAlertPresenter(message)
+            return
+        }
+        let localizer = appLocalizer()
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = localizer.string(
+            "taskRun.alert.title",
+            fallback: "Parallel Task"
+        )
+        alert.informativeText = message
+        alert.addButton(withTitle: localizer.string("common.ok", fallback: "OK"))
+        if let window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
+    private func localizedTaskRunString(_ key: String, fallback: String) -> String {
+        appLocalizer().string(key, fallback: fallback)
+    }
+}

@@ -3,14 +3,21 @@
 // Phase 3: canonical attribution of FileChanged lifecycle events to the
 // owning session and (when uniquely identifiable) to its active subagent.
 //
-// FileChanged is the authoritative filesystem signal for Claude Code 2.1.83+.
+// FileChanged is the canonical filesystem signal regardless of whether it
+// comes from the bounded Claude hook or Cocxy's native workspace monitor.
 // Pre-Phase-3 the dashboard inferred file impacts from `tool_input.file_path`
 // inside PostToolUse events. That inference is retained for backward
 // compatibility but FileChanged now augments it with events emitted by the
-// CLI directly, including changes made by tools that do not surface a
+// integration layer, including changes made by tools that do not surface a
 // file_path in their PostToolUse payload.
 
 import Foundation
+
+struct PendingDashboardFileChange: Sendable {
+    var operations: Set<FileImpact.FileOperation>
+    var latestTimestamp: Date
+    var attributedSubagentIDs: Set<String>
+}
 
 extension AgentDashboardViewModel {
 
@@ -26,59 +33,157 @@ extension AgentDashboardViewModel {
     ///   is added to that subagent's `touchedFilePaths` set. With zero or
     ///   multiple active subagents we cannot attribute confidently, so the
     ///   change is recorded only at the session level.
-    /// - The file impact is always recorded on the session, deduplicated via
-    ///   the existing `Set<FileOperation>` semantics.
-    /// - Updates `lastActivityTime` so the dashboard sort order surfaces the
-    ///   busiest sessions on top.
+    /// - Events are coalesced for 250 ms by default. The burst produces one
+    ///   immutable session snapshot and therefore one `@Published` emission.
+    /// - Pending impacts are periodically compacted and committed impacts
+    ///   retain only the 512 most recent paths per session.
     func handleFileChangedEvent(_ event: HookEvent) {
         guard case .fileChanged(let data) = event.data, !data.filePath.isEmpty else {
             return
         }
-        guard sessionDataStore[event.sessionId] != nil else {
+        guard let sessionData = sessionDataStore[event.sessionId] else {
             // Race: FileChanged before SessionStart, or session belongs to a
             // tab that is not in our store. Drop silently.
             return
         }
 
         let operation = Self.mapChangeType(data.changeType)
+        let activeSubagentIDs = sessionData.subagents.filter(\.isActive).map(\.id)
+        let attributedSubagentIDs: Set<String> = activeSubagentIDs.count == 1
+            ? [activeSubagentIDs[0]]
+            : []
 
-        // Attribute to the single active subagent if exactly one is running.
-        if let subagents = sessionDataStore[event.sessionId]?.subagents {
-            let activeIndices = subagents.indices.filter { subagents[$0].isActive }
-            if activeIndices.count == 1 {
-                let idx = activeIndices[0]
-                sessionDataStore[event.sessionId]?.subagents[idx]
-                    .touchedFilePaths.insert(data.filePath)
-                sessionDataStore[event.sessionId]?.subagents[idx]
-                    .lastActivityTime = event.timestamp
-            }
+        var pending = pendingFileChangesBySession[event.sessionId]?[data.filePath]
+            ?? PendingDashboardFileChange(
+            operations: [],
+            latestTimestamp: event.timestamp,
+            attributedSubagentIDs: []
+        )
+        pending.operations.insert(operation)
+        pending.latestTimestamp = max(pending.latestTimestamp, event.timestamp)
+        pending.attributedSubagentIDs.formUnion(attributedSubagentIDs)
+        pendingFileChangesBySession[event.sessionId, default: [:]][data.filePath] = pending
+
+        if let changes = pendingFileChangesBySession[event.sessionId],
+           changes.count > Self.pendingFileChangeCompactionThreshold {
+            pendingFileChangesBySession[event.sessionId] = Dictionary(
+                uniqueKeysWithValues: changes.sorted(by: Self.isMoreRecentPendingChange)
+                    .prefix(Self.retainedPendingFileChangesPerSession)
+                    .map { ($0.key, $0.value) }
+            )
         }
-
-        // Always record on the session as the canonical impact map. The set
-        // semantics deduplicate repeated paths automatically.
-        sessionDataStore[event.sessionId]?
-            .fileImpacts[data.filePath, default: []]
-            .insert(operation)
-        sessionDataStore[event.sessionId]?.lastActivityTime = event.timestamp
-
-        rebuildSessions()
+        scheduleFileChangeFlush()
     }
 
-    /// Maps the optional `change_type` field to `FileImpact.FileOperation`.
+    func flushPendingFileChanges() {
+        fileChangeFlushTimer?.cancel()
+        fileChangeFlushTimer = nil
+        applyPendingFileChanges()
+    }
+
+    func discardPendingFileChanges(for sessionId: String) {
+        pendingFileChangesBySession.removeValue(forKey: sessionId)
+        guard pendingFileChangesBySession.isEmpty else { return }
+        fileChangeFlushTimer?.cancel()
+        fileChangeFlushTimer = nil
+    }
+
+    /// Maps the canonical `event` field and legacy `change_type` values.
     ///
-    /// Claude Code currently emits `write`, `edit` and `delete`. We map
-    /// `delete` to `.write` (treated as a mutating change) until a dedicated
-    /// `.delete` case is added to `FileImpact.FileOperation`. Unknown or
-    /// missing values default to `.write` — recording at least that the
-    /// file was touched.
+    /// Claude Code emits `change`, `add`, and `unlink`. Legacy producers used
+    /// `write`, `edit`, and `delete`. Unknown or missing values default to
+    /// `.write`, preserving the fact that the file was touched.
     static func mapChangeType(_ raw: String?) -> FileImpact.FileOperation {
         switch raw?.lowercased() {
-        case "edit":
+        case "change", "edit":
             return .edit
-        case "write", "delete", nil, "":
+        case "add", "create":
+            return .create
+        case "unlink", "delete":
+            return .delete
+        case "write", nil, "":
             return .write
         default:
             return .write
         }
+    }
+
+    private func scheduleFileChangeFlush() {
+        let deadline: DispatchTime = fileChangeDebounceInterval > 0
+            ? .now() + fileChangeDebounceInterval
+            : .now()
+        if let timer = fileChangeFlushTimer {
+            timer.schedule(deadline: deadline)
+            return
+        }
+
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.fileChangeFlushTimer?.cancel()
+            self.fileChangeFlushTimer = nil
+            self.applyPendingFileChanges()
+        }
+        fileChangeFlushTimer = timer
+        timer.schedule(deadline: deadline)
+        timer.resume()
+    }
+
+    private func applyPendingFileChanges() {
+        guard !pendingFileChangesBySession.isEmpty else { return }
+        let pendingBySession = pendingFileChangesBySession
+        pendingFileChangesBySession.removeAll(keepingCapacity: true)
+
+        var didChange = false
+        for sessionId in pendingBySession.keys.sorted() {
+            guard var sessionData = sessionDataStore[sessionId],
+                  let changes = pendingBySession[sessionId] else {
+                continue
+            }
+
+            for filePath in changes.keys.sorted() {
+                guard let change = changes[filePath] else { continue }
+                var impact = sessionData.fileImpacts[filePath]
+                    ?? FileImpact(path: filePath, lastChangedAt: change.latestTimestamp)
+                impact.operations.formUnion(change.operations)
+                impact.lastChangedAt = max(impact.lastChangedAt, change.latestTimestamp)
+                sessionData.fileImpacts[filePath] = impact
+
+                for subagentId in change.attributedSubagentIDs {
+                    guard let index = sessionData.subagents.firstIndex(where: {
+                        $0.id == subagentId
+                    }) else {
+                        continue
+                    }
+                    sessionData.subagents[index].touchedFilePaths.insert(filePath)
+                    let previous = sessionData.subagents[index].lastActivityTime ?? .distantPast
+                    sessionData.subagents[index].lastActivityTime = max(
+                        previous,
+                        change.latestTimestamp
+                    )
+                }
+
+                let previousActivity = sessionData.lastActivityTime ?? .distantPast
+                sessionData.lastActivityTime = max(previousActivity, change.latestTimestamp)
+            }
+
+            Self.pruneFileTracking(&sessionData)
+            sessionDataStore[sessionId] = sessionData
+            didChange = true
+        }
+
+        if didChange {
+            rebuildSessions()
+        }
+    }
+
+    private static func isMoreRecentPendingChange(
+        _ lhs: Dictionary<String, PendingDashboardFileChange>.Element,
+        _ rhs: Dictionary<String, PendingDashboardFileChange>.Element
+    ) -> Bool {
+        if lhs.value.latestTimestamp != rhs.value.latestTimestamp {
+            return lhs.value.latestTimestamp > rhs.value.latestTimestamp
+        }
+        return lhs.key.localizedStandardCompare(rhs.key) == .orderedAscending
     }
 }

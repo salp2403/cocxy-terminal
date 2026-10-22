@@ -76,7 +76,7 @@ cat > "$HELPER_PLIST" <<PLIST
     <key>CFBundleVersion</key>
     <string>${APP_BUILD_VERSION}</string>
     <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
+    <string>15.0</string>
     <key>LSUIElement</key>
     <true/>
 </dict>

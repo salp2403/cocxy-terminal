@@ -76,7 +76,8 @@ extension MainWindowController {
             onCancel: closeSheet,
             onDone: closeSheet
         )
-        let sheet = NSWindow(contentViewController: NSHostingController(rootView: content))
+        let sheet = NSWindow(contentViewController: makeShellHostingController(rootView: content))
+        markAsApplicationManaged(sheet)
         sheetReference.value = sheet
         sheet.title = BrowserImportWizardView.localizedTitle(using: localizer)
         sheet.styleMask = [.titled]

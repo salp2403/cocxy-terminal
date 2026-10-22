@@ -2,11 +2,175 @@
 // MainWindowVoiceInputSwiftTestingTests.swift - MainWindow Voice wiring coverage.
 
 import Foundation
+import SwiftUI
 import Testing
 @testable import CocxyTerminal
 
 @Suite("MainWindowController Voice input")
 struct MainWindowVoiceInputSwiftTestingTests {
+    @Test("Voice consent is presented once per app session")
+    @MainActor
+    func voiceConsentIsPresentedOncePerSession() throws {
+        let coordinator = VoiceConsentCoordinator()
+        let configService = try voiceConsentConfigService(consentPrompted: false)
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            voiceConsentCoordinator: coordinator
+        )
+        defer { controller.close() }
+
+        #expect(controller.voiceConsentBannerHostingView != nil)
+        #expect(coordinator.presentationCount == 1)
+
+        controller.presentVoiceConsentIfNeeded()
+
+        #expect(coordinator.presentationCount == 1)
+    }
+
+    @Test("disabling Voice from consent persists both decisions")
+    @MainActor
+    func disablingVoiceFromConsentPersistsBothDecisions() throws {
+        let configService = try voiceConsentConfigService(consentPrompted: false)
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService
+        )
+        defer { controller.close() }
+
+        controller.resolveVoiceConsent(keepEnabled: false)
+
+        #expect(controller.preferencesWindow == nil)
+        #expect(configService.current.voice.enabled == false)
+        #expect(configService.current.voice.consentPrompted == true)
+        #expect(controller.voiceConsentBannerHostingView == nil)
+        let reopenedPreferences = PreferencesViewModel(config: configService.current)
+        #expect(reopenedPreferences.voiceEnabled == false)
+        #expect(reopenedPreferences.hasUnsavedChanges == false)
+    }
+
+    @Test("disabling Voice from consent refreshes open Preferences without reverting")
+    @MainActor
+    func disablingVoiceFromConsentRefreshesOpenPreferences() async throws {
+        let configService = try voiceConsentConfigService(consentPrompted: false)
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService
+        )
+        defer {
+            controller.preferencesWindow?.close()
+            controller.close()
+        }
+
+        controller.openPreferences(section: .voice)
+        let hostingController = try #require(
+            controller.preferencesWindow?.contentViewController
+                as? NSHostingController<PreferencesView>
+        )
+        let viewModel = hostingController.rootView.viewModel
+        #expect(viewModel.voiceEnabled == true)
+
+        controller.resolveVoiceConsent(keepEnabled: false)
+        for _ in 0..<100 where viewModel.voiceEnabled {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(configService.current.voice.enabled == false)
+        #expect(configService.current.voice.consentPrompted == true)
+        #expect(viewModel.voiceEnabled == false)
+        #expect(viewModel.hasUnsavedChanges == false)
+        viewModel.discardChanges()
+        #expect(viewModel.voiceEnabled == false)
+    }
+
+    @Test("previous Voice acknowledgement never prompts again")
+    @MainActor
+    func previousVoiceAcknowledgementDoesNotPromptAgain() throws {
+        let coordinator = VoiceConsentCoordinator()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: try voiceConsentConfigService(consentPrompted: true),
+            voiceConsentCoordinator: coordinator
+        )
+        defer { controller.close() }
+
+        #expect(controller.voiceConsentBannerHostingView == nil)
+        #expect(coordinator.presentationCount == 0)
+    }
+
+    @Test("Voice transcript writes to a detected terminal agent without submitting")
+    @MainActor
+    func voiceTranscriptWritesToDetectedAgentForReview() throws {
+        let engine = MockTerminalEngine()
+        let controller = MainWindowController(
+            bridge: engine,
+            configService: try voiceConfigService(autoSendToAgent: false)
+        )
+        let store = AgentStatePerSurfaceStore()
+        controller.injectedPerSurfaceStore = store
+        controller.showWindow(nil)
+        _ = controller.createTab()
+        controller.injectedAgentPromptRunner = MainWindowAgentPromptRunner()
+        let agentPanel = controller.resolveAgentPanelViewModel()
+        controller.isAgentModeVisible = true
+
+        let surfaceID = try #require(controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID)
+        store.update(surfaceID: surfaceID) { state in
+            state.agentState = .waitingInput
+            state.detectedAgent = detectedAgent()
+        }
+
+        controller.applyVoiceTranscript(VoiceTranscript(
+            text: "  review this change  ",
+            localeIdentifier: "en-US",
+            isFinal: true
+        ))
+
+        #expect(engine.sentTexts.count == 1)
+        #expect(engine.sentTexts.first?.surface == surfaceID)
+        #expect(engine.sentTexts.first?.text == "review this change")
+        #expect(agentPanel.promptDraft.isEmpty)
+        #expect(controller.isCommandPaletteVisible == false)
+    }
+
+    @Test("Voice auto-send submits to the detected agent in the focused split")
+    @MainActor
+    func voiceAutoSendTargetsFocusedSplit() throws {
+        let engine = MockTerminalEngine()
+        let controller = MainWindowController(
+            bridge: engine,
+            configService: try voiceConfigService(autoSendToAgent: true)
+        )
+        let store = AgentStatePerSurfaceStore()
+        controller.injectedPerSurfaceStore = store
+        controller.showWindow(nil)
+        _ = controller.createTab()
+        let primarySurfaceID = try #require(
+            controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
+        )
+
+        controller.performVisualSplit(isVertical: true)
+
+        let focusedSurfaceID = try #require(
+            controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
+        )
+        #expect(focusedSurfaceID != primarySurfaceID)
+        store.update(surfaceID: focusedSurfaceID) { state in
+            state.agentState = .waitingInput
+            state.detectedAgent = detectedAgent()
+        }
+
+        controller.applyVoiceTranscript(VoiceTranscript(
+            text: "run the checks",
+            localeIdentifier: "en-US",
+            isFinal: true
+        ))
+
+        #expect(engine.sentTexts.count == 1)
+        #expect(engine.sentTexts.first?.surface == focusedSurfaceID)
+        #expect(engine.sentTexts.first?.text == "run the checks\r")
+    }
+
     @Test("Voice transcript opens Command Palette and fills query")
     @MainActor
     func voiceTranscriptOpensCommandPaletteAndFillsQuery() async throws {
@@ -79,6 +243,37 @@ struct MainWindowVoiceInputSwiftTestingTests {
 
         #expect(controller.agentPanelViewModel?.promptDraft == "summarize terminal output")
         #expect(controller.isCommandPaletteVisible == false)
+    }
+
+    @MainActor
+    private func voiceConfigService(autoSendToAgent: Bool) throws -> ConfigService {
+        let service = ConfigService(fileProvider: VoiceInputConfigProvider(content: """
+        [voice]
+        enabled = true
+        locale = "system"
+        auto-send-to-agent = \(autoSendToAgent)
+        """))
+        try service.reload()
+        return service
+    }
+
+    @MainActor
+    private func voiceConsentConfigService(consentPrompted: Bool) throws -> ConfigService {
+        let service = ConfigService(fileProvider: VoiceInputConfigProvider(content: """
+        [voice]
+        enabled = true
+        consent-prompted = \(consentPrompted)
+        """))
+        try service.reload()
+        return service
+    }
+
+    private func detectedAgent() -> DetectedAgent {
+        DetectedAgent(
+            name: "codex",
+            launchCommand: "codex",
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
     }
 }
 

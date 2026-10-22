@@ -4,6 +4,7 @@
 import AppKit
 import CocxyCommandCorrections
 import CocxyCoreKit
+import CocxyShared
 
 // MARK: - CocxyCore View
 
@@ -24,11 +25,10 @@ import CocxyCoreKit
 /// ## Event routing
 ///
 /// Keyboard events follow the terminal host-view classification pipeline:
-/// 1. `KeyInputAction.classify()` → .copy, .paste, .selectAll, .clearScreen, .sendToTerminal
-/// 2. Special keys (arrows, backspace, enter, etc.) → `cocxycore_terminal_encode_key()`
-/// 3. Regular characters → `cocxycore_terminal_encode_char()`
-/// 4. Ctrl+letter → compute control character directly
-/// 5. Unhandled → fall through to `interpretKeyEvents()` (NSTextInputClient)
+/// 1. `KeyInputAction.classify()` routes app commands away from terminal input.
+/// 2. `interpretKeyEvents()` lets AppKit resolve text and IME composition.
+/// 3. Committed text is delivered once as complete UTF-8.
+/// 4. Keys without text fall through to CocxyCore's mode-aware encoder.
 ///
 /// Mouse events drive CocxyCore's selection model:
 /// - mouseDown sets the selection anchor
@@ -70,9 +70,16 @@ final class CocxyCoreView: NSView {
     /// AppKit first-responder changes.
     var onFocusRequested: (() -> Void)?
 
+    /// Activates an engine-detected URL or file target for this surface.
+    /// Copy-only targets stay inside the view's injected clipboard service.
+    var onActivateDetectedContent: ((TerminalDetectedContent) -> Bool)?
+
     /// Returns whether scroll gestures should move Cocxy's viewport even
     /// while the foreground process has enabled terminal mouse tracking.
     var prefersLocalScrollInMouseTrackingMode: (() -> Bool)?
+
+    /// Notifies window chrome when terminal mouse capture changes.
+    var onTerminalInteractionStateChanged: (() -> Void)?
 
     /// Returns whether delete-key autorepeat should be paced because the
     /// foreground prompt is an agent UI. This keeps agent prompt editing
@@ -119,11 +126,14 @@ final class CocxyCoreView: NSView {
         fontSizeProvider: { [weak self] in
             self?.viewModel?.currentFontSize ?? 14.0
         },
-        cursorPositionProvider: { [weak self] in
+        terminalStateProvider: { [weak self] inputStartAbsoluteRow in
             guard let self = self,
                   let bridge = self.bridge,
                   let sid = self.surfaceID else { return nil }
-            return bridge.cursorPosition(for: sid)
+            return bridge.terminalCursorClickSnapshot(
+                for: sid,
+                fromAbsoluteRow: inputStartAbsoluteRow
+            )
         },
         arrowKeySender: { [weak self] arrows in
             self?.sendArrowKeys(arrows)
@@ -138,6 +148,14 @@ final class CocxyCoreView: NSView {
     // MARK: - Command Block Overlay
 
     private(set) var commandBlockOverlayView: TerminalBlockOverlayView?
+    private(set) var historyPillView: TerminalHistoryPillView?
+    private var commandBlockConfiguration: CommandBlocksConfig = .defaults
+    private var cachedCommandBlocks: [TerminalCommandBlock] = []
+    private var cachedLiveCommandBlockIDs: Set<UInt64> = []
+    private var cachedCommandBlockSurfaceID: SurfaceID?
+    private var commandBlockDataNeedsRefresh = true
+    private var lastCommandBlockMarker: TerminalCommandBlockOverlayMarker?
+    internal private(set) var commandBlockDataReloadCount = 0
 
     // MARK: - Command Corrections
 
@@ -164,11 +182,26 @@ final class CocxyCoreView: NSView {
     internal var needsRender: Bool = false
     private let renderScheduleLock = NSLock()
     internal private(set) var renderScheduled: Bool = false
+    private var synchronizedOutputGate = SynchronizedOutputPresentationGate()
 
     // MARK: - Input State
 
     /// IME composition state.
     private var compositionState = TextCompositionState()
+
+    private struct KeyTextInterpretation {
+        var text = ""
+        var didMutateComposition = false
+    }
+
+    /// Non-nil only while `interpretKeyEvents` is synchronously dispatching
+    /// NSTextInputClient callbacks for the current physical key.
+    private var activeKeyTextInterpretation: KeyTextInterpretation?
+    private var isDiscardingInputMethodComposition = false
+
+    /// Deterministic seam for measured AppKit callback sequences in tests.
+    /// Production leaves this nil and uses `interpretKeyEvents` directly.
+    var keyEventInterpreterOverride: ((NSEvent) -> Void)?
 
     /// Whether the view currently has keyboard focus.
     private(set) var isFocused: Bool = false
@@ -176,11 +209,11 @@ final class CocxyCoreView: NSView {
     /// Active async paste delivery, used to keep large clipboard writes from
     /// monopolizing the main thread while an agent TUI is reading from the PTY.
     private var pasteDeliveryTask: Task<Void, Never>?
-    private var activeBracketedPasteSurfaceID: SurfaceID?
-    private var activeBracketedPasteSessionID: UUID?
+    private let pasteDeliveryCoordinator = TerminalPasteDeliveryCoordinator()
 
     /// Last dispatched repeated delete key event by hardware key code.
     private var repeatedDeleteDispatchTimestamps: [UInt16: TimeInterval] = [:]
+    private var forwardedKeyCodes = Set<UInt16>()
 
     // MARK: - Selection State
 
@@ -190,6 +223,10 @@ final class CocxyCoreView: NSView {
     /// Whether a drag selection is in progress.
     private var isDragging: Bool = false
 
+    /// Selection mode captured at mouse-down so modifier changes mid-drag
+    /// cannot change the geometry of the active gesture.
+    private var selectionIsRectangular: Bool = false
+
     // MARK: - Layout Tracking
 
     /// Last backing-pixel size sent to the bridge, prevents redundant resize calls.
@@ -198,15 +235,21 @@ final class CocxyCoreView: NSView {
     /// Observes screen changes on the hosting window so terminal metrics can be
     /// recalculated immediately when the view moves between displays.
     private var windowScreenObserver: NSObjectProtocol?
+    private var lastNotifiedMouseTrackingActive: Bool?
+    private var mouseMotionTrackingArea: NSTrackingArea?
+    private var terminalMouseCaptureByButton: [TerminalMouseButton: Bool] = [:]
+    private var terminalMouseMotionDeduplicator = TerminalMouseMotionDeduplicator()
+    private(set) var detectedContentOverlayView: TerminalDetectedContentOverlayView?
+    private(set) var hoveredDetectedContent: TerminalDetectedContent?
+    private(set) var detectedContentHintSession: TerminalDetectedContentHintSession?
+    private var consumedDetectedContentMouseGesture = false
 
     // MARK: - Constants
 
-    private static let scrollSpeedFactor: CGFloat = 0.15
-    static let defaultPasteChunkMaxUTF8Bytes = 512
-    static let agentPasteChunkMaxUTF8Bytes = 128
-    private static let pasteChunkMaxUTF8Bytes = defaultPasteChunkMaxUTF8Bytes
-    private static let pasteChunkDelayNanoseconds: UInt64 = 6_000_000
-    private static let agentPasteChunkDelayNanoseconds: UInt64 = 18_000_000
+    static let defaultPasteChunkMaxUTF8Bytes = TerminalPasteDeliveryTiming.production
+        .standardChunkMaxUTF8Bytes
+    static let agentPasteChunkMaxUTF8Bytes = TerminalPasteDeliveryTiming.production
+        .agentChunkMaxUTF8Bytes
     private static let repeatedDeleteMinimumInterval: TimeInterval = 0.095
     private static let agentRepeatedDeleteMinimumInterval: TimeInterval = 0.220
     private static let throttledDeleteKeyCodes: Set<UInt16> = [51, 117]
@@ -241,6 +284,7 @@ final class CocxyCoreView: NSView {
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
         commandBlockOverlayView?.updateLocalizer(localizer)
+        historyPillView?.updateLocalizer(localizer)
         if let pendingCommandCorrection {
             commandCorrectionSuggestionView?.update(
                 correction: pendingCommandCorrection,
@@ -252,7 +296,9 @@ final class CocxyCoreView: NSView {
 
     deinit {
         MainActor.assumeIsolated {
+            clearComposition(forceEngineClear: true)
             pasteDeliveryTask?.cancel()
+            pasteDeliveryCoordinator.cancelAll()
             removeWindowObservers()
             stopDisplayLink()
         }
@@ -304,6 +350,17 @@ final class CocxyCoreView: NSView {
 
     /// Configures the view with a bridge and surface. Call after createSurface.
     func configure(bridge: CocxyCoreBridge, surfaceID: SurfaceID, viewModel: TerminalViewModel) {
+        if self.bridge !== bridge || self.surfaceID != surfaceID {
+            pasteDeliveryTask?.cancel()
+            pasteDeliveryCoordinator.cancelAll()
+            resetCommandBlockOverlayForSurfaceTeardown()
+            clearComposition(forceEngineClear: true, discardInputContext: true)
+            dismissDetectedContentHints()
+            clearDetectedContentHover()
+            consumedDetectedContentMouseGesture = false
+            synchronizedOutputGate.reset()
+            forwardedKeyCodes.removeAll()
+        }
         self.bridge = bridge
         self.surfaceID = surfaceID
         self.viewModel = viewModel
@@ -319,6 +376,8 @@ final class CocxyCoreView: NSView {
         }
 
         installCommandBlockOverlayIfNeeded()
+        installHistoryPillIfNeeded()
+        installDetectedContentOverlayIfNeeded()
         refreshBackingConfiguration(forceGridSync: true)
         updateDisplayLinkRunningState()
     }
@@ -401,6 +460,14 @@ final class CocxyCoreView: NSView {
             return
         }
 
+        if synchronizedOutputGate.presentationDelay(
+            isActive: bridge.isSynchronizedOutputActive(for: sid) ?? false,
+            now: ProcessInfo.processInfo.systemUptime
+        ) != nil {
+            needsRender = true
+            return
+        }
+
         // Optimistically clear the flag, then re-arm if the renderer bailed.
         // `draw()` returns `false` when any stage failed silently: resources
         // unavailable, `nextDrawable()` returned `nil`, encoder creation
@@ -422,6 +489,9 @@ final class CocxyCoreView: NSView {
             self.onFramePresented = nil
             onFramePresented()
         }
+        refreshHistoryPill()
+        refreshCommandBlockOverlay()
+        refreshDetectedContentHintOverlay()
     }
 
     // MARK: - Layout & Resize
@@ -440,18 +510,36 @@ final class CocxyCoreView: NSView {
         refreshIDECursorMetrics()
         updateNotificationRingFrame()
         commandBlockOverlayView?.frame = bounds
+        detectedContentOverlayView?.frame = bounds
         layoutCommandCorrectionSuggestion()
         refreshCommandBlockOverlay()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        dismissDetectedContentHints()
+        clearDetectedContentHover()
         notifySizeChanged(newSize)
     }
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         refreshBackingConfiguration(forceGridSync: true)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let mouseMotionTrackingArea {
+            removeTrackingArea(mouseMotionTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        mouseMotionTrackingArea = trackingArea
     }
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {
@@ -634,6 +722,8 @@ final class CocxyCoreView: NSView {
 
     override func resignFirstResponder() -> Bool {
         isFocused = false
+        clearComposition(forceEngineClear: true, discardInputContext: true)
+        dismissDetectedContentHints()
         if let bridge, let sid = surfaceID {
             bridge.notifyFocus(false, for: sid)
         }
@@ -643,6 +733,9 @@ final class CocxyCoreView: NSView {
     // MARK: - Keyboard Input
 
     override func keyDown(with event: NSEvent) {
+        if handleDetectedContentHintKeyEvent(event) {
+            return
+        }
         guard let bridge = bridge, let sid = surfaceID else {
             super.keyDown(with: event)
             return
@@ -654,6 +747,11 @@ final class CocxyCoreView: NSView {
             modifiers: modifiers,
             characters: event.characters
         )
+
+        if action == .sendToTerminal,
+           performTerminalHostKeyEquivalent(with: event) {
+            return
+        }
 
         if action == .sendToTerminal,
            modifiers.contains(.command),
@@ -668,38 +766,68 @@ final class CocxyCoreView: NSView {
             handleCopy()
             return
         case .paste:
-            handlePaste()
+            paste(nil)
             return
         case .selectAll, .clearScreen:
-            let keyEvent = Self.translateKeyEvent(event, isKeyDown: true)
-            bridge.sendKeyEvent(keyEvent, to: sid)
+            let keyEvent = Self.translateKeyEvent(
+                event,
+                isKeyDown: true,
+                isComposing: hasMarkedText()
+            )
+            if bridge.sendKeyEvent(keyEvent, to: sid) {
+                forwardedKeyCodes.insert(event.keyCode)
+            }
             return
         case .sendToTerminal:
-            if handlePendingCommandCorrectionShortcut(
-                event,
-                bridge: bridge,
-                surfaceID: sid,
-                modifiers: modifiers
-            ) {
-                return
-            }
-            if shouldThrottleTerminalDeleteRepeat(event, bridge: bridge, surfaceID: sid) {
-                return
+            // Candidate navigation and IME deletion must win over terminal
+            // correction UI and repeat pacing while composition is active.
+            if hasMarkedText() == false {
+                if handlePendingCommandCorrectionShortcut(
+                    event,
+                    bridge: bridge,
+                    surfaceID: sid,
+                    modifiers: modifiers
+                ) {
+                    return
+                }
+                if shouldThrottleTerminalDeleteRepeat(event, bridge: bridge, surfaceID: sid) {
+                    return
+                }
             }
             handleTerminalInput(event, bridge: bridge, surfaceID: sid, modifiers: modifiers)
         }
     }
 
     override func keyUp(with event: NSEvent) {
-        // CocxyCore's encode_key only handles key-down. Key-up is a no-op.
+        guard let bridge,
+              let sid = surfaceID,
+              forwardedKeyCodes.remove(event.keyCode) != nil else { return }
+        _ = bridge.sendKeyEvent(
+            Self.translateKeyEvent(
+                event,
+                isKeyDown: false,
+                isComposing: hasMarkedText()
+            ),
+            to: sid
+        )
     }
 
     override func flagsChanged(with event: NSEvent) {
-        if event.modifierFlags.contains(.command) {
-            NSCursor.pointingHand.set()
-        } else {
-            NSCursor.iBeam.set()
-        }
+        updateDetectedContentCursor()
+        guard let bridge,
+              let sid = surfaceID,
+              let isKeyDown = MacTerminalKeyEventTranslator.modifierIsActive(
+                  keyCode: event.keyCode,
+                  flags: event.modifierFlags
+              ) else { return }
+        _ = bridge.sendKeyEvent(
+            Self.translateKeyEvent(
+                event,
+                isKeyDown: isKeyDown,
+                isComposing: hasMarkedText()
+            ),
+            to: sid
+        )
     }
 
     private func handleTerminalInput(
@@ -709,6 +837,94 @@ final class CocxyCoreView: NSView {
         modifiers: KeyModifiers
     ) {
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+
+        let wasComposing = hasMarkedText()
+        if wasComposing, event.keyCode == 53 {
+            // Escape belongs to the active input method: cancel the marked
+            // text without leaking an ESC byte into the foreground process.
+            clearComposition(forceEngineClear: true, discardInputContext: true)
+            return
+        }
+
+        if let controlText = Self.controlCharacterText(
+            for: event,
+            modifiers: modifiers
+        ) {
+            // Terminal control chords must remain reliable during IME use.
+            // Commit the visible marked text first, then deliver the control
+            // byte instead of allowing AppKit to consume Ctrl+C/Ctrl+D/etc.
+            if wasComposing {
+                commitComposition(bridge: bridge, surfaceID: sid)
+                clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
+                bridge.sendText(controlText, to: sid)
+                return
+            }
+            clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
+            let keyEvent = Self.translateKeyEvent(
+                event,
+                characters: event.charactersIgnoringModifiers,
+                isKeyDown: true,
+                isComposing: false
+            )
+            if bridge.sendKeyEvent(keyEvent, to: sid) {
+                forwardedKeyCodes.insert(event.keyCode)
+            } else {
+                bridge.sendText(controlText, to: sid)
+            }
+            return
+        }
+
+        let interpretation = interpretTerminalKeyEvent(event)
+        if interpretation.text.isEmpty == false {
+            clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
+            if interpretation.didMutateComposition == false,
+               let state = bridge.surfaceState(for: sid),
+               let bytes = MultilineEnterEncoder.bytes(
+                   keyCode: event.keyCode,
+                   modifiers: modifiers,
+                   kittyKeyboardActive: cocxycore_terminal_mode_kitty_keyboard(state.terminal) > 0
+               ) {
+                _ = bridge.writeBytes(bytes, to: sid)
+                return
+            }
+            let mustPreserveCommittedText = interpretation.didMutateComposition
+                || Self.literalTextForOptionGeneratedCharacter(
+                    characters: interpretation.text,
+                    charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+                    modifiers: modifiers
+                ) != nil
+            if mustPreserveCommittedText {
+                bridge.sendText(interpretation.text, to: sid)
+            } else {
+                let keyEvent = Self.translateKeyEvent(
+                    event,
+                    characters: interpretation.text,
+                    isKeyDown: true,
+                    isComposing: false
+                )
+                if bridge.sendKeyEvent(keyEvent, to: sid) {
+                    forwardedKeyCodes.insert(event.keyCode)
+                } else {
+                    bridge.sendText(interpretation.text, to: sid)
+                }
+            }
+            if Self.containsInputSubmission(interpretation.text),
+               modifiers.contains(.shift) == false {
+                ideCursorController.commandExecuted()
+                onUserInputSubmitted?()
+            }
+            return
+        }
+        if hasMarkedText() {
+            return
+        }
+        if interpretation.didMutateComposition {
+            // The input method consumed the key by cancelling or reducing
+            // marked text to empty. Do not also send the physical key.
+            return
+        }
+
+        clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
 
         if let literalText = Self.literalTextForOptionGeneratedCharacter(
             characters: event.characters,
@@ -735,43 +951,114 @@ final class CocxyCoreView: NSView {
             return
         }
 
-        // Ctrl+letter → compute ASCII control character directly.
-        if modifiers.contains(.control),
-           !modifiers.contains(.command),
-           let chars = event.charactersIgnoringModifiers?.lowercased(),
-           let scalar = chars.unicodeScalars.first,
-           scalar.value >= 0x61, scalar.value <= 0x7A {
-            let controlCode = UInt8(scalar.value - 0x60)
-            _ = bridge.writeBytes([controlCode], to: sid)
-            return
-        }
-
         // Use CocxyCore's mode-aware encoder for all other keys.
-        let keyEvent = KeyEvent(
-            characters: event.characters,
-            keyCode: event.keyCode,
-            modifiers: modifiers,
+        let keyEvent = Self.translateKeyEvent(
+            event,
             isKeyDown: true,
-            isRepeat: event.isARepeat
+            isComposing: hasMarkedText()
         )
 
         let handled = bridge.sendKeyEvent(keyEvent, to: sid)
-        if !handled {
-            interpretKeyEvents([event])
-        } else {
+        if handled {
+            forwardedKeyCodes.insert(event.keyCode)
             updateIDECursorState(afterHandling: event)
         }
     }
 
+    private func interpretTerminalKeyEvent(_ event: NSEvent) -> KeyTextInterpretation {
+        activeKeyTextInterpretation = KeyTextInterpretation()
+        defer { activeKeyTextInterpretation = nil }
+
+        if let keyEventInterpreterOverride {
+            keyEventInterpreterOverride(event)
+        } else {
+            interpretKeyEvents([event])
+        }
+
+        return activeKeyTextInterpretation ?? KeyTextInterpretation()
+    }
+
+    private func commitComposition(
+        bridge: CocxyCoreBridge,
+        surfaceID: SurfaceID
+    ) {
+        guard compositionState.hasMarkedText else { return }
+        let markedText = compositionState.markedText
+        compositionState.commit()
+        discardInputMethodComposition()
+        bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
+        if markedText.isEmpty == false {
+            bridge.sendText(markedText, to: surfaceID)
+        }
+    }
+
+    private func clearComposition(
+        forceEngineClear: Bool = false,
+        discardInputContext: Bool = false
+    ) {
+        let hadMarkedText = compositionState.hasMarkedText
+        compositionState.unmarkText()
+        if discardInputContext, hadMarkedText {
+            discardInputMethodComposition()
+        }
+        guard hadMarkedText || forceEngineClear,
+              let bridge,
+              let surfaceID else { return }
+        bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
+    }
+
+    private func discardInputMethodComposition() {
+        guard isDiscardingInputMethodComposition == false else { return }
+        isDiscardingInputMethodComposition = true
+        defer { isDiscardingInputMethodComposition = false }
+        inputContext?.discardMarkedText()
+        // The context can synchronously re-enter this client while discarding.
+        compositionState.unmarkText()
+    }
+
+    private func clearResidualPreeditIfNeeded(
+        bridge: CocxyCoreBridge,
+        surfaceID: SurfaceID
+    ) {
+        guard compositionState.hasMarkedText == false,
+              bridge.preeditSnapshot(for: surfaceID)?.active == true else { return }
+        bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
+    }
+
+    private static func controlCharacterText(
+        for event: NSEvent,
+        modifiers: KeyModifiers
+    ) -> String? {
+        guard modifiers.contains(.control),
+              modifiers.contains(.command) == false,
+              let scalar = event.charactersIgnoringModifiers?
+                .lowercased()
+                .unicodeScalars
+                .first else { return nil }
+        return ControlCharacterMapper.controlCharacterText(forLetter: String(scalar))
+    }
+
+    private static func containsInputSubmission(_ text: String) -> Bool {
+        text.contains("\r") || text.contains("\n")
+    }
+
     // MARK: - Text Command Handlers (NSResponder)
 
+    override func doCommand(by selector: Selector) {
+        guard activeKeyTextInterpretation == nil else { return }
+        super.doCommand(by: selector)
+    }
+
     private func sendControlSequence(_ seq: String) {
+        guard activeKeyTextInterpretation == nil else { return }
         guard let bridge = bridge, let sid = surfaceID else { return }
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+        clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
         bridge.sendText(seq, to: sid)
     }
 
     private func sendDeleteControlSequence(_ seq: String, keyCode: UInt16) {
+        guard activeKeyTextInterpretation == nil else { return }
         guard let bridge = bridge, let sid = surfaceID else { return }
         if shouldThrottleResponderDeleteRepeat(
             keyCode: keyCode,
@@ -781,7 +1068,27 @@ final class CocxyCoreView: NSView {
             return
         }
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+        clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
         bridge.sendText(seq, to: sid)
+    }
+
+    @discardableResult
+    private func sendResponderKey(keyCode: UInt16) -> Bool {
+        guard activeKeyTextInterpretation == nil,
+              let bridge,
+              let sid = surfaceID else { return false }
+        followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+        clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
+        return bridge.sendKeyEvent(
+            KeyEvent(
+                characters: nil,
+                keyCode: keyCode,
+                modifiers: [],
+                isKeyDown: true,
+                isComposing: hasMarkedText()
+            ),
+            to: sid
+        )
     }
 
     private func sendArrowKeys(_ arrows: [ArrowDirection]) {
@@ -843,15 +1150,16 @@ final class CocxyCoreView: NSView {
     override func deleteForward(_ sender: Any?) {
         sendDeleteControlSequence("\u{1B}[3~", keyCode: 117)
     }
-    override func moveUp(_ sender: Any?) { sendControlSequence("\u{1B}[A") }
-    override func moveDown(_ sender: Any?) { sendControlSequence("\u{1B}[B") }
+    override func moveUp(_ sender: Any?) { _ = sendResponderKey(keyCode: 126) }
+    override func moveDown(_ sender: Any?) { _ = sendResponderKey(keyCode: 125) }
     override func moveRight(_ sender: Any?) {
+        guard sendResponderKey(keyCode: 124) else { return }
         if ideCursorController.isOnPromptLine {
             ideCursorController.cursorMoved(toColumn: ideCursorController.cursorColumn + 1)
         }
-        sendControlSequence("\u{1B}[C")
     }
     override func moveLeft(_ sender: Any?) {
+        guard sendResponderKey(keyCode: 123) else { return }
         if ideCursorController.isOnPromptLine {
             let newColumn = max(
                 ideCursorController.promptColumn,
@@ -859,12 +1167,12 @@ final class CocxyCoreView: NSView {
             )
             ideCursorController.cursorMoved(toColumn: newColumn)
         }
-        sendControlSequence("\u{1B}[D")
     }
-    override func moveToBeginningOfLine(_ sender: Any?) { sendControlSequence("\u{1B}[H") }
-    override func moveToEndOfLine(_ sender: Any?) { sendControlSequence("\u{1B}[F") }
+    override func moveToBeginningOfLine(_ sender: Any?) { _ = sendResponderKey(keyCode: 115) }
+    override func moveToEndOfLine(_ sender: Any?) { _ = sendResponderKey(keyCode: 119) }
     override func insertTab(_ sender: Any?) { sendControlSequence("\t") }
     override func insertNewline(_ sender: Any?) {
+        guard activeKeyTextInterpretation == nil else { return }
         ideCursorController.commandExecuted()
         onUserInputSubmitted?()
         sendControlSequence("\r")
@@ -952,6 +1260,7 @@ final class CocxyCoreView: NSView {
     }
 
     @objc func paste(_ sender: Any?) {
+        clearComposition(forceEngineClear: true, discardInputContext: true)
         handlePaste()
     }
 
@@ -1099,61 +1408,21 @@ final class CocxyCoreView: NSView {
         bridge: CocxyCoreBridge,
         surfaceID sid: SurfaceID
     ) {
-        guard let state = bridge.surfaceState(for: sid) else { return }
-
-        let usesBracketedPaste = cocxycore_terminal_mode_bracketed_paste(state.terminal)
-        let normalizedText = Self.normalizedTerminalPasteText(text)
+        guard let diagnostics = bridge.modeDiagnostics(for: sid) else { return }
         let agentPacedPaste = shouldUsePromptSafePasteDelivery(bridge: bridge, surfaceID: sid)
-        let chunks = Self.terminalPasteChunks(
-            for: normalizedText,
-            agentPaced: agentPacedPaste
-        )
-        guard !chunks.isEmpty else { return }
-
-        closeActiveBracketedPasteIfNeeded(bridge: bridge)
-        pasteDeliveryTask?.cancel()
-        let pasteSessionID = UUID()
         pasteDeliveryTask = Task { @MainActor [weak self, weak bridge] in
             guard let self, let bridge else { return }
             self.followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
-            defer {
-                if self.activeBracketedPasteSessionID == pasteSessionID {
-                    self.closeActiveBracketedPasteIfNeeded(bridge: bridge)
-                }
-            }
-            guard !Task.isCancelled else { return }
-
-            let remainingChunks: ArraySlice<String>
-            if usesBracketedPaste {
-                guard let firstChunk = chunks.first else { return }
-                self.activeBracketedPasteSurfaceID = sid
-                self.activeBracketedPasteSessionID = pasteSessionID
-                bridge.sendText("\u{1B}[200~" + firstChunk, to: sid)
-                remainingChunks = chunks.dropFirst()
-                await Self.sleepBetweenPasteChunksIfNeeded(
-                    chunks.count,
+            _ = await self.pasteDeliveryCoordinator.deliver(
+                text,
+                to: sid,
+                configuration: TerminalPasteDeliveryConfiguration(
+                    usesBracketedPaste: diagnostics.bracketedPasteMode,
                     agentPaced: agentPacedPaste
-                )
-            } else {
-                remainingChunks = chunks[...]
-            }
-
-            for chunk in remainingChunks {
-                guard !Task.isCancelled,
-                      !usesBracketedPaste || self.activeBracketedPasteSessionID == pasteSessionID,
-                      bridge.surfaceState(for: sid) != nil else { return }
-                bridge.sendText(chunk, to: sid)
-                await Self.sleepBetweenPasteChunksIfNeeded(
-                    chunks.count,
-                    agentPaced: agentPacedPaste
-                )
-            }
-
-            guard !Task.isCancelled,
-                  bridge.surfaceState(for: sid) != nil else { return }
-            if usesBracketedPaste {
-                self.closeActiveBracketedPasteIfNeeded(bridge: bridge)
-            }
+                ),
+                isAvailable: { [weak bridge] in bridge?.surfaceState(for: sid) != nil },
+                sendText: { [weak bridge] chunk in bridge?.sendText(chunk, to: sid) == true }
+            )
         }
     }
 
@@ -1163,58 +1432,25 @@ final class CocxyCoreView: NSView {
         surfaceID sid: SurfaceID
     ) {
         let agentPacedPaste = shouldUsePromptSafePasteDelivery(bridge: bridge, surfaceID: sid)
-        let chunks = Self.terminalPasteChunks(
-            for: text,
-            agentPaced: agentPacedPaste
-        )
-        guard !chunks.isEmpty else { return }
-
-        closeActiveBracketedPasteIfNeeded(bridge: bridge)
-        pasteDeliveryTask?.cancel()
         pasteDeliveryTask = Task { @MainActor [weak self, weak bridge] in
             guard let self, let bridge else { return }
             self.followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
-            for chunk in chunks {
-                guard !Task.isCancelled,
-                      bridge.surfaceState(for: sid) != nil else { return }
-                bridge.sendText(chunk, to: sid)
-                await Self.sleepBetweenPasteChunksIfNeeded(
-                    chunks.count,
-                    agentPaced: agentPacedPaste
-                )
-            }
+            _ = await self.pasteDeliveryCoordinator.deliver(
+                text,
+                to: sid,
+                configuration: TerminalPasteDeliveryConfiguration(
+                    usesBracketedPaste: false,
+                    agentPaced: agentPacedPaste,
+                    normalizesText: false
+                ),
+                isAvailable: { [weak bridge] in bridge?.surfaceState(for: sid) != nil },
+                sendText: { [weak bridge] chunk in bridge?.sendText(chunk, to: sid) == true }
+            )
         }
-    }
-
-    private func closeActiveBracketedPasteIfNeeded(bridge: CocxyCoreBridge) {
-        guard let activeSurfaceID = activeBracketedPasteSurfaceID else { return }
-        if bridge.surfaceState(for: activeSurfaceID) != nil {
-            bridge.sendText("\u{1B}[201~", to: activeSurfaceID)
-        }
-        activeBracketedPasteSurfaceID = nil
-        activeBracketedPasteSessionID = nil
     }
 
     nonisolated static func normalizedTerminalPasteText(_ text: String) -> String {
-        let lineNormalized = text
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-            .replacingOccurrences(of: "\u{2028}", with: "\n")
-            .replacingOccurrences(of: "\u{2029}", with: "\n")
-
-        var scalars = String.UnicodeScalarView()
-        scalars.reserveCapacity(lineNormalized.unicodeScalars.count)
-        for scalar in lineNormalized.unicodeScalars {
-            switch scalar.value {
-            case 0x09, 0x0A:
-                scalars.append(scalar)
-            case 0x00...0x1F, 0x7F:
-                continue
-            default:
-                scalars.append(scalar)
-            }
-        }
-        return String(scalars)
+        TerminalPasteDelivery.normalizedText(text)
     }
 
     static func terminalPasteChunks(for text: String) -> [String] {
@@ -1222,9 +1458,11 @@ final class CocxyCoreView: NSView {
     }
 
     static func terminalPasteChunks(for text: String, agentPaced: Bool) -> [String] {
-        terminalPasteChunks(
+        TerminalPasteDelivery.chunks(
             for: text,
-            maxUTF8Bytes: agentPaced ? agentPasteChunkMaxUTF8Bytes : pasteChunkMaxUTF8Bytes
+            maxUTF8Bytes: agentPaced
+                ? agentPasteChunkMaxUTF8Bytes
+                : defaultPasteChunkMaxUTF8Bytes
         )
     }
 
@@ -1232,37 +1470,7 @@ final class CocxyCoreView: NSView {
         for text: String,
         maxUTF8Bytes: Int
     ) -> [String] {
-        guard maxUTF8Bytes > 0 else { return [text] }
-
-        var chunks: [String] = []
-        var current = ""
-        var currentBytes = 0
-
-        for character in text {
-            let characterText = String(character)
-            let byteCount = characterText.utf8.count
-            if currentBytes > 0, currentBytes + byteCount > maxUTF8Bytes {
-                chunks.append(current)
-                current = ""
-                currentBytes = 0
-            }
-            current.append(character)
-            currentBytes += byteCount
-        }
-
-        if !current.isEmpty {
-            chunks.append(current)
-        }
-        return chunks
-    }
-
-    private static func sleepBetweenPasteChunksIfNeeded(
-        _ chunkCount: Int,
-        agentPaced: Bool
-    ) async {
-        guard chunkCount > 1 else { return }
-        let delay = agentPaced ? agentPasteChunkDelayNanoseconds : pasteChunkDelayNanoseconds
-        try? await Task.sleep(nanoseconds: delay)
+        TerminalPasteDelivery.chunks(for: text, maxUTF8Bytes: maxUTF8Bytes)
     }
 
     internal func shouldThrottleTerminalDeleteRepeat(
@@ -1330,17 +1538,28 @@ final class CocxyCoreView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         onFocusRequested?()
+        viewModel?.recordMouseDown(clickCount: event.clickCount)
+        dismissDetectedContentHints()
+
+        consumedDetectedContentMouseGesture = false
+        if event.clickCount == 1,
+           event.modifierFlags.contains(.command),
+           let content = detectedContent(at: event),
+           activateDetectedContent(content) {
+            consumedDetectedContentMouseGesture = true
+            return
+        }
+
+        if beginTerminalMouseGesture(button: .left, event: event) {
+            selectionAnchor = nil
+            isDragging = false
+            selectionIsRectangular = false
+            return
+        }
 
         guard let bridge = bridge, let sid = surfaceID,
               let state = bridge.surfaceState(for: sid) else {
             super.mouseDown(with: event)
-            return
-        }
-
-        let location = convert(event.locationInWindow, from: nil)
-        viewModel?.recordMouseDown(clickCount: event.clickCount)
-
-        if event.clickCount == 1, ideCursorController.handleClickToPosition(at: location) {
             return
         }
 
@@ -1352,11 +1571,32 @@ final class CocxyCoreView: NSView {
         // the per-surface terminal lock and cannot race with the background
         // PTY feed loop.
         bridge.clearSelection(for: sid)
-        selectionAnchor = (row: absoluteRow, col: pos.col)
         isDragging = false
+        selectionIsRectangular = false
+
+        let clickCount = viewModel?.lastClickCount ?? event.clickCount
+        if clickCount >= 3 {
+            selectionAnchor = nil
+            _ = bridge.selectLogicalLine(for: sid, row: absoluteRow)
+            setNeedsTerminalDisplay()
+        } else if clickCount == 2 {
+            selectionAnchor = nil
+            _ = bridge.selectWord(for: sid, row: absoluteRow, col: pos.col)
+            setNeedsTerminalDisplay()
+        } else {
+            selectionAnchor = (row: absoluteRow, col: pos.col)
+            selectionIsRectangular = event.modifierFlags.contains(.option)
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if consumedDetectedContentMouseGesture {
+            return
+        }
+        if continueTerminalMouseGesture(button: .left, event: event) {
+            return
+        }
+
         guard let bridge = bridge, let sid = surfaceID,
               let state = bridge.surfaceState(for: sid),
               let anchor = selectionAnchor else { return }
@@ -1369,13 +1609,23 @@ final class CocxyCoreView: NSView {
         // Route the selection mutation through the bridge so it acquires
         // the per-surface terminal lock and cannot race with the background
         // PTY feed loop.
-        bridge.setSelection(
-            for: sid,
-            startRow: anchor.row,
-            startCol: anchor.col,
-            endRow: absoluteRow,
-            endCol: pos.col
-        )
+        if selectionIsRectangular {
+            bridge.setRectangularSelection(
+                for: sid,
+                startRow: anchor.row,
+                startCol: anchor.col,
+                endRow: absoluteRow,
+                endCol: pos.col
+            )
+        } else {
+            bridge.setSelection(
+                for: sid,
+                startRow: anchor.row,
+                startCol: anchor.col,
+                endRow: absoluteRow,
+                endCol: pos.col
+            )
+        }
 
         setNeedsTerminalDisplay()
     }
@@ -1383,35 +1633,76 @@ final class CocxyCoreView: NSView {
     override func mouseUp(with event: NSEvent) {
         viewModel?.recordMouseUp()
 
-        guard let bridge = bridge, let sid = surfaceID,
-              let state = bridge.surfaceState(for: sid) else { return }
+        if consumedDetectedContentMouseGesture {
+            consumedDetectedContentMouseGesture = false
+            return
+        }
 
-        if isDragging && cocxycore_terminal_selection_active(state.terminal) {
+        if endTerminalMouseGesture(button: .left, event: event) {
+            isDragging = false
+            selectionAnchor = nil
+            selectionIsRectangular = false
+            return
+        }
+
+        guard let bridge = bridge, let sid = surfaceID else {
+            isDragging = false
+            selectionAnchor = nil
+            selectionIsRectangular = false
+            return
+        }
+
+        let completedDrag = isDragging
+        let clickCount = viewModel?.lastClickCount ?? event.clickCount
+        let selection = bridge.selectionSnapshot(for: sid)
+        if completedDrag || clickCount >= 2, selection?.active == true {
             if viewModel?.autoCopyOnSelect == true {
-                if let text = bridge.readSelection(for: sid), !text.isEmpty {
+                if let text = selection?.text, !text.isEmpty {
                     clipboardService.write(text)
                 }
             }
         }
 
+        if !completedDrag,
+           selection?.active != true,
+           clickCount == 1,
+           !event.modifierFlags.contains(.shift) {
+            let location = convert(event.locationInWindow, from: nil)
+            _ = ideCursorController.handleClickToPosition(at: location)
+        }
+
         isDragging = false
         selectionAnchor = nil
+        selectionIsRectangular = false
     }
 
     override func rightMouseDown(with event: NSEvent) {
+        onFocusRequested?()
+        dismissDetectedContentHints()
+        if beginTerminalMouseGesture(button: .right, event: event) {
+            return
+        }
+
         guard let bridge = bridge,
               let sid = surfaceID,
-              let state = bridge.surfaceState(for: sid) else { return }
+              let state = bridge.surfaceState(for: sid) else {
+            super.rightMouseDown(with: event)
+            return
+        }
 
-        let nearText = smartCopyContextText(
+        let lineText = smartCopyLineText(
             for: event,
             bridge: bridge,
             surfaceID: sid,
             terminal: state.terminal
         )
+        let selectedText = bridge.readSelection(for: sid)?.trimmingCharacters(in: .newlines)
+        let copyText = selectedText.flatMap { $0.isEmpty ? nil : $0 } ?? lineText
 
         let menu = SmartCopyMenuBuilder.buildMenu(
-            nearText: nearText,
+            detectedContent: detectedContent(at: event),
+            copyText: copyText,
+            lineText: lineText,
             clipboardService: clipboardService,
             paste: { [weak bridge] in
                 guard let bridge else { return }
@@ -1453,58 +1744,151 @@ final class CocxyCoreView: NSView {
                     break
                 }
             },
+            activate: { [weak self] content in
+                self?.activateDetectedContent(content) ?? false
+            },
             localizer: localizer
         )
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
+    override func rightMouseDragged(with event: NSEvent) {
+        if continueTerminalMouseGesture(button: .right, event: event) {
+            return
+        }
+        super.rightMouseDragged(with: event)
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        if endTerminalMouseGesture(button: .right, event: event) {
+            return
+        }
+        super.rightMouseUp(with: event)
+    }
+
+    override func otherMouseDown(with event: NSEvent) {
+        onFocusRequested?()
+        guard let button = TerminalMouseButton(appKitButtonNumber: event.buttonNumber) else {
+            super.otherMouseDown(with: event)
+            return
+        }
+        if beginTerminalMouseGesture(button: button, event: event) {
+            return
+        }
+        super.otherMouseDown(with: event)
+    }
+
+    override func otherMouseDragged(with event: NSEvent) {
+        guard let button = TerminalMouseButton(appKitButtonNumber: event.buttonNumber) else {
+            super.otherMouseDragged(with: event)
+            return
+        }
+        if continueTerminalMouseGesture(button: button, event: event) {
+            return
+        }
+        super.otherMouseDragged(with: event)
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        guard let button = TerminalMouseButton(appKitButtonNumber: event.buttonNumber) else {
+            super.otherMouseUp(with: event)
+            return
+        }
+        if endTerminalMouseGesture(button: button, event: event) {
+            return
+        }
+        super.otherMouseUp(with: event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateDetectedContentHover(with: event)
+        guard terminalReportsCurrentUnbuttonedMotion(event) else {
+            terminalMouseMotionDeduplicator.reset()
+            super.mouseMoved(with: event)
+            return
+        }
+        reportTerminalMouse(action: .motion, button: nil, event: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        terminalMouseMotionDeduplicator.reset()
+        clearDetectedContentHover()
+        super.mouseExited(with: event)
+    }
+
     // MARK: - Scroll
 
     override func scrollWheel(with event: NSEvent) {
-        guard let bridge = bridge, let sid = surfaceID,
-              let state = bridge.surfaceState(for: sid) else {
+        dismissDetectedContentHints()
+        clearDetectedContentHover()
+        guard let bridge = bridge,
+              let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid) else {
             super.scrollWheel(with: event)
             return
         }
 
-        let mouseMode = cocxycore_terminal_mode_mouse(state.terminal)
-        if mouseMode > 0 && !shouldScrollLocallyWhileMouseTracking(event) {
-            // Terminal app is tracking mouse — forward scroll as mouse events
-            let delta = event.scrollingDeltaY * Self.scrollSpeedFactor
-            let button: UInt8 = delta > 0 ? 64 : 65 // scroll up / down
-            let count = max(1, Int(abs(delta)))
+        guard event.scrollingDeltaY != 0 else { return }
+        let destination = TerminalScrollRouter.destination(
+            localRange: snapshot.historyMaxVisibleStart,
+            prefersLocal: prefersLocalScrollInMouseTrackingMode?() == true,
+            mouseTrackingMode: snapshot.mouseTrackingMode,
+            isAltScreen: snapshot.isAltScreen,
+            alternateScrollMode: snapshot.alternateScrollMode,
+            modifiers: event.modifierFlags
+        )
+
+        switch destination {
+        case .terminalApplication:
+            let position = mousePosition(for: event, snapshot: snapshot)
+            let payload = TerminalMouseWireEncoder.wheelPayload(
+                button: event.scrollingDeltaY > 0 ? 64 : 65,
+                encodingRawValue: snapshot.mouseEncodingMode,
+                row: position.row,
+                column: position.column,
+                pixelX: position.pixelX,
+                pixelY: position.pixelY,
+                count: TerminalScrollWheelMetrics.forwardedEventCount(for: event)
+            )
+            _ = bridge.writeBytes(Array(payload), to: sid)
+            return
+        case .alternateScreenApplication:
+            followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+            let keyCode = TerminalAlternateScrollKey.keyCode(
+                forScrollingDeltaY: event.scrollingDeltaY
+            )
+            let count = TerminalScrollWheelMetrics.forwardedEventCount(for: event)
             for _ in 0..<count {
-                var buf = [UInt8](repeating: 0, count: 16)
-                let n = encodeMouseButton(
-                    button,
-                    terminal: state.terminal,
-                    mouseMode: mouseMode,
-                    event: event,
-                    buf: &buf
+                _ = bridge.sendKeyEvent(
+                    KeyEvent(
+                        characters: nil,
+                        keyCode: keyCode,
+                        modifiers: [],
+                        isKeyDown: true
+                    ),
+                    to: sid
                 )
-                if n > 0 {
-                    _ = bridge.writeBytes(Array(buf.prefix(n)), to: sid)
-                }
             }
             return
+        case .localViewport:
+            let deltaRows = TerminalScrollWheelMetrics.localDeltaRows(for: event)
+            guard deltaRows != 0 else { return }
+            bridge.scrollViewport(surfaceID: sid, deltaRows: deltaRows)
+            refreshCommandBlockOverlay()
+            refreshHistoryPill()
+        case .none:
+            return
         }
-
-        let scaledDelta = event.scrollingDeltaY * Self.scrollSpeedFactor
-        guard scaledDelta != 0 else { return }
-
-        let steps = max(1, Int(abs(scaledDelta.rounded(.towardZero))))
-        let signedSteps = scaledDelta > 0 ? steps : -steps
-        bridge.scrollViewport(surfaceID: sid, deltaRows: signedSteps)
-        refreshCommandBlockOverlay()
     }
 
-    private func shouldScrollLocallyWhileMouseTracking(_ event: NSEvent) -> Bool {
-        if prefersLocalScrollInMouseTrackingMode?() == true {
-            return true
-        }
-
-        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        return modifiers.contains(.option) || modifiers.contains(.shift)
+    private func performTerminalHostKeyEquivalent(with event: NSEvent) -> Bool {
+        guard let menu = NSApp.mainMenu,
+              MenuKeybindingsBinder.matches(
+                event,
+                actionIds: TerminalHostKeybindingRouting.actionIDs,
+                in: menu
+              ) else { return false }
+        return menu.performKeyEquivalent(with: event)
     }
 
     private func followLiveViewportBeforeUserInput(
@@ -1512,6 +1896,8 @@ final class CocxyCoreView: NSView {
         surfaceID: SurfaceID
     ) {
         bridge.scrollToLiveBottom(surfaceID: surfaceID)
+        refreshCommandBlockOverlay()
+        refreshHistoryPill()
     }
 
     // MARK: - Drag and Drop
@@ -1576,8 +1962,7 @@ final class CocxyCoreView: NSView {
         // terminal on the platform.
         let paths = FileDropPathFormatter.format(urls)
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
-        bridge.sendText(paths, to: sid)
-        return true
+        return bridge.sendText(paths, to: sid)
     }
 
     private func flashVaultDropFeedback(success: Bool) {
@@ -1620,47 +2005,132 @@ final class CocxyCoreView: NSView {
         )
     }
 
-    /// Encode a mouse button event for the active terminal mouse mode.
-    private func encodeMouseButton(
-        _ button: UInt8,
-        terminal: OpaquePointer,
-        mouseMode: UInt8,
-        event: NSEvent,
-        buf: inout [UInt8]
-    ) -> Int {
-        let pos = cellPosition(for: event, terminal: terminal)
-        guard mouseMode == 6 else {
-            let bytes: [UInt8] = [
-                0x1B,
-                0x5B,
-                0x4D,
-                UInt8(clamping: Int(button) + 32),
-                UInt8(clamping: Int(pos.col) + 33),
-                UInt8(clamping: Int(pos.row) + 33),
-            ]
-            let count = min(bytes.count, buf.count)
-            buf.replaceSubrange(0..<count, with: bytes[0..<count])
-            return count
-        }
+    private func mousePosition(
+        for event: NSEvent,
+        snapshot: TerminalViewportSnapshot
+    ) -> (row: UInt16, column: UInt16, pixelX: Int, pixelY: Int) {
+        let location = convert(event.locationInWindow, from: nil)
+        let scale = max(CGFloat(currentBackingScale()), 1)
+        let padding = contentPadding
+        let localX = max(0, location.x - padding.x)
+        let localY = max(0, location.y - padding.y)
+        let cellWidth = max(CGFloat(snapshot.cellWidth) / scale, 1)
+        let cellHeight = max(CGFloat(snapshot.cellHeight) / scale, 1)
+        let rawColumn = max(0, Int(localX / cellWidth))
+        let rawRow = max(0, Int(localY / cellHeight))
 
-        let seq = "\u{1B}[<\(button);\(pos.col + 1);\(pos.row + 1)M"
-        let bytes = Array(seq.utf8)
-        let count = min(bytes.count, buf.count)
-        buf.replaceSubrange(0..<count, with: bytes[0..<count])
-        return count
+        return (
+            row: UInt16(min(rawRow, max(0, Int(snapshot.visibleRowCount) - 1))),
+            column: UInt16(min(rawColumn, max(0, Int(snapshot.visibleColumnCount) - 1))),
+            pixelX: Int(localX * scale),
+            pixelY: Int(localY * scale)
+        )
     }
 
-    private func smartCopyContextText(
+    private func beginTerminalMouseGesture(
+        button: TerminalMouseButton,
+        event: NSEvent
+    ) -> Bool {
+        let captures = terminalCapturesCurrentMouseEvent(event)
+        terminalMouseCaptureByButton[button] = captures
+        guard captures else { return false }
+        reportTerminalMouse(action: .press, button: button, event: event)
+        return true
+    }
+
+    private func continueTerminalMouseGesture(
+        button: TerminalMouseButton,
+        event: NSEvent
+    ) -> Bool {
+        let captures = terminalMouseCaptureByButton[button]
+            ?? terminalCapturesCurrentMouseEvent(event)
+        guard captures else { return false }
+        reportTerminalMouse(action: .motion, button: button, event: event)
+        return true
+    }
+
+    private func endTerminalMouseGesture(
+        button: TerminalMouseButton,
+        event: NSEvent
+    ) -> Bool {
+        let captures = terminalMouseCaptureByButton.removeValue(forKey: button)
+            ?? terminalCapturesCurrentMouseEvent(event)
+        guard captures else { return false }
+        reportTerminalMouse(action: .release, button: button, event: event)
+        return true
+    }
+
+    private func terminalCapturesCurrentMouseEvent(_ event: NSEvent) -> Bool {
+        guard let bridge,
+              let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid) else {
+            return false
+        }
+        return TerminalMouseCapturePolicy.terminalCaptures(
+            trackingRawValue: snapshot.mouseTrackingMode,
+            modifiers: event.modifierFlags
+        )
+    }
+
+    private func terminalReportsCurrentUnbuttonedMotion(_ event: NSEvent) -> Bool {
+        guard let bridge,
+              let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid),
+              TerminalMouseCapturePolicy.terminalCaptures(
+                  trackingRawValue: snapshot.mouseTrackingMode,
+                  modifiers: event.modifierFlags
+              ) else {
+            return false
+        }
+        return TerminalMouseTracking
+            .normalized(rawValue: snapshot.mouseTrackingMode)
+            .reports(.motion, hasButton: false)
+    }
+
+    private func reportTerminalMouse(
+        action: TerminalMouseAction,
+        button: TerminalMouseButton?,
+        event: NSEvent
+    ) {
+        if action != .motion {
+            terminalMouseMotionDeduplicator.reset()
+        }
+        guard let bridge,
+              let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid) else {
+            return
+        }
+        let position = mousePosition(for: event, snapshot: snapshot)
+        guard let payload = TerminalMouseWireEncoder.buttonPayload(
+            action: action,
+            button: button,
+            trackingRawValue: snapshot.mouseTrackingMode,
+            encodingRawValue: snapshot.mouseEncodingMode,
+            row: position.row,
+            column: position.column,
+            pixelX: position.pixelX,
+            pixelY: position.pixelY,
+            modifiers: event.modifierFlags
+        ) else { return }
+        if action == .motion {
+            guard terminalMouseMotionDeduplicator.shouldReport(
+                row: position.row,
+                column: position.column,
+                button: button,
+                modifiers: event.modifierFlags,
+                trackingMode: snapshot.mouseTrackingMode,
+                encodingMode: snapshot.mouseEncodingMode
+            ) else { return }
+        }
+        _ = bridge.writeBytes(Array(payload), to: sid)
+    }
+
+    private func smartCopyLineText(
         for event: NSEvent,
         bridge: CocxyCoreBridge,
         surfaceID: SurfaceID,
         terminal: OpaquePointer
     ) -> String {
-        if let selectedText = bridge.readSelection(for: surfaceID),
-           !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return selectedText
-        }
-
         let pos = cellPosition(for: event, terminal: terminal)
         if let visibleLine = bridge.visibleLineText(for: surfaceID, visibleRow: pos.row),
            !visibleLine.isEmpty {
@@ -1671,7 +2141,179 @@ final class CocxyCoreView: NSView {
             return fallbackLine
         }
 
-        return clipboardService.read() ?? ""
+        return ""
+    }
+
+    private func detectedContent(
+        at event: NSEvent,
+        snapshot providedSnapshot: TerminalViewportSnapshot? = nil
+    ) -> TerminalDetectedContent? {
+        guard let bridge, let surfaceID else { return nil }
+        let snapshot = providedSnapshot ?? bridge.terminalViewportSnapshot(for: surfaceID)
+        guard let snapshot,
+              snapshot.visibleRowCount > 0,
+              snapshot.visibleColumnCount > 0 else {
+            return nil
+        }
+        let position = mousePosition(for: event, snapshot: snapshot)
+        let (absoluteRow, overflowed) = snapshot.visibleStartRow.addingReportingOverflow(
+            UInt32(position.row)
+        )
+        guard overflowed == false else { return nil }
+        return bridge.detectedContent(
+            atAbsoluteRow: absoluteRow,
+            column: position.column,
+            for: surfaceID
+        )
+    }
+
+    @discardableResult
+    private func activateDetectedContent(_ content: TerminalDetectedContent) -> Bool {
+        switch content.kind {
+        case .ipAddress, .gitHash, .email:
+            guard content.target.isEmpty == false else { return false }
+            clipboardService.write(content.target)
+            return true
+        case .hyperlink, .url, .filePath:
+            return onActivateDetectedContent?(content) ?? false
+        }
+    }
+
+    private func updateDetectedContentHover(with event: NSEvent) {
+        guard detectedContentHintSession == nil else { return }
+        guard let bridge,
+              let surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: surfaceID),
+              let content = detectedContent(at: event, snapshot: snapshot) else {
+            clearDetectedContentHover()
+            return
+        }
+
+        installDetectedContentOverlayIfNeeded()
+        hoveredDetectedContent = content
+        detectedContentOverlayView?.showUnderline(
+            for: content,
+            viewport: detectedContentViewport(for: snapshot)
+        )
+        updateDetectedContentCursor()
+    }
+
+    private func clearDetectedContentHover() {
+        guard hoveredDetectedContent != nil
+            || detectedContentOverlayView?.hoveredContent != nil else {
+            return
+        }
+        hoveredDetectedContent = nil
+        detectedContentOverlayView?.clearHover()
+        updateDetectedContentCursor()
+    }
+
+    @discardableResult
+    func showDetectedContentHints() -> Int {
+        guard let bridge,
+              let surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: surfaceID) else {
+            dismissDetectedContentHints()
+            return 0
+        }
+        clearComposition(forceEngineClear: true, discardInputContext: true)
+        clearDetectedContentHover()
+        let viewport = detectedContentViewport(for: snapshot)
+        let contents = bridge.visibleDetectedContents(for: surfaceID).filter {
+            TerminalDetectedContentOverlayView.underlineRects(
+                for: $0,
+                viewport: viewport
+            ).isEmpty == false
+        }
+        guard let session = TerminalDetectedContentHintSession(contents: contents) else {
+            dismissDetectedContentHints()
+            return 0
+        }
+        detectedContentHintSession = session
+        installDetectedContentOverlayIfNeeded()
+        detectedContentOverlayView?.showHints(
+            session.hints,
+            matching: session.typedPrefix,
+            viewport: viewport
+        )
+        return session.hints.count
+    }
+
+    private func dismissDetectedContentHints() {
+        guard detectedContentHintSession != nil
+            || detectedContentOverlayView?.hints.isEmpty == false else {
+            return
+        }
+        detectedContentHintSession = nil
+        detectedContentOverlayView?.clearHints()
+    }
+
+    private func handleDetectedContentHintKeyEvent(_ event: NSEvent) -> Bool {
+        guard var session = detectedContentHintSession else { return false }
+        let blockedModifiers: NSEvent.ModifierFlags = [.command, .control, .option]
+        let characters = event.modifierFlags.intersection(blockedModifiers).isEmpty
+            ? event.charactersIgnoringModifiers
+            : nil
+        switch session.consume(keyCode: event.keyCode, characters: characters) {
+        case .updated:
+            detectedContentHintSession = session
+            refreshDetectedContentHintOverlay()
+        case .cancelled:
+            dismissDetectedContentHints()
+        case .selected(let content):
+            dismissDetectedContentHints()
+            _ = activateDetectedContent(content)
+        }
+        return true
+    }
+
+    private func refreshDetectedContentHintOverlay() {
+        guard let session = detectedContentHintSession,
+              let bridge,
+              let surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: surfaceID) else {
+            return
+        }
+        let viewport = detectedContentViewport(for: snapshot)
+        let visibleContents = bridge.visibleDetectedContents(for: surfaceID).filter {
+            TerminalDetectedContentOverlayView.underlineRects(
+                for: $0,
+                viewport: viewport
+            ).isEmpty == false
+        }
+        guard visibleContents == session.hints.map(\.content) else {
+            dismissDetectedContentHints()
+            return
+        }
+        detectedContentOverlayView?.showHints(
+            session.hints,
+            matching: session.typedPrefix,
+            viewport: viewport
+        )
+    }
+
+    private func detectedContentViewport(
+        for snapshot: TerminalViewportSnapshot
+    ) -> TerminalDetectedContentViewport {
+        let scale = max(currentBackingScale(), 1)
+        return TerminalDetectedContentViewport(
+            visibleStartRow: snapshot.visibleStartRow,
+            rowCount: snapshot.visibleRowCount,
+            columnCount: snapshot.visibleColumnCount,
+            cellSize: CGSize(
+                width: CGFloat(snapshot.cellWidth) / scale,
+                height: CGFloat(snapshot.cellHeight) / scale
+            ),
+            origin: CGPoint(x: contentPadding.x, y: contentPadding.y)
+        )
+    }
+
+    private func updateDetectedContentCursor() {
+        if hoveredDetectedContent != nil {
+            NSCursor.pointingHand.set()
+        } else {
+            NSCursor.iBeam.set()
+        }
     }
 
     private func refreshIDECursorMetrics() {
@@ -1703,21 +2345,20 @@ final class CocxyCoreView: NSView {
     // MARK: - Static Helpers
 
     static func translateModifierFlags(_ flags: NSEvent.ModifierFlags) -> KeyModifiers {
-        var modifiers = KeyModifiers()
-        if flags.contains(.shift)   { modifiers.insert(.shift) }
-        if flags.contains(.control) { modifiers.insert(.control) }
-        if flags.contains(.option)  { modifiers.insert(.option) }
-        if flags.contains(.command) { modifiers.insert(.command) }
-        return modifiers
+        MacTerminalKeyEventTranslator.modifiers(from: flags)
     }
 
-    static func translateKeyEvent(_ event: NSEvent, isKeyDown: Bool) -> KeyEvent {
-        KeyEvent(
-            characters: event.characters,
-            keyCode: event.keyCode,
-            modifiers: translateModifierFlags(event.modifierFlags),
+    static func translateKeyEvent(
+        _ event: NSEvent,
+        characters: String? = nil,
+        isKeyDown: Bool,
+        isComposing: Bool = false
+    ) -> KeyEvent {
+        MacTerminalKeyEventTranslator.event(
+            from: event,
+            characters: characters,
             isKeyDown: isKeyDown,
-            isRepeat: event.isARepeat
+            isComposing: isComposing
         )
     }
 
@@ -1739,6 +2380,18 @@ final class CocxyCoreView: NSView {
     }
 
     // MARK: - Command Block Overlay
+
+    private func installDetectedContentOverlayIfNeeded() {
+        guard detectedContentOverlayView == nil else { return }
+        let overlay = TerminalDetectedContentOverlayView(frame: bounds)
+        overlay.autoresizingMask = [.width, .height]
+        if let commandBlockOverlayView {
+            addSubview(overlay, positioned: .below, relativeTo: commandBlockOverlayView)
+        } else {
+            addSubview(overlay)
+        }
+        detectedContentOverlayView = overlay
+    }
 
     private func installCommandBlockOverlayIfNeeded() {
         guard commandBlockOverlayView == nil else { return }
@@ -1764,41 +2417,143 @@ final class CocxyCoreView: NSView {
         commandBlockOverlayView = overlay
     }
 
+    private func installHistoryPillIfNeeded() {
+        guard historyPillView == nil else { return }
+        let pill = TerminalHistoryPillView(localizer: localizer)
+        pill.onJumpToBottom = { [weak self] in
+            self?.performLocalViewportScroll(.bottom)
+        }
+        addSubview(pill)
+        NSLayoutConstraint.activate([
+            pill.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            pill.centerXAnchor.constraint(equalTo: centerXAnchor),
+            pill.heightAnchor.constraint(equalToConstant: 28),
+            pill.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 12),
+            pill.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+        ])
+        historyPillView = pill
+        refreshHistoryPill()
+    }
+
+    private func refreshHistoryPill() {
+        guard let bridge, let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid) else {
+            historyPillView?.update(linesAbove: 0)
+            return
+        }
+        historyPillView?.update(linesAbove: snapshot.viewOffset)
+        let isMouseTrackingActive = snapshot.mouseTrackingMode > 0
+        if lastNotifiedMouseTrackingActive != isMouseTrackingActive {
+            lastNotifiedMouseTrackingActive = isMouseTrackingActive
+            onTerminalInteractionStateChanged?()
+        }
+    }
+
     func refreshCommandBlockOverlay() {
         guard let overlay = commandBlockOverlayView else { return }
         overlay.frame = bounds
 
-        guard let bridge, let sid = surfaceID,
-              let snapshot = bridge.terminalViewportSnapshot(for: sid),
-              !snapshot.isAltScreen else {
+        guard commandBlockConfiguration.enabled else {
             overlay.clear()
+            lastCommandBlockMarker = nil
+            return
+        }
+
+        guard let bridge, let sid = surfaceID,
+              let overlaySnapshot = bridge.commandBlockOverlaySnapshot(for: sid) else {
+            overlay.clear()
+            lastCommandBlockMarker = nil
+            return
+        }
+        let snapshot = overlaySnapshot.viewport
+
+        guard !snapshot.isAltScreen else {
+            overlay.clear()
+            lastCommandBlockMarker = nil
             return
         }
 
         let scale = currentBackingScale()
         let cellHeight = CGFloat(snapshot.cellHeight) / scale
-        let blocks = TerminalBlockRestoration.blocksForDisplay(
-            live: bridge.commandBlocks(for: sid, limit: 32),
-            restored: restoredCommandBlocksProvider?() ?? [],
-            limit: 32
+        let padding = CGPoint(x: contentPadding.x, y: contentPadding.y)
+        let shouldReloadData = commandBlockDataNeedsRefresh
+            || cachedCommandBlockSurfaceID != sid
+            || lastCommandBlockMarker != overlaySnapshot.marker
+
+        if shouldReloadData {
+            let liveBlocks = bridge.commandBlocks(
+                for: sid,
+                limit: 32,
+                includeOutput: false,
+                includeVisibleMapping: false
+            )
+            cachedLiveCommandBlockIDs = Set(liveBlocks.map(\.id))
+            cachedCommandBlocks = TerminalBlockRestoration.blocksForDisplay(
+                live: liveBlocks,
+                restored: restoredCommandBlocksProvider?() ?? [],
+                limit: 32
+            )
+            cachedCommandBlockSurfaceID = sid
+            commandBlockDataNeedsRefresh = false
+            lastCommandBlockMarker = overlaySnapshot.marker
+            commandBlockDataReloadCount += 1
+        }
+
+        let mappedBlocks = bridge.remapCommandBlocksForOverlay(
+            cachedCommandBlocks,
+            liveBlockIDs: cachedLiveCommandBlockIDs,
+            for: sid
         )
+
         overlay.update(
-            blocks: blocks,
+            blocks: mappedBlocks,
             visibleStartRow: snapshot.visibleStartRow,
             visibleRowCount: snapshot.visibleRowCount,
             cellHeight: cellHeight,
-            padding: CGPoint(x: contentPadding.x, y: contentPadding.y)
+            padding: padding,
+            showOnlyOnHover: commandBlockConfiguration.showOnlyOnHover
         )
     }
 
+    func invalidateCommandBlockOverlayData() {
+        commandBlockDataNeedsRefresh = true
+        refreshCommandBlockOverlay()
+    }
+
+    func updateCommandBlockOverlayConfiguration(_ configuration: CommandBlocksConfig) {
+        guard commandBlockConfiguration != configuration else { return }
+        let enabledChanged = commandBlockConfiguration.enabled != configuration.enabled
+        commandBlockConfiguration = configuration
+        if enabledChanged && configuration.enabled {
+            commandBlockDataNeedsRefresh = true
+        }
+        refreshCommandBlockOverlay()
+    }
+
+    func resetCommandBlockOverlayForSurfaceTeardown() {
+        commandBlockOverlayView?.resetForSurfaceTeardown()
+        cachedCommandBlocks.removeAll(keepingCapacity: false)
+        cachedCommandBlockSurfaceID = nil
+        commandBlockDataNeedsRefresh = true
+        lastCommandBlockMarker = nil
+    }
+
+    @discardableResult
+    func dismissVisibleCommandBlocks() -> Int {
+        commandBlockOverlayView?.dismissAllVisible() ?? 0
+    }
+
     private func copyBlockOutputFromOverlay(_ block: TerminalCommandBlock) {
-        let text = block.output.isEmpty ? block.command : block.output
+        let resolved = resolvedCommandBlockForOverlayAction(block)
+        let text = resolved.output.isEmpty ? resolved.command : resolved.output
         guard !text.isEmpty else { return }
         clipboardService.write(text)
     }
 
     private func copySelectedBlockOutputsFromOverlay(_ blocks: [TerminalCommandBlock]) {
-        let text = BlockSelectionCopyFormatter.outputText(for: blocks)
+        let text = BlockSelectionCopyFormatter.outputText(
+            for: blocks.map(resolvedCommandBlockForOverlayAction)
+        )
         guard !text.isEmpty else { return }
         clipboardService.write(text)
     }
@@ -1814,7 +2569,9 @@ final class CocxyCoreView: NSView {
     }
 
     private func shareBlockFromOverlay(_ block: TerminalCommandBlock, sourceView: NSView) {
-        let text = TerminalBlockShareFormatter.text(for: block)
+        let text = TerminalBlockShareFormatter.text(
+            for: resolvedCommandBlockForOverlayAction(block)
+        )
         guard !text.isEmpty else { return }
         NSSharingServicePicker(items: [text]).show(
             relativeTo: sourceView.bounds,
@@ -1824,13 +2581,63 @@ final class CocxyCoreView: NSView {
     }
 
     private func toggleBlockBookmarkFromOverlay(_ block: TerminalCommandBlock) {
-        onToggleCommandBlockBookmark?(block)
+        onToggleCommandBlockBookmark?(resolvedCommandBlockForOverlayAction(block))
+    }
+
+    private func resolvedCommandBlockForOverlayAction(
+        _ block: TerminalCommandBlock
+    ) -> TerminalCommandBlock {
+        guard let bridge,
+              let sid = surfaceID,
+              let live = bridge.commandBlock(for: sid, blockID: block.id) else {
+            return block
+        }
+        return live.mergingRestoredMetadata(from: block)
     }
 }
 
 // MARK: - Terminal Hosting View
 
 extension CocxyCoreView: TerminalHostingView {
+    var isTerminalMouseTrackingActive: Bool {
+        guard let bridge, let sid = surfaceID else { return false }
+        return (bridge.terminalViewportSnapshot(for: sid)?.mouseTrackingMode ?? 0) > 0
+    }
+
+    func performLocalViewportScroll(_ command: TerminalViewportScrollCommand) {
+        guard let bridge,
+              let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid) else { return }
+        let pageRows = max(1, Int(snapshot.visibleRowCount))
+        let deltaRows: Int
+        switch command {
+        case .pageUp:
+            deltaRows = pageRows
+        case .pageDown:
+            deltaRows = -pageRows
+        case .top:
+            deltaRows = Int(Int32.max)
+        case .bottom:
+            deltaRows = Int(Int32.min)
+        }
+        bridge.scrollViewport(surfaceID: sid, deltaRows: deltaRows)
+        refreshCommandBlockOverlay()
+        refreshHistoryPill()
+    }
+
+    @discardableResult
+    func performSemanticNavigation(_ action: TerminalSemanticNavigationAction) -> Bool {
+        dismissDetectedContentHints()
+        guard let bridge, let sid = surfaceID,
+              bridge.performSemanticNavigation(action, for: sid) != nil else {
+            return false
+        }
+        refreshCommandBlockOverlay()
+        refreshHistoryPill()
+        setNeedsTerminalDisplay()
+        return true
+    }
+
     var terminalViewModel: TerminalViewModel? { viewModel }
 
     /// Re-anchors the CVDisplayLink to the display currently hosting
@@ -1906,8 +2713,30 @@ extension CocxyCoreView: TerminalHostingView {
     }
 
     func handleShellPrompt(row: Int, column: Int) {
+        let position = TerminalGridPosition(
+            screenRow: UInt16(clamping: row),
+            absoluteRow: UInt32(clamping: row),
+            column: UInt16(clamping: column)
+        )
+        handleShellPrompt(position: position)
+    }
+
+    func handleShellPrompt(position: TerminalGridPosition) {
         refreshIDECursorMetrics()
-        ideCursorController.shellPromptDetected(row: row, column: column)
+        ideCursorController.shellPromptDetected(at: position)
+    }
+
+    func handleCommandInputStarted(at position: TerminalGridPosition) {
+        refreshIDECursorMetrics()
+        ideCursorController.commandInputStarted(at: position)
+    }
+
+    func handleCommandExecuted() {
+        ideCursorController.commandExecuted()
+    }
+
+    func updateCursorClickToMoveEnabled(_ enabled: Bool) {
+        ideCursorController.isEnabled = enabled
     }
 
     /// Reads the real cursor row/col from the backing CocxyCore terminal
@@ -1922,16 +2751,21 @@ extension CocxyCoreView: TerminalHostingView {
     /// the v0.1.52 "blinking line near the status bar" bug.
     func handleShellPromptAtCurrentCursor() {
         guard let bridge, let sid = surfaceID,
-              let position = bridge.cursorPosition(for: sid) else {
+              let snapshot = bridge.terminalCursorClickSnapshot(for: sid) else {
             return
         }
-        handleShellPrompt(row: position.row, column: position.col)
+        handleShellPrompt(position: TerminalGridPosition(
+            screenRow: snapshot.cursorScreenRow,
+            absoluteRow: snapshot.cursorAbsoluteRow,
+            column: snapshot.cursorColumn
+        ))
     }
 
     func updateInteractionMetrics() {
         lastNotifiedBackingSize = .zero
         syncSizeWithTerminal()
         refreshIDECursorMetrics()
+        refreshCommandBlockOverlay()
     }
 
     func configureSurfaceIfNeeded(
@@ -1991,11 +2825,20 @@ extension CocxyCoreView: @preconcurrency NSTextInputClient {
         let wasComposing = compositionState.hasMarkedText
         compositionState.commit()
 
+        if wasComposing, let bridge, let sid = surfaceID {
+            bridge.sendPreeditText("", cursorByteOffset: 0, to: sid)
+        }
+        if activeKeyTextInterpretation != nil {
+            activeKeyTextInterpretation?.text.append(contentsOf: text)
+            if wasComposing {
+                activeKeyTextInterpretation?.didMutateComposition = true
+            }
+            return
+        }
+
         guard let bridge = bridge, let sid = surfaceID else { return }
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
-        if wasComposing {
-            bridge.sendPreeditText("", to: sid)
-        }
+        clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
         bridge.sendText(text, to: sid)
     }
 
@@ -2006,15 +2849,26 @@ extension CocxyCoreView: @preconcurrency NSTextInputClient {
         else { return }
 
         compositionState.setMarkedText(text, selectedRange: selectedRange)
+        if activeKeyTextInterpretation != nil {
+            activeKeyTextInterpretation?.didMutateComposition = true
+        }
 
         guard let bridge = bridge, let sid = surfaceID else { return }
-        bridge.sendPreeditText(text, to: sid)
+        bridge.sendPreeditText(
+            text,
+            cursorByteOffset: compositionState.cursorUTF8ByteOffset,
+            to: sid
+        )
     }
 
     func unmarkText() {
         compositionState.unmarkText()
+        if activeKeyTextInterpretation != nil {
+            activeKeyTextInterpretation?.didMutateComposition = true
+        }
+        guard isDiscardingInputMethodComposition == false else { return }
         guard let bridge = bridge, let sid = surfaceID else { return }
-        bridge.sendPreeditText("", to: sid)
+        bridge.sendPreeditText("", cursorByteOffset: 0, to: sid)
     }
 
     func hasMarkedText() -> Bool {
@@ -2026,7 +2880,9 @@ extension CocxyCoreView: @preconcurrency NSTextInputClient {
     }
 
     func selectedRange() -> NSRange {
-        NSRange(location: NSNotFound, length: 0)
+        compositionState.hasMarkedText
+            ? compositionState.selectedRange
+            : NSRange(location: NSNotFound, length: 0)
     }
 
     func firstRect(forCharacterRange range: NSRange, actualRange: UnsafeMutablePointer<NSRange>?) -> NSRect {

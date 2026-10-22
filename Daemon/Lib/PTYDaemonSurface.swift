@@ -15,6 +15,7 @@ import Foundation
 /// close events back to the app. The implementation is split across
 /// extension files for readability:
 ///
+/// - `PTYDaemonSurface+Creation.swift` — validated surface construction.
 /// - `PTYDaemonSurface+Spawn.swift` — `spawnPTY` and env scoping helpers.
 /// - `PTYDaemonSurface+Frame.swift` — `makeFrame` and grid-cell packing.
 /// - `PTYDaemonSurface+Search.swift` — literal and regex scrollback search.
@@ -27,6 +28,7 @@ final class PTYDaemonSurface: @unchecked Sendable {
     static let maximumRows = 512
     static let maximumColumns = 2_048
     static let maximumCells = 131_072
+    static let semanticBlockCapacity: UInt32 = 1_024
 
     /// Deadline for the asynchronous teardown that `close` waits on.
     ///
@@ -56,8 +58,9 @@ final class PTYDaemonSurface: @unchecked Sendable {
     private var frameSubscribed = false
     private var closed = false
     private var cleanupSucceeded = true
+    private var processExitReported = false
 
-    private init(
+    init(
         surfaceID: String,
         terminal: OpaquePointer,
         pty: OpaquePointer,
@@ -80,53 +83,6 @@ final class PTYDaemonSurface: @unchecked Sendable {
         close(emitEvent: false)
     }
 
-    static func create(
-        payload: [String: String],
-        writer: PTYDaemonLineWriter
-    ) throws -> PTYDaemonSurface {
-        let dimensions = try validatedDimensions(payload: payload)
-        let rows = dimensions.rows
-        let columns = dimensions.columns
-        let shell = payload.nonEmpty("command")
-            ?? ProcessInfo.processInfo.environment["SHELL"]
-            ?? "/bin/zsh"
-        let workingDirectory = payload.nonEmpty("workingDirectory")
-            ?? FileManager.default.homeDirectoryForCurrentUser.path
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: workingDirectory, isDirectory: &isDirectory),
-              isDirectory.boolValue
-        else {
-            throw PTYDaemonSurfaceError.invalidPayload("surface_create requires an existing workingDirectory")
-        }
-
-        guard let terminal = cocxycore_terminal_create(rows, columns) else {
-            throw PTYDaemonSurfaceError.creationFailed("terminal allocation failed")
-        }
-
-        guard let pty = spawnPTY(rows: rows, columns: columns, shell: shell, workingDirectory: workingDirectory) else {
-            cocxycore_terminal_destroy(terminal)
-            throw PTYDaemonSurfaceError.creationFailed("PTY spawn failed")
-        }
-
-        guard cocxycore_terminal_attach_pty(terminal, pty) else {
-            cocxycore_pty_destroy(pty)
-            cocxycore_terminal_destroy(terminal)
-            throw PTYDaemonSurfaceError.creationFailed("PTY attach failed")
-        }
-
-        _ = cocxycore_terminal_enable_scrollback(terminal, 10_000)
-        _ = cocxycore_terminal_enable_process_tracking(terminal, cocxycore_pty_child_pid(pty), 256)
-
-        let surface = PTYDaemonSurface(
-            surfaceID: UUID().uuidString,
-            terminal: terminal,
-            pty: pty,
-            writer: writer
-        )
-        surface.registerCallbacks()
-        return surface
-    }
-
     func activate(onClosed: @escaping @Sendable (String) -> Void) {
         startReadSource(onClosed: onClosed)
     }
@@ -142,21 +98,31 @@ final class PTYDaemonSurface: @unchecked Sendable {
                 guard let baseAddress = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
                     return false
                 }
-                return cocxycore_terminal_write_attached_pty(
-                    terminal,
-                    baseAddress,
-                    bytes.count
-                ) > 0
+                return TerminalByteWriteCompleter.writeAll(byteCount: bytes.count) { offset, remaining in
+                    Int(cocxycore_terminal_write_attached_pty(
+                        terminal,
+                        baseAddress.advanced(by: offset),
+                        remaining
+                    ))
+                } == bytes.count
             }
         }
     }
-
     func resize(rows: UInt16, columns: UInt16) -> Bool {
         guard Self.dimensionsAreValid(rows: rows, columns: columns) else { return false }
         return terminalLock.withLock {
             let didResize = cocxycore_terminal_resize(terminal, rows, columns)
             cocxycore_pty_resize(pty, rows, columns)
+            drainTerminalResponses()
             return didResize
+        }
+    }
+    func applyFont(payload: [String: String]) throws -> Bool {
+        let configuration = try Self.validatedFontConfiguration(payload: payload)
+        return terminalLock.withLock {
+            let didApply = Self.applyFontConfiguration(configuration, to: terminal)
+            drainTerminalResponses()
+            return didApply
         }
     }
 
@@ -183,6 +149,71 @@ final class PTYDaemonSurface: @unchecked Sendable {
             && Int(rows) * Int(columns) <= maximumCells
     }
 
+    struct FontConfiguration {
+        let family: String
+        let size: Float
+        let dpiScale: Float
+        let ligatures: Bool
+    }
+
+    static func validatedFontConfiguration(
+        payload: [String: String]
+    ) throws -> FontConfiguration {
+        let family = payload.nonEmpty("fontFamily") ?? payload.nonEmpty("family") ?? "Menlo"
+        guard family.utf8.count <= 256 else {
+            throw PTYDaemonSurfaceError.invalidPayload("font family exceeds 256 UTF-8 bytes")
+        }
+
+        let size = try finiteFloat(
+            payload.nonEmpty("fontSize") ?? payload.nonEmpty("size"),
+            default: 14,
+            range: 4...256,
+            field: "font size"
+        )
+        let dpiScale = try finiteFloat(
+            payload.nonEmpty("dpiScale"),
+            default: 1,
+            range: 0.5...4,
+            field: "font dpiScale"
+        )
+        return FontConfiguration(
+            family: family,
+            size: size,
+            dpiScale: dpiScale,
+            ligatures: payload.bool("ligaturesEnabled") ?? true
+        )
+    }
+
+    private static func finiteFloat(
+        _ rawValue: String?,
+        default defaultValue: Float,
+        range: ClosedRange<Float>,
+        field: String
+    ) throws -> Float {
+        guard let rawValue else { return defaultValue }
+        guard let value = Float(rawValue), value.isFinite, range.contains(value) else {
+            throw PTYDaemonSurfaceError.invalidPayload(
+                "\(field) must be finite and within \(range.lowerBound)...\(range.upperBound)"
+            )
+        }
+        return value
+    }
+
+    static func applyFontConfiguration(
+        _ configuration: FontConfiguration,
+        to terminal: OpaquePointer
+    ) -> Bool {
+        configuration.family.withCString { family in
+            cocxycore_terminal_set_font(
+                terminal,
+                family,
+                configuration.size,
+                configuration.dpiScale,
+                configuration.ligatures
+            )
+        }
+    }
+
     func subscribeFrame() -> PTYDaemonSurfaceFrame? {
         markFrameSubscribed()
         return makeFrame()
@@ -193,46 +224,81 @@ final class PTYDaemonSurface: @unchecked Sendable {
     }
 
     func handleKey(payload: [String: String]) -> Bool {
-        guard payload.bool("isKeyDown") ?? true else { return true }
-
-        if let characters = payload.nonEmpty("characters"),
-           payload.uint("modifiers").map({ $0 & 8 == 0 }) ?? true {
-            return write(bytes: Data(characters.utf8))
-        }
-
+        guard payload.bool("isComposing") != true else { return false }
+        let isKeyDown = payload.bool("isKeyDown") ?? true
+        let eventType: UInt8 = isKeyDown
+            ? ((payload.bool("isRepeat") ?? false) ? 2 : 1)
+            : 3
         let keyCode = payload.uint16("keyCode") ?? 0
-        guard let key = Self.specialKey(forMacKeyCode: keyCode) else {
-            if let codepoint = payload.uint32("unshiftedCodepoint"), codepoint > 0 {
-                return writeEncodedCharacter(codepoint, modifiers: payload.uint("modifiers") ?? 0)
-            }
-            return false
+        let modifiers = payload.uint("modifiers") ?? 0
+        let characters = payload["characters"] ?? ""
+        let characterScalars = characters.unicodeScalars.map(\.value)
+        let shiftedCodepoint = payload.uint32("shiftedCodepoint") ?? 0
+        let baseLayoutCodepoint = payload.uint32("baseLayoutCodepoint") ?? 0
+        if let key = TerminalKeyMapping.specialKey(forMacKeyCode: keyCode) {
+            let associatedText = isKeyDown && TerminalKeyMapping.carriesAssociatedText(key)
+                ? Array(characterScalars.prefix(8))
+                : []
+            return writeEncodedKey(
+                key,
+                modifiers: modifiers,
+                eventType: eventType,
+                shiftedCodepoint: shiftedCodepoint,
+                baseLayoutCodepoint: baseLayoutCodepoint,
+                associatedText: associatedText
+            )
         }
-        return writeEncodedKey(key, modifiers: payload.uint("modifiers") ?? 0)
+
+        let primaryCodepoint = payload.uint32("unshiftedCodepoint")
+            .flatMap { $0 > 0 ? $0 : nil }
+            ?? characterScalars.first
+            ?? 0
+        guard primaryCodepoint > 0 else { return false }
+        return writeEncodedCharacter(
+            primaryCodepoint,
+            characters: characters,
+            modifiers: modifiers,
+            eventType: eventType,
+            shiftedCodepoint: shiftedCodepoint,
+            baseLayoutCodepoint: baseLayoutCodepoint,
+            associatedText: isKeyDown ? Array(characterScalars.prefix(8)) : []
+        )
     }
 
-    func setPreedit(_ text: String) {
-        terminalLock.withLock {
+    func setPreedit(_ text: String, cursorByteOffset: Int?) {
+        let frame: PTYDaemonSurfaceFrame? = terminalLock.withLock {
             if text.isEmpty {
                 cocxycore_terminal_preedit_clear(terminal)
             } else {
                 let row = cocxycore_terminal_cursor_row(terminal)
                 let column = cocxycore_terminal_cursor_col(terminal)
                 let bytes = Array(text.utf8)
+                let cursorBytes = UInt16(clamping: min(
+                    max(0, cursorByteOffset ?? bytes.count),
+                    bytes.count
+                ))
                 cocxycore_terminal_preedit_set(
                     terminal,
                     row,
                     column,
                     bytes,
                     bytes.count,
-                    UInt16(bytes.count)
+                    cursorBytes
                 )
             }
+            return shouldEmitFrames() ? makeFrameLocked() : nil
+        }
+        if let frame {
+            writer.write(
+                PTYDaemonEvent(event: .surfaceFrame, surfaceID: surfaceID, frame: frame)
+            )
         }
     }
 
     func notifyFocus(_ focused: Bool) {
         terminalLock.withLock {
             cocxycore_terminal_notify_focus(terminal, focused)
+            drainTerminalResponses()
         }
     }
 
@@ -254,6 +320,36 @@ final class PTYDaemonSurface: @unchecked Sendable {
         }
     }
 
+    func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction
+    ) -> (result: TerminalSemanticNavigationResult, frame: PTYDaemonSurfaceFrame?)? {
+        terminalLock.withLock {
+            guard let result = Self.performSemanticNavigation(action, terminal: terminal) else {
+                return nil
+            }
+            return (result, makeFrameLocked())
+        }
+    }
+
+    func semanticNavigationUnavailableReason() -> String {
+        terminalLock.withLock {
+            let blockCount = cocxycore_terminal_semantic_block_count(terminal)
+            let promptCount = cocxycore_terminal_semantic_block_count_by_type(
+                terminal,
+                UInt8(COCXYCORE_BLOCK_PROMPT.rawValue)
+            )
+            let retainedPrompts = Self.semanticPromptRegions(
+                terminal: terminal,
+                blockCount: blockCount
+            ).count
+            return "semantic navigation target unavailable " +
+                "(blocks=\(blockCount), prompts=\(promptCount), " +
+                "retainedPrompts=\(retainedPrompts), " +
+                "visibleStart=\(cocxycore_terminal_history_visible_start(terminal)), " +
+                "maximumVisibleStart=\(cocxycore_terminal_history_max_visible_start(terminal)))"
+        }
+    }
+
     func search(query: String, caseSensitive: Bool, useRegex: Bool, maxResults: Int) -> [PTYDaemonSearchResult] {
         guard query.isEmpty == false else { return [] }
         return terminalLock.withLock {
@@ -269,6 +365,162 @@ final class PTYDaemonSurface: @unchecked Sendable {
         // the shell PID, but its PTY master descriptor is meaningless and
         // potentially dangerous in the app process.
         PTYDaemonProcessRegistration(shellPID: shellPID, ptyMasterFD: nil)
+    }
+
+    private static func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction,
+        terminal: OpaquePointer
+    ) -> TerminalSemanticNavigationResult? {
+        let visibleStart = cocxycore_terminal_history_visible_start(terminal)
+        let maximumVisibleStart = cocxycore_terminal_history_max_visible_start(terminal)
+        let blockCount = cocxycore_terminal_semantic_block_count(terminal)
+        let promptRegions = semanticPromptRegions(
+            terminal: terminal,
+            blockCount: blockCount
+        )
+
+        switch action {
+        case .previousPrompt, .nextPrompt:
+            guard let target = TerminalSemanticNavigationResolver.promptRegion(
+                for: action,
+                visibleStartRow: visibleStart,
+                regions: promptRegions,
+                maximumSearchSteps: Int(blockCount),
+                findOlder: { offset in
+                    cocxycore_terminal_semantic_find_next(
+                        terminal,
+                        UInt8(COCXYCORE_BLOCK_PROMPT.rawValue),
+                        offset
+                    )
+                },
+                findNewer: { offset in
+                    cocxycore_terminal_semantic_find_prev(
+                        terminal,
+                        UInt8(COCXYCORE_BLOCK_PROMPT.rawValue),
+                        offset
+                    )
+                }
+            ) else { return nil }
+            let viewportStart = min(target.startRow, maximumVisibleStart)
+            guard cocxycore_terminal_history_set_visible_start(terminal, viewportStart) else {
+                return nil
+            }
+            cocxycore_terminal_selection_clear(terminal)
+            return TerminalSemanticNavigationResult(
+                action: action,
+                viewportStartRow: viewportStart
+            )
+
+        case .selectCommandOutput:
+            let outputRegions = commandOutputRegions(terminal: terminal)
+            guard let target = TerminalSemanticNavigationResolver.commandOutputRegion(
+                visibleStartRow: visibleStart,
+                regions: promptRegions + outputRegions
+            ), let blockID = target.blockID else { return nil }
+            let columns = cocxycore_terminal_cols(terminal)
+            guard columns > 0 else { return nil }
+            let viewportStart = min(target.startRow, maximumVisibleStart)
+            guard cocxycore_terminal_history_set_visible_start(terminal, viewportStart) else {
+                return nil
+            }
+            let endColumn = columns - 1
+            cocxycore_terminal_selection_set(
+                terminal,
+                target.startRow,
+                0,
+                target.endRow,
+                endColumn
+            )
+            return TerminalSemanticNavigationResult(
+                action: action,
+                viewportStartRow: viewportStart,
+                selection: TerminalSemanticSelection(
+                    blockID: blockID,
+                    startRow: target.startRow,
+                    startColumn: 0,
+                    endRow: target.endRow,
+                    endColumn: endColumn,
+                    text: blockOutput(from: terminal, blockID: blockID)
+                )
+            )
+        }
+    }
+
+    private static func semanticPromptRegions(
+        terminal: OpaquePointer,
+        blockCount: UInt32
+    ) -> [TerminalSemanticRegion] {
+        guard blockCount > 0 else { return [] }
+        var regions: [TerminalSemanticRegion] = []
+        regions.reserveCapacity(Int(blockCount))
+
+        for offset in 0..<blockCount {
+            var block = cocxycore_semantic_block()
+            guard cocxycore_terminal_semantic_get_block(terminal, offset, &block),
+                  block.block_type == UInt8(COCXYCORE_BLOCK_PROMPT.rawValue) else {
+                continue
+            }
+            var startRow: UInt32 = 0
+            var endRow: UInt32 = 0
+            guard cocxycore_block_visible_row(terminal, block.start_row, &startRow),
+                  cocxycore_block_visible_row(terminal, block.end_row, &endRow) else {
+                continue
+            }
+            regions.append(TerminalSemanticRegion(
+                offset: offset,
+                kind: .prompt,
+                startRow: startRow,
+                endRow: endRow
+            ))
+        }
+        return regions
+    }
+
+    private static func commandOutputRegions(
+        terminal: OpaquePointer
+    ) -> [TerminalSemanticRegion] {
+        guard let iterator = cocxycore_block_iterator_create(terminal) else { return [] }
+        defer { cocxycore_block_iterator_destroy(iterator) }
+        var regions: [TerminalSemanticRegion] = []
+
+        while cocxycore_block_iterator_next(iterator) {
+            let blockID = cocxycore_block_iterator_current_id(iterator)
+            var metadata = cocxycore_block_metadata()
+            guard blockID != 0,
+                  cocxycore_block_get_metadata(terminal, blockID, &metadata),
+                  let kind = TerminalSemanticBlockKind(rawValue: metadata.block_type),
+                  kind == .commandOutput || kind == .errorOutput else {
+                continue
+            }
+            var startRow: UInt32 = 0
+            var endRow: UInt32 = 0
+            guard cocxycore_block_visible_row(terminal, metadata.start_row, &startRow),
+                  cocxycore_block_visible_row(terminal, metadata.end_row, &endRow) else {
+                continue
+            }
+            regions.append(TerminalSemanticRegion(
+                blockID: blockID,
+                kind: kind,
+                startRow: startRow,
+                endRow: endRow
+            ))
+        }
+        return regions
+    }
+
+    private static func blockOutput(from terminal: OpaquePointer, blockID: UInt64) -> String {
+        let required = cocxycore_block_get_output(terminal, blockID, nil, 0, true)
+        guard required > 0 else { return "" }
+        var buffer = [CChar](repeating: 0, count: required)
+        let copied = cocxycore_block_get_output(
+            terminal,
+            blockID,
+            &buffer,
+            buffer.count,
+            true
+        )
+        guard copied > 0 else { return "" }
+        return String(decoding: buffer.prefix(copied).map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
     @discardableResult
@@ -311,6 +563,16 @@ final class PTYDaemonSurface: @unchecked Sendable {
                 osc: osc
             )
         )
+    }
+
+    func emitProcessExitIfNeeded(exitCode: Int?) {
+        let shouldEmit = stateLock.withLock {
+            guard processExitReported == false else { return false }
+            processExitReported = true
+            return true
+        }
+        guard shouldEmit else { return }
+        emitOSC(.init(kind: .processExited, exitCode: exitCode))
     }
 
     private func startReadSource(onClosed: @escaping @Sendable (String) -> Void) {
@@ -372,10 +634,7 @@ final class PTYDaemonSurface: @unchecked Sendable {
     }
 
     private func pollChildExit() {
-        guard isClosed() == false else { return }
-        var waitResult = cocxycore_pty_wait_result()
-        guard cocxycore_pty_wait_check(pty, &waitResult),
-              cocxycore_pty_is_alive(pty) == false else { return }
+        guard isClosed() == false, pollPTYExit() else { return }
 
         // A final readable notification is not guaranteed after the child
         // exits. Drain one pending chunk on each timer tick; the first empty
@@ -388,7 +647,7 @@ final class PTYDaemonSurface: @unchecked Sendable {
         var buffer = [UInt8](repeating: 0, count: Self.readBufferSize)
         let bytesRead = cocxycore_pty_read(pty, &buffer, buffer.count)
         guard bytesRead > 0 else {
-            if !cocxycore_pty_is_alive(pty) {
+            if pollPTYExit() {
                 close(waitForCleanup: false)
             }
             return
@@ -397,7 +656,6 @@ final class PTYDaemonSurface: @unchecked Sendable {
         let frame: PTYDaemonSurfaceFrame? = terminalLock.withLock {
             cocxycore_terminal_feed(terminal, buffer, bytesRead)
             drainTerminalResponses()
-            cocxycore_terminal_poll_processes(terminal)
             return shouldEmitFrames() ? makeFrameLocked() : nil
         }
 
@@ -411,6 +669,36 @@ final class PTYDaemonSurface: @unchecked Sendable {
         if let frame {
             writer.write(PTYDaemonEvent(event: .surfaceFrame, surfaceID: surfaceID, frame: frame))
         }
+    }
+
+    private func pollTrackedProcesses() {
+        terminalLock.withLock {
+            cocxycore_terminal_poll_processes(terminal)
+        }
+    }
+
+    private func pollPTYExit() -> Bool {
+        var waitResult = cocxycore_pty_wait_result()
+        let didExit = cocxycore_pty_wait_check(pty, &waitResult)
+            && cocxycore_pty_is_alive(pty) == false
+        return Self.completePTYExitPoll(
+            didExit: didExit,
+            exitCode: waitResult.status == 1 ? Int(waitResult.exit_code) : nil,
+            emitProcessExit: { [self] in emitProcessExitIfNeeded(exitCode: $0) },
+            pollTrackedProcesses: { [self] in pollTrackedProcesses() }
+        )
+    }
+
+    static func completePTYExitPoll(
+        didExit: Bool,
+        exitCode: Int?,
+        emitProcessExit: (Int?) -> Void,
+        pollTrackedProcesses: () -> Void
+    ) -> Bool {
+        defer { pollTrackedProcesses() }
+        guard didExit else { return false }
+        emitProcessExit(exitCode)
+        return true
     }
 
     private func drainTerminalResponses() {

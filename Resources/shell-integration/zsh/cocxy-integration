@@ -173,7 +173,7 @@ _cocxy_precmd() {
     # the prompt without modifying $PS1. Modifying $PS1 would interact
     # with the user's prompt framework (Prezto, P10K, Oh-My-Zsh, YADR…)
     # and break their renderers — see Design notes at the top.
-    _cocxy_print $'\e]133;A\a'
+    _cocxy_print $'\e]133;A;cl=m\a'
 }
 
 _cocxy_preexec() {

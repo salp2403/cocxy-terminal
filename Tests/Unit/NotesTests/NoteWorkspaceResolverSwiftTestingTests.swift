@@ -5,9 +5,9 @@ import Testing
 @testable import CocxyTerminal
 
 /// Pin the `NoteWorkspaceResolving` contract: the production resolver
-/// reuses the Aurora git-ancestor lookup, falls back to the directory
-/// itself when no ancestor is reachable (so non-git directories still
-/// get notes), and exposes a stable display name. The protocol stays
+/// reuses the filesystem git-ancestor lookup, falls back to the canonical
+/// directory itself when no ancestor is reachable (so non-git directories
+/// still get notes), and exposes a stable display name. The protocol stays
 /// `Sendable` so callers from any actor can ask for a workspace without
 /// trampolining through a queue.
 @Suite("NoteWorkspaceResolver")
@@ -21,7 +21,7 @@ struct NoteWorkspaceResolverSwiftTestingTests {
         func workspaceRoot(for directory: URL) -> URL? { canned }
     }
 
-    @Test("resolver delegates to the supplied Aurora resolver so Notes inherits Aurora's grouping")
+    @Test("resolver delegates to the supplied filesystem root resolver")
     func delegatesToAuroraResolver() {
         let gitAncestor = URL(fileURLWithPath: "/Users/sample/projects/foo")
         let resolver = DefaultNoteWorkspaceResolver(
@@ -48,10 +48,11 @@ struct NoteWorkspaceResolverSwiftTestingTests {
 
         let resolved = resolver.resolveWorkspace(for: directory)
 
-        #expect(resolved?.rootURL == directory.standardizedFileURL)
+        let canonicalDirectory = ProjectPathCanonicalizer.canonicalURL(directory)
+        #expect(resolved?.rootURL == canonicalDirectory)
         #expect(
             resolved?.workspaceID
-                == NoteWorkspaceID(workspaceRoot: directory.standardizedFileURL)
+                == NoteWorkspaceID(workspaceRoot: canonicalDirectory)
         )
     }
 

@@ -65,6 +65,23 @@ struct CodeReviewGitWorkflowSwiftTestingTests {
         #expect(parsed.behind == 1)
     }
 
+    @Test("Git summaries localize structured status instead of rendering English tokens")
+    func structuredGitSummaryLocalization() throws {
+        let bundle = try #require(codeReviewLocalizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let arabic = AppLocalizer(languagePreference: .arabic, bundle: bundle)
+        let changed = CodeReviewGitSummary(
+            branch: "main",
+            changedCount: 3,
+            ahead: 2,
+            behind: 1
+        )
+        let clean = CodeReviewGitSummary(branch: "main", changedCount: 0, ahead: 0, behind: 0)
+
+        #expect(changed.localized(using: spanish) == "main · 3 modificados · 2 por delante · 1 por detrás")
+        #expect(clean.localized(using: arabic) == "main · نظيف")
+    }
+
     @Test("sanitizedBranchName rejects unsafe branch names")
     func sanitizedBranchNameRejectsUnsafeNames() throws {
         #expect(throws: HunkActionError.self) {
@@ -423,6 +440,11 @@ private func runWorkflowGit(_ arguments: [String], in directory: URL) throws -> 
         throw HunkActionError.commandFailed(result.stderr)
     }
     return result.stdout
+}
+
+private func codeReviewLocalizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }
 
 @MainActor

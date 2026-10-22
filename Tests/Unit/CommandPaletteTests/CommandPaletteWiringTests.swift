@@ -19,6 +19,8 @@ final class CommandPaletteWiringTests: XCTestCase {
             "window.commandPalette",
             "tabs.new",
             "tabs.close",
+            "tabs.rename",
+            "workspace.rename",
             "tabs.configSave",
             "tabs.configOpen",
             "onboarding.show",
@@ -45,6 +47,10 @@ final class CommandPaletteWiringTests: XCTestCase {
             "navigation.splitDown",
             "search.toggle",
             "terminal.richInput",
+            "terminal.previousPrompt",
+            "terminal.nextPrompt",
+            "terminal.selectCommandOutput",
+            "terminal.showDetectedContentHints",
             "editor.zoomIn",
             "editor.zoomOut",
             "editor.resetZoom",
@@ -81,8 +87,12 @@ final class CommandPaletteWiringTests: XCTestCase {
             "theme.cycle",
             "sidebar.transparency",
             "navigation.quickswitch",
+            "navigation.jumpProject",
             "navigation.quickterminal",
             "window.pictureInPicture",
+            "taskRun.fanOut",
+            "taskRun.compare",
+            "taskQueue.manage",
         ]
 
         XCTAssertTrue(
@@ -94,6 +104,31 @@ final class CommandPaletteWiringTests: XCTestCase {
             .config,
             "The Preferences command must be grouped with settings/configuration actions, not navigation."
         )
+        XCTAssertEqual(actionsByID["tabs.rename"]?.name, "Rename Session")
+        XCTAssertEqual(actionsByID["workspace.rename"]?.name, "Rename Workspace")
+        XCTAssertEqual(
+            actionsByID["terminal.showDetectedContentHints"]?.shortcut,
+            KeybindingActionCatalog.terminalShowDetectedContentHints.defaultShortcut.prettyLabel
+        )
+        XCTAssertEqual(
+            actionsByID["terminal.previousPrompt"]?.shortcut,
+            KeybindingActionCatalog.terminalPreviousPrompt.defaultShortcut.prettyLabel
+        )
+        XCTAssertEqual(
+            actionsByID["terminal.nextPrompt"]?.shortcut,
+            KeybindingActionCatalog.terminalNextPrompt.defaultShortcut.prettyLabel
+        )
+        XCTAssertEqual(
+            actionsByID["terminal.selectCommandOutput"]?.shortcut,
+            KeybindingActionCatalog.terminalSelectCommandOutput.defaultShortcut.prettyLabel
+        )
+        let auroraActionIDs = Set(controller.buildAuroraPaletteActions().map(\.id))
+        XCTAssertTrue(auroraActionIDs.contains("tabs.rename"))
+        XCTAssertTrue(auroraActionIDs.contains("workspace.rename"))
+        XCTAssertTrue(auroraActionIDs.contains("navigation.jumpProject"))
+        XCTAssertTrue(auroraActionIDs.contains("taskRun.fanOut"))
+        XCTAssertTrue(auroraActionIDs.contains("taskRun.compare"))
+        XCTAssertTrue(auroraActionIDs.contains("taskQueue.manage"))
         XCTAssertEqual(actionsByID["theme.cycle"]?.name, "Toggle Light/Dark Theme")
         XCTAssertEqual(
             actionsByID["theme.cycle"]?.localized(
@@ -118,6 +153,51 @@ final class CommandPaletteWiringTests: XCTestCase {
         XCTAssertTrue(
             cellsResults.contains("cells.createSSH"),
             "The runtime command palette must expose an SSH Cells creation action when searching for cells."
+        )
+    }
+
+    func testDetectedContentHintShortcutHotReloadsInTheRuntimePalette() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let engine = controller.createWiredCommandPaletteEngine()
+        let defaults = KeybindingsConfig.defaults
+        let customized = KeybindingsConfig(
+            newTab: defaults.newTab,
+            closeTab: defaults.closeTab,
+            nextTab: defaults.nextTab,
+            prevTab: defaults.prevTab,
+            splitVertical: defaults.splitVertical,
+            splitHorizontal: defaults.splitHorizontal,
+            gotoAttention: defaults.gotoAttention,
+            toggleQuickTerminal: defaults.toggleQuickTerminal,
+            customOverrides: [
+                KeybindingActionCatalog.terminalShowDetectedContentHints.id: "cmd+alt+h",
+                KeybindingActionCatalog.terminalPreviousPrompt.id: "cmd+alt+up",
+                KeybindingActionCatalog.terminalNextPrompt.id: "cmd+alt+down",
+                KeybindingActionCatalog.terminalSelectCommandOutput.id: "cmd+alt+o",
+            ]
+        )
+
+        engine.rebuildBuiltInShortcuts(using: customized)
+
+        XCTAssertEqual(
+            engine.allActions.first(where: {
+                $0.id == "terminal.showDetectedContentHints"
+            })?.shortcut,
+            KeybindingShortcut.parse("cmd+alt+h")?.prettyLabel
+        )
+        XCTAssertEqual(
+            engine.allActions.first(where: { $0.id == "terminal.previousPrompt" })?.shortcut,
+            KeybindingShortcut.parse("cmd+alt+up")?.prettyLabel
+        )
+        XCTAssertEqual(
+            engine.allActions.first(where: { $0.id == "terminal.nextPrompt" })?.shortcut,
+            KeybindingShortcut.parse("cmd+alt+down")?.prettyLabel
+        )
+        XCTAssertEqual(
+            engine.allActions.first(where: {
+                $0.id == "terminal.selectCommandOutput"
+            })?.shortcut,
+            KeybindingShortcut.parse("cmd+alt+o")?.prettyLabel
         )
     }
 

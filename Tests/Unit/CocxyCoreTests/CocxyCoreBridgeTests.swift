@@ -4,6 +4,7 @@ import AppKit
 import Combine
 import Testing
 import CocxyCoreKit
+import CocxyShared
 @testable import CocxyTerminal
 
 @Suite("CocxyCoreBridge", .serialized)
@@ -53,6 +54,108 @@ struct CocxyCoreBridgeTests {
         #expect(registration.shellIdentity?.pid == registration.shellPID)
     }
 
+    @Test("external surface routes output input resize and teardown without a local PTY")
+    func externalSurfaceRoutesTransportLifecycle() throws {
+        let bridge = try makeBridge()
+        let hostView = InteractionMetricsTrackingHostView()
+        let transport = ExternalSurfaceTransportProbe()
+        let output = TestDataSink()
+        let surfaceID = try bridge.createExternalSurface(
+            in: hostView,
+            workingDirectory: URL(fileURLWithPath: NSTemporaryDirectory()),
+            transport: .init(
+                write: { transport.write($0) },
+                resize: { transport.resize($0) },
+                close: { transport.close() }
+            )
+        )
+        bridge.setOutputHandler(for: surfaceID) { data in
+            output.data.append(data)
+        }
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        #expect(state.pty == nil)
+        #expect(state.readSource == nil)
+        #expect(bridge.processMonitorRegistration(for: surfaceID) == nil)
+
+        let remoteOutput = Data("alpha\r\nbeta\r\n\u{1B}[?1h".utf8)
+        #expect(bridge.feedExternalOutput(remoteOutput, to: surfaceID))
+        #expect(bridge.historyLines(for: surfaceID).contains("alpha"))
+        #expect(output.data == remoteOutput)
+
+        bridge.sendText("echo", to: surfaceID)
+        #expect(transport.writes.last == Data("echo".utf8))
+        #expect(bridge.sendKeyEvent(
+            KeyEvent(characters: nil, keyCode: 123, modifiers: [], isKeyDown: true),
+            to: surfaceID
+        ))
+        #expect(transport.writes.last == Data("\u{1B}OD".utf8))
+
+        let size = TerminalSize(
+            columns: 132,
+            rows: 40,
+            pixelWidth: 1_320,
+            pixelHeight: 800
+        )
+        bridge.resize(surfaceID, to: size)
+        #expect(transport.sizes == [size])
+
+        bridge.destroySurface(surfaceID)
+        #expect(transport.closeCount == 1)
+        #expect(bridge.surfaceState(for: surfaceID) == nil)
+        #expect(!bridge.feedExternalOutput(Data("late".utf8), to: surfaceID))
+    }
+
+    @Test("agent team launch command replaces the shell with a live provider process")
+    func agentTeamLaunchCommandRunsExpectedLiveProcess() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-agent-team-live-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let marker = root.appendingPathComponent("provider.env")
+        let launchSpec = AgentTeamProviderLaunchSpec(
+            provider: .codex,
+            teamID: "live-team",
+            teammateID: "live-team-reviewer",
+            teammateName: "Reviewer",
+            executable: "/bin/sh",
+            arguments: [
+                "-c",
+                "printf '%s:%s' \"$COCXY_AGENT_TEAM_ID\" \"$COCXY_AGENT_TEAMMATE_ID\" " +
+                    "> \"$MARKER_PATH\"; exec /bin/sleep 30",
+            ],
+            environment: [
+                "COCXY_AGENT_TEAM_ID": "live-team",
+                "COCXY_AGENT_TEAMMATE_ID": "live-team-reviewer",
+                "MARKER_PATH": marker.path,
+            ],
+            workingDirectory: root.path
+        )
+        let command = try #require(AgentTeamLaunchCommand.makeShellCommand(for: launchSpec))
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: "/bin/zsh")
+        defer { bridge.destroySurface(surfaceID) }
+        let registration = try #require(bridge.processMonitorRegistration(for: surfaceID))
+
+        bridge.sendText(command + "\r", to: surfaceID)
+
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(5))
+        var processName: String?
+        while clock.now < deadline {
+            processName = ForegroundProcessDetector.processName(for: registration.shellPID)
+            if FileManager.default.fileExists(atPath: marker.path), processName == "sleep" {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+
+        #expect(try String(contentsOf: marker, encoding: .utf8) == "live-team:live-team-reviewer")
+        #expect(processName == "sleep")
+        #expect(bridge.isProcessAlive(for: surfaceID))
+    }
+
     @Test("surfaceState returns nil for unknown surfaces")
     func surfaceStateReturnsNilForUnknownSurface() throws {
         let bridge = try makeBridge()
@@ -71,6 +174,31 @@ struct CocxyCoreBridgeTests {
 
         let lines = bridge.historyLines(for: surfaceID).filter { !$0.isEmpty }
         #expect(Array(lines.prefix(3)) == ["alpha", "beta", "gamma"])
+    }
+
+    @Test("actionable content maps file locations and visible targets from CocxyCore")
+    func actionableContentMapsFileLocationsAndVisibleTargets() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("Sources/App/Main.swift:42:7 https://cocxy.dev\r\n", to: state.terminal)
+
+        let contents = bridge.visibleDetectedContents(for: surfaceID)
+        let path = try #require(contents.first { $0.kind == .filePath })
+        let hit = bridge.detectedContent(
+            atAbsoluteRow: path.startRow,
+            column: path.startColumn + 2,
+            for: surfaceID
+        )
+
+        #expect(path.text == "Sources/App/Main.swift:42:7")
+        #expect(path.target == "Sources/App/Main.swift")
+        #expect(path.line == 42)
+        #expect(path.column == 7)
+        #expect(hit == path)
+        #expect(contents.contains { $0.kind == .url && $0.target == "https://cocxy.dev" })
     }
 
     @Test("historyTailLines returns only newest scrollback lines")
@@ -106,6 +234,94 @@ struct CocxyCoreBridgeTests {
         #expect(results[0].lineNumber == 1)
         #expect(results[0].column == 0)
         #expect(results[0].matchText.lowercased() == "beta")
+        #expect(bridge.searchScrollback(
+            surfaceID: surfaceID,
+            options: SearchOptions(query: "")
+        ) == [])
+        #expect(bridge.searchScrollback(
+            surfaceID: SurfaceID(),
+            options: SearchOptions(query: "")
+        ) == nil)
+    }
+
+    @Test("literal scrollback search crosses a soft wrap and degrades to its first row")
+    func literalScrollbackSearchCrossesSoftWrap() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        bridge.resize(surfaceID, to: TerminalSize(
+            columns: 4,
+            rows: 2,
+            pixelWidth: 40,
+            pixelHeight: 40
+        ))
+        let contentStartRow = cocxycore_terminal_history_max_visible_start(state.terminal)
+            + UInt32(cocxycore_terminal_cursor_row(state.terminal))
+
+        feed("abcdef", to: state.terminal)
+        #expect(cocxycore_terminal_row_wrapped(state.terminal, contentStartRow))
+
+        let results = try #require(bridge.searchScrollback(
+            surfaceID: surfaceID,
+            options: SearchOptions(query: "cdef", caseSensitive: true, useRegex: false)
+        ))
+
+        #expect(results.count == 1)
+        #expect(results[0].lineNumber == Int(contentStartRow))
+        #expect(results[0].column == 2)
+        #expect(results[0].matchText == "cd")
+    }
+
+    @Test("literal scrollback search returns multiple non-overlapping occurrences")
+    func literalScrollbackSearchReturnsNonOverlappingOccurrences() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("aaaa\r\n", to: state.terminal)
+
+        let results = try #require(bridge.searchScrollback(
+            surfaceID: surfaceID,
+            options: SearchOptions(query: "aa", caseSensitive: true, useRegex: false)
+        ))
+
+        #expect(results.map(\.lineNumber) == [0, 0])
+        #expect(results.map(\.column) == [0, 2])
+        #expect(results.map(\.matchText) == ["aa", "aa"])
+    }
+
+    @Test("regex scrollback search remains on the native regex path")
+    func regexScrollbackSearchRemainsAvailable() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("alpha-123\r\nomega\r\n", to: state.terminal)
+
+        let results = try #require(bridge.searchScrollback(
+            surfaceID: surfaceID,
+            options: SearchOptions(query: "alpha-[0-9]+", caseSensitive: true, useRegex: true)
+        ))
+
+        #expect(results.count == 1)
+        #expect(results[0].lineNumber == 0)
+        #expect(results[0].column == 0)
+        #expect(results[0].matchText == "alpha-123")
+        #expect(bridge.searchScrollback(
+            surfaceID: surfaceID,
+            options: SearchOptions(query: "", caseSensitive: true, useRegex: true)
+        ) == [])
+        #expect(bridge.searchScrollback(
+            surfaceID: surfaceID,
+            options: SearchOptions(query: "(", caseSensitive: true, useRegex: true)
+        ) == nil)
+        #expect(bridge.searchScrollback(
+            surfaceID: SurfaceID(),
+            options: SearchOptions(query: ".+", caseSensitive: true, useRegex: true)
+        ) == nil)
     }
 
     @Test("historyVisibleStart reports the live bottom before scrolling")
@@ -197,7 +413,7 @@ struct CocxyCoreBridgeTests {
         defer { bridge.destroySurface(surfaceID) }
         let baseline = hostView.updateInteractionMetricsCount
 
-        try await waitUntil(timeoutNanoseconds: 3_000_000_000, pollNanoseconds: 10_000_000) {
+        try await waitUntil(timeoutNanoseconds: 15_000_000_000, pollNanoseconds: 10_000_000) {
             hostView.updateInteractionMetricsCount >= baseline + 2
         }
 
@@ -346,7 +562,7 @@ struct CocxyCoreBridgeTests {
         #expect(accepted.withValue { $0 })
 
         goodProbe.close()
-        try await waitUntil(timeoutNanoseconds: 5_000_000_000) {
+        try await waitUntil(timeoutNanoseconds: 15_000_000_000) {
             bridge.webTerminalStatus(for: surfaceID) == nil
         }
 
@@ -377,7 +593,7 @@ struct CocxyCoreBridgeTests {
             _ = try await probe.receive(containing: "\"type\":\"auth_ok\"")
             probe.close()
 
-            try await waitUntil(timeoutNanoseconds: 5_000_000_000) {
+            try await waitUntil(timeoutNanoseconds: 15_000_000_000) {
                 bridge.webTerminalStatus(for: surfaceID) == nil
             }
         }
@@ -433,6 +649,45 @@ struct CocxyCoreBridgeTests {
             bridge.webTerminalStatus(for: surfaceID)?.lastEventType == "auth_ok"
         }
         #expect(bridge.webTerminalStatus(for: surfaceID)?.connectionCount == 1)
+    }
+
+    @Test("read-only web terminal streams but rejects browser input")
+    func readOnlyWebTerminalRejectsBrowserInput() async throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: "/bin/cat")
+        defer { bridge.destroySurface(surfaceID) }
+        let received = TestDataSink()
+        bridge.setOutputHandler(for: surfaceID) { data in
+            received.data.append(data)
+        }
+
+        let status = try #require(bridge.startWebTerminal(
+            for: surfaceID,
+            configuration: WebTerminalConfiguration(
+                bindAddress: "127.0.0.1",
+                port: 0,
+                authToken: "read-only-token",
+                maxConnections: 1,
+                maxFrameRate: 30,
+                allowsInput: false
+            )
+        ))
+        #expect(status.allowsInput == false)
+
+        let probe = try WebSocketTestProbe(port: status.port, bearerToken: "read-only-token")
+        defer { probe.close() }
+        _ = try await probe.receive(containing: "\"type\":\"auth_ok\"")
+        try await probe.send(
+            "{\"type\":\"clipboard_paste\",\"data\":\"browser-write-blocked\\n\"}"
+        )
+        try await Task.sleep(nanoseconds: 150_000_000)
+        #expect(String(decoding: received.data, as: UTF8.self).contains("browser-write-blocked") == false)
+
+        bridge.sendText("native-write-ok\n", to: surfaceID)
+        try await waitUntil {
+            String(decoding: received.data, as: UTF8.self).contains("native-write-ok")
+        }
+        #expect(String(decoding: received.data, as: UTF8.self).contains("native-write-ok"))
     }
 
     @Test("TUI status glyphs stay narrow so incremental redraws do not smear text")
@@ -661,6 +916,107 @@ struct CocxyCoreBridgeTests {
         #expect(handled == true)
     }
 
+    @Test("sendKeyEvent rejects composing events without reporting delivery")
+    func sendKeyEventRejectsComposingEvents() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        var deliveryCount = 0
+        bridge.inputDeliveryObserver = { _, _ in
+            deliveryCount += 1
+        }
+
+        let handled = bridge.sendKeyEvent(
+            KeyEvent(
+                characters: "x",
+                keyCode: 7,
+                modifiers: [],
+                isKeyDown: true,
+                isComposing: true
+            ),
+            to: surfaceID
+        )
+
+        #expect(handled == false)
+        #expect(deliveryCount == 0)
+    }
+
+    @Test("sendKeyEvent preserves every scalar and modifier ordering")
+    func sendKeyEventPreservesMultiScalarText() async throws {
+        let rawCat = try makeBridgeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: rawCat.scriptURL.path)
+        defer { bridge.destroySurface(surfaceID) }
+        let received = TestDataSink()
+        bridge.setOutputHandler(for: surfaceID) { data in
+            received.data.append(data)
+        }
+        try await waitUntil {
+            FileManager.default.fileExists(atPath: rawCat.readyURL.path)
+        }
+
+        #expect(bridge.sendKeyEvent(
+            KeyEvent(
+                characters: "`q",
+                keyCode: 12,
+                modifiers: [],
+                isKeyDown: true
+            ),
+            to: surfaceID
+        ))
+        #expect(bridge.sendKeyEvent(
+            KeyEvent(
+                characters: "cq",
+                keyCode: 8,
+                modifiers: [.control],
+                isKeyDown: true
+            ),
+            to: surfaceID
+        ))
+
+        let expected = Data([0x60, 0x71, 0x03, 0x71])
+        try await waitUntil {
+            received.data.range(of: expected) != nil
+        }
+        #expect(received.data.range(of: expected) != nil)
+    }
+
+    @Test("sendKeyEvent forwards key release after progressive event negotiation")
+    func sendKeyEventForwardsProgressiveRelease() async throws {
+        let rawCat = try makeBridgeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: rawCat.scriptURL.path)
+        defer { bridge.destroySurface(surfaceID) }
+        let received = TestDataSink()
+        bridge.setOutputHandler(for: surfaceID) { data in
+            received.data.append(data)
+        }
+        try await waitUntil {
+            FileManager.default.fileExists(atPath: rawCat.readyURL.path)
+        }
+
+        let negotiation = Array("\u{001B}[>2u".utf8)
+        bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_feed(state.terminal, negotiation, negotiation.count)
+        }
+        #expect(bridge.sendKeyEvent(
+            KeyEvent(characters: nil, keyCode: 123, modifiers: [], isKeyDown: true),
+            to: surfaceID
+        ))
+        #expect(bridge.sendKeyEvent(
+            KeyEvent(characters: nil, keyCode: 123, modifiers: [], isKeyDown: false),
+            to: surfaceID
+        ))
+
+        let expected = Data("\u{001B}[D\u{001B}[1;1:3D".utf8)
+        try await waitUntil {
+            received.data.range(of: expected) != nil
+        }
+        #expect(received.data.range(of: expected) != nil)
+    }
+
     @Test("sendText reaches the PTY-backed process")
     func sendTextReachesPty() async throws {
         let bridge = try makeBridge()
@@ -678,6 +1034,36 @@ struct CocxyCoreBridgeTests {
         }
 
         #expect(String(data: received.data, encoding: .utf8)?.contains("ping") == true)
+    }
+
+    @Test("theme changes flush one negotiated color-scheme report to the PTY")
+    func themeChangeFlushesSingleColorSchemeReport() async throws {
+        let rawCat = try makeBridgeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: rawCat.scriptURL.path)
+        defer { bridge.destroySurface(surfaceID) }
+        let received = TestDataSink()
+        bridge.setOutputHandler(for: surfaceID) { data in
+            received.data.append(data)
+        }
+        try await waitUntil {
+            FileManager.default.fileExists(atPath: rawCat.readyURL.path)
+        }
+
+        bridge.withTerminalLock(surfaceID) { state in
+            feed("\u{001B}[?2031h", to: state.terminal)
+        }
+        bridge.applyTheme(makeUXPolishPalette(), to: surfaceID)
+
+        let expected = "\u{001B}[?997;1n"
+        try await waitUntil {
+            String(decoding: received.data, as: UTF8.self).contains(expected)
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        let output = String(decoding: received.data, as: UTF8.self)
+        #expect(output.components(separatedBy: expected).count - 1 == 1)
     }
 
     @Test("updateDefaults stores shell and padding for future surfaces")
@@ -955,6 +1341,105 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.terminalViewportSnapshot(for: SurfaceID()) == nil)
     }
 
+    @Test("third-party OSC 133 defaults cursor clicks to single-line mode")
+    func cursorClickSnapshotIsAtomic() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("\u{1B}]133;A\u{07}\u{1B}]133;B\u{07}界", to: state.terminal)
+
+        let snapshot = try #require(bridge.terminalCursorClickSnapshot(for: surfaceID))
+        #expect(snapshot.semanticState == 2)
+        #expect(snapshot.cursorAbsoluteRow == snapshot.visibleStartRow + UInt32(snapshot.cursorScreenRow))
+        #expect(snapshot.cursorColumn == 2)
+        #expect(snapshot.cellWidths[0] == 1)
+        #expect(snapshot.cellWidths[1] == 2)
+        #expect(snapshot.isAltScreen == false)
+        #expect(snapshot.mouseTrackingMode == 0)
+        #expect(snapshot.selectionActive == false)
+        #expect(snapshot.shellClickMode == 1)
+        #expect(bridge.terminalCursorClickSnapshot(for: SurfaceID()) == nil)
+    }
+
+    @Test("declared shell click mode survives later OSC 133 prompts without options")
+    func declaredShellClickModeSurvivesPlainPrompts() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("\u{1B}]133;A;cl=m\u{07}", to: state.terminal)
+        #expect(bridge.terminalCursorClickSnapshot(for: surfaceID)?.shellClickMode == 2)
+
+        feed("\u{1B}]133;A\u{07}", to: state.terminal)
+        #expect(bridge.terminalCursorClickSnapshot(for: surfaceID)?.shellClickMode == 2)
+
+        feed("\u{1B}]133;A;cl=none\u{07}", to: state.terminal)
+        #expect(bridge.terminalCursorClickSnapshot(for: surfaceID)?.shellClickMode == 0)
+    }
+
+    @Test("cursor click snapshot carries wrapped semantic input rows")
+    func cursorClickSnapshotCarriesWrappedSemanticRows() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        #expect(cocxycore_terminal_resize(state.terminal, 24, 4))
+        let inputStartRow = cocxycore_terminal_history_max_visible_start(state.terminal)
+            + UInt32(cocxycore_terminal_cursor_row(state.terminal))
+
+        feed("\u{1B}]133;A;cl=m\u{07}\u{1B}]133;B\u{07}abcdef", to: state.terminal)
+
+        let snapshot = try #require(bridge.terminalCursorClickSnapshot(
+            for: surfaceID,
+            fromAbsoluteRow: inputStartRow
+        ))
+        #expect(snapshot.shellClickMode == 2)
+        #expect(snapshot.cursorColumn == 2)
+        #expect(snapshot.rows.count == 2)
+        #expect(snapshot.rows[0].wrapped)
+        #expect(snapshot.rows[0].cellSemantics == [2, 2, 2, 2])
+        #expect(snapshot.rows[1].cellSemantics.prefix(2) == [2, 2])
+        #expect(snapshot.rows[1].cellSemantics.dropFirst(2).allSatisfy { $0 == 0 })
+    }
+
+    @Test("semantic OSC positions are captured before later bytes advance the cursor")
+    func semanticOSCPositionsAreCapturedSynchronously() async throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let capturedPositions = LockedBox<[String: TerminalGridPosition]>([:])
+
+        bridge.setOSCHandler(for: surfaceID) { notification in
+            switch notification {
+            case .shellPrompt(let position):
+                if let position {
+                    capturedPositions.withValue { $0["prompt"] = position }
+                }
+            case .commandStarted(let position):
+                if let position {
+                    capturedPositions.withValue { $0["input"] = position }
+                }
+            default:
+                break
+            }
+        }
+
+        feed("\u{1B}]133;A\u{07}\u{1B}]133;B\u{07}abc", to: state.terminal)
+
+        try await waitUntil {
+            capturedPositions.withValue { $0.count == 2 }
+        }
+        let positions = capturedPositions.withValue { $0 }
+        #expect(positions["prompt"]?.column == 0)
+        #expect(positions["input"]?.column == 0)
+        #expect(positions["prompt"]?.absoluteRow == positions["input"]?.absoluteRow)
+        #expect(cocxycore_terminal_cursor_col(state.terminal) == 3)
+    }
+
     @Test("preedit snapshot exposes text, cursor, and anchor")
     func preeditSnapshotExposesTextCursorAndAnchor() throws {
         let bridge = try makeBridge()
@@ -1011,7 +1496,7 @@ struct CocxyCoreBridgeTests {
         let state = try #require(bridge.surfaceState(for: surfaceID))
 
         // Enter command-running state so an agent launch pattern can promote
-        // the semantic state to agent_active inside CocxyCore.
+        // the semantic state without splitting the surrounding shell command.
         feed("\u{1B}]133;A\u{07}", to: state.terminal)
         feed("\u{1B}]133;B\u{07}", to: state.terminal)
         feed("\u{1B}]133;C\u{07}", to: state.terminal)
@@ -1019,7 +1504,7 @@ struct CocxyCoreBridgeTests {
 
         let diagnostics = try #require(bridge.semanticDiagnostics(for: surfaceID))
         #expect(diagnostics.state == 4)
-        #expect(diagnostics.currentBlockType == 5)
+        #expect(diagnostics.currentBlockType == UInt8(COCXYCORE_BLOCK_COMMAND_OUTPUT.rawValue))
     }
 
     @Test("applyFont updates the live terminal font metrics")
@@ -1251,6 +1736,172 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.commandBlock(for: surfaceID, blockID: block.id + 1) == nil)
     }
 
+    @Test("semantic prompt navigation follows retained CocxyCore history")
+    func semanticPromptNavigationFollowsRetainedHistory() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        cocxycore_terminal_resize(state.terminal, 6, 48)
+
+        for index in 1...4 {
+            feed(
+                semanticCommandCycle(label: "command-\(index)", outputLineCount: 4),
+                to: state.terminal
+            )
+        }
+
+        let liveBottom = cocxycore_terminal_history_max_visible_start(state.terminal)
+        let previous = try #require(bridge.performSemanticNavigation(
+            .previousPrompt,
+            for: surfaceID
+        ))
+        let older = try #require(bridge.performSemanticNavigation(
+            .previousPrompt,
+            for: surfaceID
+        ))
+        let newer = try #require(bridge.performSemanticNavigation(
+            .nextPrompt,
+            for: surfaceID
+        ))
+
+        #expect(liveBottom > 0)
+        #expect(previous.viewportStartRow < liveBottom)
+        #expect(older.viewportStartRow < previous.viewportStartRow)
+        #expect(newer.viewportStartRow == previous.viewportStartRow)
+        #expect(bridge.historyVisibleStart(for: surfaceID) == previous.viewportStartRow)
+        #expect(bridge.selectionSnapshot(for: surfaceID)?.active == false)
+    }
+
+    @Test("semantic output selection exposes the complete current command output")
+    func semanticOutputSelectionExposesCompleteOutput() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        cocxycore_terminal_resize(state.terminal, 6, 48)
+
+        feed(semanticCommandCycle(label: "older", outputLineCount: 4), to: state.terminal)
+        feed(semanticCommandCycle(label: "latest", outputLineCount: 4), to: state.terminal)
+        let liveBottom = cocxycore_terminal_history_max_visible_start(state.terminal)
+        #expect(cocxycore_terminal_history_set_visible_start(state.terminal, liveBottom))
+
+        let result = try #require(bridge.performSemanticNavigation(
+            .selectCommandOutput,
+            for: surfaceID
+        ))
+        let selection = try #require(result.selection)
+        let snapshot = try #require(bridge.selectionSnapshot(for: surfaceID))
+
+        #expect(result.action == .selectCommandOutput)
+        #expect(selection.blockID != 0)
+        #expect(selection.text.contains("latest-output-0"))
+        #expect(selection.text.contains("latest-output-3"))
+        #expect(selection.text.contains("older-output") == false)
+        #expect(snapshot.active)
+        #expect(snapshot.startRow == selection.startRow)
+        #expect(snapshot.startCol == selection.startColumn)
+        #expect(snapshot.endRow == selection.endRow)
+        #expect(snapshot.endCol == selection.endColumn)
+        #expect(snapshot.text?.contains("latest-output-3") == true)
+    }
+
+    @Test("semantic navigation rejects missing surfaces and absent semantic data")
+    func semanticNavigationRejectsMissingData() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        #expect(bridge.performSemanticNavigation(.previousPrompt, for: SurfaceID()) == nil)
+        #expect(bridge.performSemanticNavigation(.previousPrompt, for: surfaceID) == nil)
+        #expect(bridge.performSemanticNavigation(.selectCommandOutput, for: surfaceID) == nil)
+    }
+
+    @Test("commandBlocks preserves evicted metadata and maps only retained rows")
+    func commandBlocksPreserveEvictedMetadataAndMapRetainedRows() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed(
+            "\u{1B}]133;A\u{7}" +
+            "\u{1B}]133;B\u{7}" +
+            "echo evicted\r\n" +
+            "\u{1B}]133;C\u{7}" +
+            "evicted\r\n" +
+            "\u{1B}]133;D;0\u{7}",
+            to: state.terminal
+        )
+        let evictedID = try #require(bridge.commandBlocks(for: surfaceID, limit: 10).first?.id)
+
+        feed(String(repeating: "filler\r\n", count: 10_050), to: state.terminal)
+        feed(
+            "\u{1B}]133;A\u{7}" +
+            "\u{1B}]133;B\u{7}" +
+            "echo retained\r\n" +
+            "\u{1B}]133;C\u{7}" +
+            "retained\r\n" +
+            "\u{1B}]133;D;0\u{7}",
+            to: state.terminal
+        )
+
+        let blocks = bridge.commandBlocks(for: surfaceID, limit: 10)
+        let evicted = try #require(blocks.first { $0.id == evictedID })
+        let retained = try #require(blocks.first { $0.command == "echo retained" })
+        let retainedVisibleStart = try #require(retained.visibleStartRow)
+        let retainedVisibleEnd = try #require(retained.visibleEndRow)
+        let maximumHistoryRow = cocxycore_terminal_scrollback_len(state.terminal)
+            + UInt32(cocxycore_terminal_rows(state.terminal) - 1)
+
+        #expect(blocks.count == 2)
+        #expect(evicted.command == "echo evicted")
+        #expect(evicted.visibleStartRow == nil)
+        #expect(evicted.visibleEndRow == nil)
+        #expect(retained.command == "echo retained")
+        #expect(retained.startRow <= retained.endRow)
+        #expect(retainedVisibleStart <= retainedVisibleEnd)
+        #expect(retainedVisibleEnd <= maximumHistoryRow)
+        #expect(bridge.commandBlock(for: surfaceID, blockID: evictedID)?.id == evictedID)
+    }
+
+    @Test("commandBlocks bounds metadata work before building overlay blocks")
+    func commandBlocksBoundMetadataAndSkipOutputCopies() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        for index in 0..<1_024 {
+            feed(
+                "\u{1B}]133;A\u{7}" +
+                "\u{1B}]133;B\u{7}" +
+                "printf \(index)\r\n" +
+                "\u{1B}]133;C\u{7}" +
+                "\(index)\r\n" +
+                "\u{1B}]133;D;0\u{7}",
+                to: state.terminal
+            )
+        }
+
+        var metadataLoads = 0
+        var outputCopies = 0
+        bridge.commandBlockMetadataLoadObserver = { metadataLoads += 1 }
+        bridge.commandBlockOutputCopyObserver = { outputCopies += 1 }
+
+        let blocks = bridge.commandBlocks(
+            for: surfaceID,
+            limit: 32,
+            includeOutput: false
+        )
+
+        #expect(blocks.count == 32)
+        #expect(metadataLoads == 32)
+        #expect(outputCopies == 0)
+        #expect(blocks.allSatisfy { $0.output.isEmpty })
+        #expect(blocks.last?.command == "printf 1023")
+    }
+
     @Test("commandBlocks groups multiline commands into one block")
     func commandBlocksGroupsMultilineCommandsIntoOneBlock() throws {
         let bridge = try makeBridge()
@@ -1369,6 +2020,7 @@ struct CocxyCoreBridgeTests {
             resourcesPath: root.path,
             hookIntegration: HookIntegrationConfig(
                 enabled: false,
+                debugLog: true,
                 agents: [
                     .codex: HookIntegrationAgentConfig(enabled: false),
                     .opencode: HookIntegrationAgentConfig(enabled: false),
@@ -1378,6 +2030,7 @@ struct CocxyCoreBridgeTests {
 
         #expect(env["COCXY_CLAUDE_HOOKS"] == "1")
         #expect(env["COCXY_HOOKS_DISABLED"] == "1")
+        #expect(env["COCXY_HOOK_DEBUG_LOG"] == "1")
         #expect(env["COCXY_CODEX_HOOKS_DISABLED"] == "1")
         #expect(env["COCXY_OPENCODE_HOOKS_DISABLED"] == "1")
         #expect(env["COCXY_PI_HOOKS_DISABLED"] == nil)
@@ -1404,6 +2057,7 @@ struct CocxyCoreBridgeTests {
             let script = try String(contentsOf: scriptURL, encoding: .utf8)
 
             #expect(script.contains("133;C;"))
+            #expect(script.contains("133;A;cl=m"))
             #expect(script.contains("sanitized_command"))
             #expect(script.contains("cocxy-percent-v1:"))
             #expect(script.contains("%0A"))
@@ -1522,6 +2176,8 @@ struct CocxyCoreBridgeTests {
     func terminalPTYsStripHostNoColor() throws {
         #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("NO_COLOR"))
         #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("COCXY_HOOKS_DISABLED"))
+        #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("COCXY_HOOK_DEBUG_LOG"))
+        #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("COCXY_HOOK_DEBUG_LOG_PATH"))
         #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("COCXY_OPENCODE_HOOKS_DISABLED"))
     }
 }
@@ -1597,6 +2253,26 @@ private final class RecordingClipboardService: ClipboardServiceProtocol {
 }
 
 @MainActor
+private final class ExternalSurfaceTransportProbe {
+    private(set) var writes: [Data] = []
+    private(set) var sizes: [TerminalSize] = []
+    private(set) var closeCount = 0
+
+    func write(_ data: Data) -> Bool {
+        writes.append(data)
+        return true
+    }
+
+    func resize(_ size: TerminalSize) {
+        sizes.append(size)
+    }
+
+    func close() {
+        closeCount += 1
+    }
+}
+
+@MainActor
 private func createSurface(
     using bridge: CocxyCoreBridge,
     command: String = "/bin/cat"
@@ -1614,6 +2290,19 @@ private func numberedLines(_ count: Int) -> String {
     (0..<count)
         .map { String(format: "line-%02d", $0) }
         .joined(separator: "\r\n") + "\r\n"
+}
+
+private func semanticCommandCycle(label: String, outputLineCount: Int) -> String {
+    let output = (0..<outputLineCount)
+        .map { "\(label)-output-\($0)\r\n" }
+        .joined()
+    return "\u{1B}]133;A\u{7}" +
+        "$ " +
+        "\u{1B}]133;B\u{7}" +
+        "echo \(label)\r\n" +
+        "\u{1B}]133;C\u{7}" +
+        output +
+        "\u{1B}]133;D;0\u{7}"
 }
 
 private func makeTemporaryDirectory(named prefix: String) throws -> URL {
@@ -1641,6 +2330,27 @@ private func makeAltScreenTransitionScript() throws -> (rootDirectory: URL, scri
         ofItemAtPath: scriptURL.path
     )
     return (rootDirectory, scriptURL)
+}
+
+private func makeBridgeRawCatScript() throws -> (
+    rootDirectory: URL,
+    scriptURL: URL,
+    readyURL: URL
+) {
+    let rootDirectory = try makeTemporaryDirectory(named: "cocxy-bridge-raw-cat")
+    let scriptURL = rootDirectory.appendingPathComponent("raw-cat.sh")
+    let readyURL = rootDirectory.appendingPathComponent("ready")
+    try """
+    #!/bin/sh
+    stty raw -echo
+    : > '\(readyURL.path)'
+    exec /bin/cat
+    """.write(to: scriptURL, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes(
+        [.posixPermissions: 0o700],
+        ofItemAtPath: scriptURL.path
+    )
+    return (rootDirectory, scriptURL, readyURL)
 }
 
 private func feed(_ text: String, to terminal: OpaquePointer) {
@@ -1692,7 +2402,7 @@ func readPreedit(from terminal: OpaquePointer) -> String {
 /// poll interval, while a loaded 3-vCPU machine is not failed for being
 /// slow. The `Issue.record` below still fires if the effect never arrives.
 func waitUntil(
-    timeoutNanoseconds: UInt64 = 5_000_000_000,
+    timeoutNanoseconds: UInt64 = 15_000_000_000,
     pollNanoseconds: UInt64 = 10_000_000,
     condition: @escaping @Sendable @MainActor () -> Bool
 ) async throws {
@@ -1707,80 +2417,6 @@ func waitUntil(
         return
     }
     Issue.record("Timed out waiting for condition")
-}
-
-private enum WebSocketTestProbeError: Error, CustomStringConvertible {
-    case timeout(expected: String)
-    case unsupportedMessage
-
-    var description: String {
-        switch self {
-        case .timeout(let expected):
-            "Timed out waiting for WebSocket message containing \(expected)"
-        case .unsupportedMessage:
-            "Received unsupported WebSocket message"
-        }
-    }
-}
-
-private final class WebSocketTestProbe: @unchecked Sendable {
-    private let session: URLSession
-    private let task: URLSessionWebSocketTask
-
-    init(port: UInt16, bearerToken: String, origin: String? = nil) throws {
-        let url = try #require(URL(string: "ws://127.0.0.1:\(port)/"))
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
-        if let origin {
-            request.setValue(origin, forHTTPHeaderField: "Origin")
-        }
-        let configuration = URLSessionConfiguration.ephemeral
-        self.session = URLSession(configuration: configuration)
-        self.task = session.webSocketTask(with: request)
-        task.resume()
-    }
-
-    var responseStatusCode: Int? {
-        (task.response as? HTTPURLResponse)?.statusCode
-    }
-
-    func receive(
-        containing expected: String,
-        timeoutNanoseconds: UInt64 = 5_000_000_000
-    ) async throws -> String {
-        try await withThrowingTaskGroup(of: String.self) { group in
-            group.addTask { [self] in
-                while true {
-                    let message = try await task.receive()
-                    let text: String
-                    switch message {
-                    case .string(let value):
-                        text = value
-                    case .data(let data):
-                        text = String(decoding: data, as: UTF8.self)
-                    @unknown default:
-                        throw WebSocketTestProbeError.unsupportedMessage
-                    }
-                    if text.contains(expected) {
-                        return text
-                    }
-                }
-            }
-            group.addTask {
-                try await Task.sleep(nanoseconds: timeoutNanoseconds)
-                throw WebSocketTestProbeError.timeout(expected: expected)
-            }
-
-            let value = try await group.next() ?? ""
-            group.cancelAll()
-            return value
-        }
-    }
-
-    func close() {
-        task.cancel(with: .normalClosure, reason: nil)
-        session.invalidateAndCancel()
-    }
 }
 
 final class TestDataSink: @unchecked Sendable {

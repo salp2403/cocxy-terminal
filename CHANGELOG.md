@@ -7,6 +7,132 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-10-22
+
+### Added
+- Added Projects. Git repositories you open or work in are kept in a local
+  project list, shown in the sidebar under Pinned and Recent with their task
+  count, and reachable from File > Open Project, Open Recent, Clone Project,
+  Quick Switch, and the Jump to Project command.
+- Added Project Home, a panel for each project with Git status, a task inbox,
+  managed worktrees, and actions to start a session, create a worktree, launch
+  an agent team, open code review, or open the most recent diff. With local
+  activity tracking turned on, it also shows the project's time, tokens, and
+  cost for the week and month.
+- Added project aliases: renaming a workspace in the sidebar sets the
+  project's display name, and its activity stays together under that name.
+- Added a project filter to the Agent Timeline.
+- Added `cocxy project-open`, `project-list`, `project-pin`, `project-unpin`,
+  `project-alias`, `project-forget`, `project-clone`, and `project-tasks`.
+- Added parallel task runs. Fan Out Task sends one prompt to several local
+  agents, each in its own Git worktree, and Compare Parallel Task shows each
+  candidate's status, cost, branch, and diff before you promote one and clean
+  up the rest.
+- Added collision warnings for planned files in parallel task runs, which are
+  saved across restarts and also available as `cocxy task-run`,
+  `task-run-list`, and `task-run promote`.
+- Added a persistent Task Queue for local agent pipelines that run manually,
+  on a cron schedule, or on terminal events, managed from the command palette
+  or with `cocxy task-enqueue`, `task-list`, `task-cancel`, `task-rerun`, and
+  `task-remove`.
+- Added task handoff. Pass This Task To... continues the active task in
+  another local agent in a new tab with its recent context, and
+  `cocxy handoff-export` and `cocxy handoff-import` do the same from the
+  command line.
+- Added the phone mirror. View > Pair Phone... shows a single-use QR code that
+  expires after 90 seconds, and the phone gets access only after you allow it
+  on the Mac; access ends after eight hours or as soon as you revoke it.
+- Added phone controls. From the paired phone's browser you can see local
+  projects and live agents, follow a terminal with pinch and double-tap zoom,
+  type keys and paste text, reply to a waiting agent, approve or reject agent
+  approvals, receive local notifications, and create a project in a folder
+  chosen on the Mac after you confirm it there.
+- Added end-to-end encryption for the phone mirror: terminal traffic and phone
+  actions are encrypted with a key carried in the QR code. The phone connects
+  over your private local network through a TLS relay, or optionally through a
+  connected SSH profile, while terminal servers stay on loopback and no
+  account or cloud service is involved.
+- Added keyboard content hints (`Cmd+Shift+L`) that open URLs, links, and file
+  paths at their line, or copy IP addresses, commit hashes, and email
+  addresses shown in the terminal.
+- Added prompt navigation (`Cmd+Up` / `Cmd+Down`), Select Command Output
+  (`Cmd+Shift+A`), and history scrolling shortcuts, plus a history indicator
+  that jumps back to live output.
+- Added word selection on double-click, line selection on triple-click, and
+  rectangular selection with Option-drag.
+- Added mouse forwarding to full-screen programs that request it, in both the
+  in-process and daemon terminals. Holding Shift keeps selection and scrolling
+  local, and the status bar shows when a program has captured the mouse.
+- Added support for the progressive keyboard protocol, synchronized output,
+  and styled or colored underlines, strikethrough, and overline.
+- Added cursor placement by clicking in shell input, including multiline
+  prompts, with a `cursor-click-to-move` setting to turn it off.
+- Added command block settings to hide blocks or show their actions only on
+  hover, and a Hide Command Blocks action (`Cmd+Shift+B`).
+- Added opening persistent remote daemon sessions directly in terminal tabs.
+- Added sending dictated text to the prompt of a detected agent, with an
+  optional setting to submit it automatically.
+- Added hook delivery diagnostics to the agent dashboard, with hook repair,
+  linking an agent session to its tab, and an opt-in local hook debug log.
+- Added complete translations for all 21 supported languages, with a
+  right-to-left layout in Arabic.
+
+### Changed
+- Cocxy now requires macOS 15 Sequoia or later; macOS 14 is no longer
+  supported.
+- Toggle Browser moved to `Cmd+Option+B`, and `Cmd+Shift+B` now hides command
+  blocks.
+- Command block controls now sit in a slim rail inside the terminal padding
+  and, by default, show their actions only on hover.
+- Git worktrees are now enabled by default. Nothing is created until you
+  create a worktree or start a task that needs one.
+- Voice input is now available by default. It still starts only when you
+  invoke it and needs macOS Speech and microphone permission, and a one-time
+  notice lets you keep it or turn it off.
+- Notes are now shared by all linked worktrees of a project, and existing
+  per-worktree notes are migrated.
+- Tab configs now save split pane layouts, including Markdown and browser
+  panes, with paths relative to the project.
+- Agent teams now wait until each agent is ready before sending its first
+  prompt, and agent executables found only on your shell's `PATH` are now
+  resolved at launch.
+- Project, task, and browser import errors are now shown as localized
+  messages, with technical details kept in the private local log.
+- The bundled CocxyCore engine is now 0.18.0, which renders the phone mirror
+  and serializes terminal access between the Mac and a connected phone.
+- Test runs now use a private home directory and fail if they leave
+  preference files in the real one.
+- The cocxy.dev website moved to a new design, and its home page now covers
+  Projects and the phone mirror.
+
+### Fixed
+- Fixed dead-key and input-method composition leaving stale text in the
+  terminal, and input methods now also work in daemon-hosted terminals.
+- Fixed command block rows drifting away from their output, and bookmarked
+  command output being lost when the command finished.
+- Fixed scrollback search reporting overlapping results for literal matches
+  and ignoring invalid regular expressions without a message.
+- Fixed remote tmux sessions losing their cursor position when their screen
+  was restored.
+- Fixed agent dashboard rows and the Dock badge outliving a closed window.
+- Fixed cancelling a session or workspace rename resetting its name, and the
+  rename panel disappearing when Cocxy lost focus.
+- Fixed agent team and pipeline steps being marked successful when the agent
+  exited with an error or without an exit status, and the agent's exit code
+  being lost.
+
+### Security
+- Phone actions carry a sequence number and a timestamp and are rejected when
+  replayed, stale, or aimed at a terminal the phone was not granted, and
+  phone connections are rate-limited per address.
+- Remote (reverse) SSH port forwards now bind only to the server's loopback
+  interface.
+- Opening or cloning a project from the command line now requires approval in
+  the app, and clone URLs with embedded credentials or symbolic-link
+  destinations are rejected.
+- Project records are validated when read, invalid records are set aside in a
+  private recovery file, and projects open only in verified directories.
+
 ## [1.19.0] - 2026-07-27
 
 ### Added

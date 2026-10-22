@@ -3,7 +3,37 @@
 
 import Foundation
 
+@MainActor
+struct AgentTeamAppLaunchResult {
+    let launchResult: AgentTeamLaunchResult
+    let tabIDs: [TabID]
+}
+
 extension AppDelegate {
+    nonisolated static func agentTeamProviderForPreflight(
+        command: CLICommandName,
+        params: [String: String]
+    ) -> AgentTeamProvider? {
+        switch command {
+        case .agentTeamLaunch:
+            let requestedProvider = (params["provider"] ?? AgentTeamProvider.claudeCode.rawValue)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedProvider = requestedProvider.isEmpty
+                ? AgentTeamProvider.claudeCode.rawValue
+                : requestedProvider
+            return AgentTeamProvider(rawValue: normalizedProvider)
+        case .handoffImport:
+            let requestedProvider = (params["agent"] ?? AgentTeamProvider.claudeCode.rawValue)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedProvider = requestedProvider.isEmpty
+                ? AgentTeamProvider.claudeCode.rawValue
+                : requestedProvider
+            return AgentTeamProvider.resolve(named: normalizedProvider)
+        default:
+            return nil
+        }
+    }
+
     nonisolated func handleAgentTeamCLIRequest(
         kind: String,
         params: [String: String],
@@ -45,57 +75,28 @@ extension AppDelegate {
                 .standardizedFileURL.path == approvedContext.workingDirectory else {
             return (false, ["error": "Approved agent team target is no longer available"])
         }
-        let rawProvider = params["provider"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let providerName: String
-        if let rawProvider, !rawProvider.isEmpty {
-            providerName = rawProvider
-        } else {
-            providerName = AgentTeamProvider.claudeCode.rawValue
-        }
-        guard let provider = AgentTeamProvider(rawValue: providerName) else {
-            return (false, ["error": "Unsupported agent team provider: \(providerName)"])
-        }
-
         do {
-            let config: AgentTeamConfig
-            if let templateID = params["template"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !templateID.isEmpty {
-                config = try AgentTeamTemplateCatalog.builtin.makeConfig(
-                    templateID: templateID,
-                    teamID: params["team-id"],
-                    provider: provider
-                )
-            } else if let teammates = params["teammates"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      !teammates.isEmpty {
-                config = try AgentTeamConfig.from(
-                    teammates: teammates,
-                    teamID: params["team-id"],
-                    provider: provider
-                )
-            } else {
-                return (false, ["error": "Missing required param: teammates"])
+            let plan = try AgentTeamCLILaunchPlanner.make(
+                params: params,
+                workingDirectory: approvedContext.workingDirectory,
+                fallbackTeamID: approvedContext.authorityDetails["team-id"],
+                adapterRegistry: agentTeamProviderAdapterRegistry
+            )
+            guard plan.authorityDetails == approvedContext.authorityDetails else {
+                return (false, ["error": "Approved agent team launch plan changed"])
             }
-            let paneLauncher = SocketBoundAgentTeamPaneLauncher(
+            let config = plan.config
+            guard activeAgentTeamCoordinators[config.id] == nil else {
+                return (false, ["error": "Agent team is already running: \(config.id)"])
+            }
+            let appResult = try launchAgentTeamConfig(
+                config,
                 controller: controller,
-                targetTabID: rawTabID
+                targetTabID: rawTabID,
+                workingDirectory: approvedContext.workingDirectory,
+                authorizedLaunchSpecs: plan.launchSpecs
             )
-            let launcher = AgentTeamLauncher(paneLauncher: paneLauncher)
-            let result = try launcher.launch(config: config)
-            activeAgentTeamCoordinators[config.id] = AgentTeamCoordinator(config: config)
-            activeAgentTeamRuns[config.id] = AgentTeamRunState(
-                config: config,
-                launchSpecs: result.launchSpecs
-            )
-            if let run = activeAgentTeamRuns[config.id] {
-                syncAgentTeamRunToDashboard(
-                    run,
-                    tabID: rawTabID
-                )
-            }
-            try? AgentTeamPersistence().save(config)
-            if let snapshot = activeAgentTeamRuns[config.id]?.snapshot() {
-                try? AgentTeamSessionSnapshotStore().save(snapshot)
-            }
+            let result = appResult.launchResult
 
             var data: [String: String] = [
                 "status": "launched",
@@ -103,8 +104,9 @@ extension AppDelegate {
                 "provider": config.provider.rawValue,
                 "teammates": "\(result.launchedCount)",
                 "launch-specs": "\(result.launchSpecs.count)",
+                "surfaces": "\(result.launchedCount)",
                 "provider-preflight": "passed",
-                "runtime-handoff": "provider-launch-spec",
+                "runtime-handoff": "provider-process",
                 "notifications-isolated": "\(config.notificationsIsolated)",
             ]
             if let templateID = params["template"], !templateID.isEmpty {
@@ -112,6 +114,9 @@ extension AppDelegate {
             }
             for (index, teammateID) in result.teammateIDs.enumerated() {
                 data["teammate_\(index)"] = teammateID
+            }
+            for (index, tabID) in appResult.tabIDs.enumerated() {
+                data["tab_\(index)_id"] = tabID.rawValue.uuidString
             }
             return (true, data)
         } catch {
@@ -141,15 +146,31 @@ extension AppDelegate {
             return (false, ["error": "Missing required param: team-id"])
         }
         let teamID = AgentTeamConfig.slug(rawTeamID)
-        guard activeAgentTeamCoordinators.removeValue(forKey: teamID) != nil else {
+        guard activeAgentTeamCoordinators[teamID] != nil else {
             return (false, ["error": "Agent team not found: \(teamID)"])
         }
-        activeAgentTeamRuns.removeValue(forKey: teamID)
-        agentDashboardViewModel?.removeAgentTeamRun(teamID: teamID)
-
-        for controller in allWindowControllers {
-            controller.dashboardViewModel?.removeAgentTeamRun(teamID: teamID)
-            controller.removeSubagentPanels(forSession: teamID)
+        if taskQueueAgentTeamContexts[teamID] != nil {
+            completeQueuedAgentTeam(
+                teamID: teamID,
+                outcome: .failed("Provider process stopped")
+            )
+            return (true, [
+                "status": "stopped",
+                "team-id": teamID,
+            ])
+        }
+        let taskRunID = taskRunIDByTeamID[teamID]
+        _ = removeAgentTeamRuntime(
+            teamID: teamID,
+            worktreeClosePolicyOverride: taskRunID == nil ? nil : .keep,
+            removeDashboardRow: taskRunID == nil
+        )
+        if let taskRunID {
+            markTaskRunCandidateStopped(
+                taskRunID: taskRunID,
+                teamID: teamID,
+                reason: "Provider process stopped"
+            )
         }
 
         return (true, [
@@ -166,23 +187,209 @@ extension AppDelegate {
 
         for teamID in candidateTeamIDs {
             guard var run = activeAgentTeamRuns[teamID] else { continue }
+            let isQueuedAgentTeam = taskQueueAgentTeamContexts[teamID] != nil
+            let queueOutcome = isQueuedAgentTeam
+                ? AgentPipelineHookOutcome.resolve(event)
+                : nil
             do {
                 let result = try run.apply(event)
                 guard result.accepted else { continue }
                 activeAgentTeamRuns[teamID] = run
                 activeAgentTeamCoordinators[teamID] = run.coordinator
-                let tabID = agentDashboardViewModel?.tabIdForSession(teamID)
-                    ?? focusedWindowController()?.visibleTabID?.rawValue
-                    ?? focusedWindowController()?.tabManager.activeTabID?.rawValue
-                syncAgentTeamRunToDashboard(run, tabID: tabID)
-                try? AgentTeamSessionSnapshotStore().save(run.snapshot())
+                if let taskRunID = taskRunIDByTeamID[teamID] {
+                    updateTaskRunCandidate(
+                        taskRunID: taskRunID,
+                        teamID: teamID,
+                        from: run
+                    )
+                } else if isQueuedAgentTeam {
+                    let tabID = agentDashboardViewModel?.tabIdForSession(teamID)
+                        ?? focusedWindowController()?.visibleTabID?.rawValue
+                        ?? focusedWindowController()?.tabManager.activeTabID?.rawValue
+                    syncAgentTeamRunToDashboard(run, tabID: tabID)
+                } else {
+                    let tabID = agentDashboardViewModel?.tabIdForSession(teamID)
+                        ?? focusedWindowController()?.visibleTabID?.rawValue
+                        ?? focusedWindowController()?.tabManager.activeTabID?.rawValue
+                    syncAgentTeamRunToDashboard(run, tabID: tabID)
+                    if !teamID.hasPrefix("handoff-") {
+                        try? agentTeamSessionSnapshotStore.save(run.snapshot())
+                    }
+                }
                 if let request = result.reviewBeforeShipRequest {
                     requestAgentTeamReviewBeforeShip(request)
                 }
+                if let queueOutcome {
+                    completeQueuedAgentTeam(teamID: teamID, outcome: queueOutcome)
+                }
             } catch {
+                if isQueuedAgentTeam, queueOutcome != nil {
+                    completeQueuedAgentTeam(
+                        teamID: teamID,
+                        outcome: .failed("Agent lifecycle event could not be applied")
+                    )
+                }
                 continue
             }
         }
+    }
+
+    func handleAgentTeamTerminalEnd(
+        _ terminalEnd: AgentTeamTerminalEnd,
+        in controller: MainWindowController
+    ) {
+        let teamID = terminalEnd.context.teamID
+        let processSucceeded = terminalEnd.reason == .processExited
+            && terminalEnd.exitCode == 0
+        let status: AgentTeamStatus = processSucceeded
+            ? .finished
+            : .error
+        let message: String
+        if terminalEnd.reason == .processExited, let exitCode = terminalEnd.exitCode,
+           exitCode != 0 {
+            message = "Provider process exited with status \(exitCode)"
+        } else if terminalEnd.reason == .processExited, terminalEnd.exitCode == 0 {
+            message = "Provider process exited"
+        } else if terminalEnd.reason == .processExited {
+            message = "Provider process exited without a status"
+        } else {
+            message = "Provider terminal tab closed"
+        }
+
+        if var run = activeAgentTeamRuns[teamID] {
+            try? run.markTeammateTerminated(
+                teammateID: terminalEnd.context.teammateID,
+                status: status,
+                message: message
+            )
+            activeAgentTeamRuns[teamID] = run
+            activeAgentTeamCoordinators[teamID] = run.coordinator
+        }
+
+        if taskQueueAgentTeamContexts[teamID] != nil {
+            let outcome: AgentPipelineHookOutcome = processSucceeded
+                ? .succeeded(message)
+                : .failed(message)
+            completeQueuedAgentTeam(teamID: teamID, outcome: outcome)
+            if terminalEnd.reason == .processExited,
+               controller.tabManager.tab(for: terminalEnd.tabID) != nil {
+                controller.performCloseTab(
+                    terminalEnd.tabID,
+                    worktreeClosePolicyOverride: .keep
+                )
+            }
+            return
+        }
+
+        guard let run = activeAgentTeamRuns[teamID] else { return }
+        if let taskRunID = taskRunIDByTeamID[teamID] {
+            updateTaskRunCandidate(taskRunID: taskRunID, teamID: teamID, from: run)
+        } else {
+            syncAgentTeamRunToDashboard(
+                run,
+                tabID: terminalEnd.tabID.rawValue
+            )
+        }
+        guard terminalEnd.remainingTabCount == 0 else { return }
+
+        _ = removeAgentTeamRuntime(
+            teamID: teamID,
+            worktreeClosePolicyOverride: .keep,
+            removeDashboardRow: taskRunIDByTeamID[teamID] == nil
+        )
+    }
+
+    @MainActor
+    func launchAgentTeamConfig(
+        _ config: AgentTeamConfig,
+        controller: MainWindowController,
+        targetTabID: UUID,
+        workingDirectory: String,
+        authorizedLaunchSpecs: [AgentTeamProviderLaunchSpec]? = nil,
+        persistSnapshot: Bool = true,
+        syncDashboard: Bool = true,
+        excludesTaskQueueLifecycleEvents: Bool = false
+    ) throws -> AgentTeamAppLaunchResult {
+        guard activeAgentTeamCoordinators[config.id] == nil else {
+            throw AgentTeamError.alreadyRunning(config.id)
+        }
+
+        let paneLauncher = SocketBoundAgentTeamPaneLauncher(
+            controller: controller,
+            targetTabID: targetTabID,
+            excludesTaskQueueLifecycleEvents: excludesTaskQueueLifecycleEvents
+        )
+        let launcher = AgentTeamLauncher(
+            paneLauncher: paneLauncher,
+            adapterRegistry: agentTeamProviderAdapterRegistry,
+            launchProfileProvider: { _ in
+                AgentTeamLaunchProfile(workingDirectory: workingDirectory)
+            }
+        )
+        let result: AgentTeamLaunchResult
+        if let authorizedLaunchSpecs {
+            result = try launcher.launch(
+                config: config,
+                preparedLaunchSpecs: authorizedLaunchSpecs
+            )
+        } else {
+            result = try launcher.launch(config: config)
+        }
+        guard paneLauncher.launchedTabIDs.count == result.launchedCount else {
+            paneLauncher.closeAgentTeamPanes(teamID: config.id)
+            throw AgentTeamError.paneLaunchFailed(config.id)
+        }
+
+        activeAgentTeamCoordinators[config.id] = AgentTeamCoordinator(config: config)
+        activeAgentTeamRuns[config.id] = AgentTeamRunState(
+            config: config,
+            launchSpecs: result.launchSpecs
+        )
+        if syncDashboard, let run = activeAgentTeamRuns[config.id] {
+            syncAgentTeamRunToDashboard(
+                run,
+                tabID: paneLauncher.launchedTabIDs.first?.rawValue ?? targetTabID
+            )
+        }
+        if persistSnapshot {
+            if let snapshot = activeAgentTeamRuns[config.id]?.snapshot() {
+                try? agentTeamSessionSnapshotStore.save(snapshot)
+            }
+        }
+
+        return AgentTeamAppLaunchResult(
+            launchResult: result,
+            tabIDs: paneLauncher.launchedTabIDs
+        )
+    }
+
+    @MainActor
+    @discardableResult
+    func removeAgentTeamRuntime(
+        teamID rawTeamID: String,
+        worktreeClosePolicyOverride: WorktreeOnClose?,
+        removeDashboardRow: Bool
+    ) -> Bool {
+        let teamID = AgentTeamConfig.slug(rawTeamID)
+        let removedCoordinator = activeAgentTeamCoordinators.removeValue(forKey: teamID)
+        let removedRun = activeAgentTeamRuns.removeValue(forKey: teamID)
+        let existed = removedCoordinator != nil || removedRun != nil
+        taskRunIDByTeamID.removeValue(forKey: teamID)
+        taskQueueAgentTeamContexts.removeValue(forKey: teamID)
+
+        if removeDashboardRow {
+            agentDashboardViewModel?.removeAgentTeamRun(teamID: teamID)
+        }
+        for controller in allWindowControllers {
+            if removeDashboardRow {
+                controller.dashboardViewModel?.removeAgentTeamRun(teamID: teamID)
+            }
+            controller.closeAgentTeamPanes(
+                teamID: teamID,
+                worktreeClosePolicyOverride: worktreeClosePolicyOverride
+            )
+        }
+        return existed
     }
 
     private func requestAgentTeamReviewBeforeShip(_ request: AgentTeamReviewBeforeShipRequest) {
@@ -220,16 +427,36 @@ extension AppDelegate {
 private final class SocketBoundAgentTeamPaneLauncher: AgentTeamPaneLaunching {
     private weak var controller: MainWindowController?
     private let targetTabID: UUID
+    private let excludesTaskQueueLifecycleEvents: Bool
+    private(set) var launchedTabIDs: [TabID] = []
 
-    init(controller: MainWindowController, targetTabID: UUID) {
+    init(
+        controller: MainWindowController,
+        targetTabID: UUID,
+        excludesTaskQueueLifecycleEvents: Bool
+    ) {
         self.controller = controller
         self.targetTabID = targetTabID
+        self.excludesTaskQueueLifecycleEvents = excludesTaskQueueLifecycleEvents
     }
 
-    func spawnAgentTeamPane(launchSpec: AgentTeamProviderLaunchSpec) -> Bool {
-        controller?.spawnAgentTeamPane(
+    func spawnAgentTeamPane(
+        launchSpec: AgentTeamProviderLaunchSpec,
+        initialPrompt: String?
+    ) -> Bool {
+        guard let tabID = controller?.spawnAgentTeamTerminal(
             launchSpec: launchSpec,
-            targetTabID: targetTabID
-        ) ?? false
+            initialPrompt: initialPrompt,
+            targetTabID: targetTabID,
+            excludesTaskQueueLifecycleEvents: excludesTaskQueueLifecycleEvents
+        ) else {
+            return false
+        }
+        launchedTabIDs.append(tabID)
+        return true
+    }
+
+    func closeAgentTeamPanes(teamID: String) {
+        controller?.closeAgentTeamPanes(teamID: teamID)
     }
 }

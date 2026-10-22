@@ -128,6 +128,80 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(connection.requests.last?.command == .surfaceCreate)
         #expect(connection.requests.last?.payload?["workingDirectory"] == "/tmp/project")
         #expect(connection.requests.last?.payload?["command"] == "/bin/zsh")
+        #expect(connection.requests.last?.payload?["fontFamily"] == "Menlo")
+        #expect(connection.requests.last?.payload?["fontSize"] == "13.0")
+        #expect(connection.requests.last?.payload?["ligaturesEnabled"] == "true")
+        let dpiScale = Double(connection.requests.last?.payload?["dpiScale"] ?? "")
+        #expect(dpiScale?.isFinite == true)
+        #expect((dpiScale ?? 0) > 0)
+    }
+
+    @Test("font updates preserve surface scale and focus requests are deduplicated")
+    func fontAndFocusRequestsPreserveSurfaceState() throws {
+        let rawSurfaceID = UUID()
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: rawSurfaceID.uuidString),
+            PTYDaemonResponse(id: "font", ok: true),
+            PTYDaemonResponse(id: "focus-in", ok: true),
+            PTYDaemonResponse(id: "focus-out", ok: true),
+            PTYDaemonResponse(id: "preedit-clear", ok: true),
+            PTYDaemonResponse(id: "close", ok: true),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig().replacing(ligaturesEnabled: false))
+        let surfaceID = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+
+        client.applyFont(family: "JetBrainsMono Nerd Font Mono", size: 18, to: surfaceID)
+        client.notifyFocus(true, for: surfaceID)
+        client.notifyFocus(true, for: surfaceID)
+        client.notifyFocus(false, for: surfaceID)
+        client.notifyFocus(false, for: surfaceID)
+        client.destroySurface(surfaceID)
+        client.notifyFocus(true, for: surfaceID)
+        client.applyFont(family: "Menlo", size: 12, to: surfaceID)
+
+        #expect(connection.requests.map(\.command) == [
+            .hello,
+            .surfaceCreate,
+            .surfaceFont,
+            .surfaceFocus,
+            .surfaceFocus,
+            .surfacePreedit,
+            .surfaceClose,
+        ])
+        let createPayload = try #require(connection.requests[1].payload)
+        let fontPayload = try #require(connection.requests[2].payload)
+        #expect(createPayload["ligaturesEnabled"] == "false")
+        #expect(fontPayload["fontFamily"] == "JetBrainsMono Nerd Font Mono")
+        #expect(fontPayload["fontSize"] == "18.0")
+        #expect(fontPayload["dpiScale"] == createPayload["dpiScale"])
+        #expect(fontPayload["ligaturesEnabled"] == "false")
+        #expect(connection.requests[3].payload?["focused"] == "true")
+        #expect(connection.requests[4].payload?["focused"] == "false")
+    }
+
+    @Test("font default updates configure surfaces created after a hot reload")
+    func fontDefaultUpdatesConfigureFutureSurfaces() throws {
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+            PTYDaemonResponse(id: "first-create", ok: true, surfaceID: UUID().uuidString),
+            PTYDaemonResponse(id: "second-create", ok: true, surfaceID: UUID().uuidString),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig().replacing(ligaturesEnabled: false))
+
+        _ = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+        client.updateFontDefaults(family: "Courier", size: 17)
+        _ = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+
+        let createRequests = connection.requests.filter { $0.command == .surfaceCreate }
+        #expect(createRequests.count == 2)
+        #expect(createRequests[0].payload?["fontFamily"] == "Menlo")
+        #expect(createRequests[0].payload?["fontSize"] == "13.0")
+        #expect(createRequests[1].payload?["fontFamily"] == "Courier")
+        #expect(createRequests[1].payload?["fontSize"] == "17.0")
+        #expect(createRequests[1].payload?["ligaturesEnabled"] == "false")
     }
 
     @Test("sendText, resize and destroy serialize surface requests")
@@ -138,6 +212,7 @@ struct PTYDaemonClientSwiftTestingTests {
             PTYDaemonResponse(id: "create", ok: true, surfaceID: surfaceID.uuidString),
             PTYDaemonResponse(id: "write", ok: true),
             PTYDaemonResponse(id: "resize", ok: true),
+            PTYDaemonResponse(id: "preedit-clear", ok: true),
             PTYDaemonResponse(id: "close", ok: true),
         ])
         let client = PTYDaemonClient(connection: connection)
@@ -152,11 +227,109 @@ struct PTYDaemonClientSwiftTestingTests {
         client.destroySurface(surface)
 
         let commands = connection.requests.map(\.command)
-        #expect(commands == [.hello, .surfaceCreate, .surfaceWrite, .surfaceResize, .surfaceClose])
+        #expect(commands == [
+            .hello,
+            .surfaceCreate,
+            .surfaceWrite,
+            .surfaceResize,
+            .surfacePreedit,
+            .surfaceClose,
+        ])
         #expect(connection.requests[2].payload?["bytesBase64"] == Data("echo ok\n".utf8).base64EncodedString())
         #expect(connection.requests[3].payload?["columns"] == "120")
         #expect(connection.requests[3].payload?["pixelHeight"] == "900")
-        #expect(connection.requests[4].payload?["surfaceID"] == surfaceID.uuidString)
+        #expect(connection.requests[4].payload?["text"] == "")
+        #expect(connection.requests[4].payload?["cursorByteOffset"] == "0")
+        #expect(connection.requests[5].payload?["surfaceID"] == surfaceID.uuidString)
+    }
+
+    @Test("composing key events never cross the daemon transport")
+    func composingKeyEventsDoNotSendRequests() throws {
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+
+        let handled = client.sendKeyEvent(
+            KeyEvent(
+                characters: "x",
+                keyCode: 7,
+                modifiers: [],
+                isKeyDown: true,
+                isComposing: true
+            ),
+            to: SurfaceID()
+        )
+
+        #expect(handled == false)
+        #expect(connection.requests.map(\.command) == [.hello])
+    }
+
+    @Test("progressive key press and release serialize complete metadata")
+    func progressiveKeyEventsSerializeCompleteMetadata() throws {
+        let rawSurfaceID = UUID()
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: rawSurfaceID.uuidString),
+            PTYDaemonResponse(id: "press", ok: true),
+            PTYDaemonResponse(id: "release", ok: true),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+        let surfaceID = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+        let press = KeyEvent(
+            characters: "Q",
+            keyCode: 12,
+            modifiers: [.shift, .command, .capsLock, .numLock],
+            isKeyDown: true,
+            unshiftedCodepoint: 113,
+            shiftedCodepoint: 81,
+            baseLayoutCodepoint: 113
+        )
+
+        #expect(client.sendKeyEvent(press, to: surfaceID))
+        #expect(client.sendKeyEvent(
+            KeyEvent(
+                characters: "Q",
+                keyCode: 12,
+                modifiers: press.modifiers,
+                isKeyDown: false,
+                unshiftedCodepoint: 113,
+                shiftedCodepoint: 81,
+                baseLayoutCodepoint: 113
+            ),
+            to: surfaceID
+        ))
+
+        let requests = connection.requests.filter { $0.command == .surfaceKey }
+        #expect(requests.count == 2)
+        #expect(requests[0].payload?["isKeyDown"] == "true")
+        #expect(requests[1].payload?["isKeyDown"] == "false")
+        #expect(requests[0].payload?["unshiftedCodepoint"] == "113")
+        #expect(requests[0].payload?["shiftedCodepoint"] == "81")
+        #expect(requests[0].payload?["baseLayoutCodepoint"] == "113")
+        #expect(requests[0].payload?["modifiers"] == "201")
+    }
+
+    @Test("preedit cursor byte offset is serialized for the daemon")
+    func preeditCursorByteOffsetIsSerialized() throws {
+        let rawSurfaceID = UUID()
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: rawSurfaceID.uuidString),
+            PTYDaemonResponse(id: "preedit", ok: true),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+        let surfaceID = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+
+        client.sendPreeditText("かな", cursorByteOffset: 3, to: surfaceID)
+
+        let request = try #require(connection.requests.last)
+        #expect(request.command == .surfacePreedit)
+        #expect(request.payload?["text"] == "かな")
+        #expect(request.payload?["cursorByteOffset"] == "3")
     }
 
     @Test("scrollViewport serializes relative daemon scroll requests")
@@ -192,6 +365,87 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(connection.requests[2].payload?["deltaRows"] == "18")
         #expect(connection.requests[2].payload?["lineNumber"] == nil)
         #expect(deliveredScrollbackTop.withValue { $0 } == 18)
+    }
+
+    @Test("semantic navigation sends the negotiated action and delivers its frame")
+    func semanticNavigationSendsActionAndDeliversFrame() throws {
+        let surfaceID = UUID()
+        let frame = PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.uuidString,
+            revision: 4,
+            timestamp: 4,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            scrollbackTop: 12,
+            historyMaxVisibleStart: 20
+        )
+        let result = TerminalSemanticNavigationResult(
+            action: .selectCommandOutput,
+            viewportStartRow: 12,
+            selection: TerminalSemanticSelection(
+                blockID: 88,
+                startRow: 12,
+                startColumn: 0,
+                endRow: 15,
+                endColumn: 79,
+                text: "complete daemon output"
+            )
+        )
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: surfaceID.uuidString),
+            PTYDaemonResponse(
+                id: "semantic",
+                ok: true,
+                frame: frame,
+                semanticNavigation: result
+            ),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+        let surface = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+        let deliveredRevision = LockedBox<UInt64?>(nil)
+        client.setFrameHandler(for: surface) { delivered in
+            deliveredRevision.withValue { $0 = delivered.revision }
+        }
+
+        let returned = client.performSemanticNavigation(.selectCommandOutput, for: surface)
+
+        #expect(returned == result)
+        #expect(connection.requests.map(\.command) == [
+            .hello,
+            .surfaceCreate,
+            .surfaceSemanticNavigation,
+        ])
+        #expect(connection.requests[2].payload?["surfaceID"] == surfaceID.uuidString)
+        #expect(connection.requests[2].payload?["action"] == "select_command_output")
+        #expect(deliveredRevision.withValue { $0 } == 4)
+    }
+
+    @Test("semantic navigation is not sent to an older compatible daemon")
+    func semanticNavigationRequiresCapability() throws {
+        let surfaceID = UUID()
+        let hello = PTYDaemonHello(
+            version: "dev",
+            capabilities: [
+                PTYDaemonProtocol.jsonLinesCapability,
+                PTYDaemonProtocol.terminalSurfaceCapability,
+                PTYDaemonProtocol.terminalEngineCapability,
+                PTYDaemonProtocol.terminalHostRendererCapability,
+            ]
+        )
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: hello),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: surfaceID.uuidString),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+        let surface = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+
+        #expect(client.performSemanticNavigation(.previousPrompt, for: surface) == nil)
+        #expect(connection.requests.map(\.command) == [.hello, .surfaceCreate])
     }
 
     @Test("search and process registration map daemon payloads to domain models")
@@ -261,6 +515,11 @@ struct PTYDaemonClientSwiftTestingTests {
                     surfaceID: surfaceID.uuidString,
                     osc: PTYDaemonOSCNotification(kind: .titleChange, text: "Daemon Shell")
                 ),
+                PTYDaemonEvent(
+                    event: .surfaceOSC,
+                    surfaceID: surfaceID.uuidString,
+                    osc: PTYDaemonOSCNotification(kind: .processExited, exitCode: 9)
+                ),
             ]
         )
         let client = PTYDaemonClient(connection: connection)
@@ -268,6 +527,7 @@ struct PTYDaemonClientSwiftTestingTests {
         let surface = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
         let output = LockedBox(Data())
         let title = LockedBox<String?>(nil)
+        let processExitCode = LockedBox<Int32?>(nil)
 
         client.setOutputHandler(for: surface) { chunk in
             output.withValue { $0.append(chunk) }
@@ -276,12 +536,16 @@ struct PTYDaemonClientSwiftTestingTests {
             if case .titleChange(let value) = notification {
                 title.withValue { $0 = value }
             }
+            if case .processExited(let exitCode) = notification {
+                processExitCode.withValue { $0 = exitCode }
+            }
         }
 
         client.tick()
 
         #expect(String(data: output.withValue { $0 }, encoding: .utf8) == "ready\n")
         #expect(title.withValue { $0 } == "Daemon Shell")
+        #expect(processExitCode.withValue { $0 } == 9)
     }
 
     @Test("frame subscription requests an initial frame and tick forwards frame events")
@@ -302,7 +566,19 @@ struct PTYDaemonClientSwiftTestingTests {
                     backgroundRGBA: 0x000000ff
                 )
             ],
-            cursor: PTYDaemonCursor(row: 0, column: 1)
+            cursor: PTYDaemonCursor(row: 0, column: 1),
+            scrollbackTop: 3,
+            detectedContents: [
+                PTYDaemonDetectedContent(
+                    kind: .url,
+                    text: "https://cocxy.dev",
+                    target: "https://cocxy.dev",
+                    startRow: 3,
+                    startColumn: 0,
+                    endRow: 3,
+                    endColumn: 16
+                )
+            ]
         )
         let eventFrame = PTYDaemonSurfaceFrame(
             surfaceID: surfaceID.uuidString,
@@ -340,11 +616,69 @@ struct PTYDaemonClientSwiftTestingTests {
             deliveredRevision.withValue { $0 = frame.revision }
         }
         let subscribed = client.subscribeFrames(for: surface)
+        let cachedContents = client.visibleDetectedContents(for: surface)
+        let cachedHit = client.detectedContent(atAbsoluteRow: 3, column: 8, for: surface)
         client.tick()
 
         #expect(subscribed?.revision == 1)
+        #expect(cachedContents.map(\.target) == ["https://cocxy.dev"])
+        #expect(cachedHit?.kind == .url)
+        #expect(client.detectedContent(atAbsoluteRow: 4, column: 8, for: surface) == nil)
         #expect(deliveredRevision.withValue { $0 } == 2)
         #expect(connection.requests.map(\.command) == [.hello, .surfaceCreate, .surfaceFrameSubscribe])
+    }
+
+    @Test("stale daemon frames never replace a newer revision")
+    func staleDaemonFramesAreDiscarded() throws {
+        let rawSurfaceID = UUID()
+        let foreignSurfaceID = UUID()
+        func frame(revision: UInt64, surfaceID: UUID? = nil) -> PTYDaemonSurfaceFrame {
+            PTYDaemonSurfaceFrame(
+                surfaceID: (surfaceID ?? rawSurfaceID).uuidString,
+                revision: revision,
+                timestamp: Double(revision),
+                columns: 2,
+                rows: 1,
+                cells: [],
+                cursor: PTYDaemonCursor(row: 0, column: 0)
+            )
+        }
+        let connection = MockPTYDaemonClientConnection(
+            responses: [
+                PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+                PTYDaemonResponse(id: "create", ok: true, surfaceID: rawSurfaceID.uuidString),
+                PTYDaemonResponse(id: "frame", ok: true, frame: frame(revision: 1)),
+            ],
+            events: [
+                PTYDaemonEvent(
+                    event: .surfaceFrame,
+                    surfaceID: rawSurfaceID.uuidString,
+                    frame: frame(revision: 3)
+                ),
+                PTYDaemonEvent(
+                    event: .surfaceFrame,
+                    surfaceID: rawSurfaceID.uuidString,
+                    frame: frame(revision: 2)
+                ),
+                PTYDaemonEvent(
+                    event: .surfaceFrame,
+                    surfaceID: rawSurfaceID.uuidString,
+                    frame: frame(revision: 4, surfaceID: foreignSurfaceID)
+                ),
+            ]
+        )
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+        let surface = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+        let deliveredRevisions = LockedBox<[UInt64]>([])
+        client.setFrameHandler(for: surface) { frame in
+            deliveredRevisions.withValue { $0.append(frame.revision) }
+        }
+
+        #expect(client.subscribeFrames(for: surface)?.revision == 1)
+        client.tick()
+
+        #expect(deliveredRevisions.withValue { $0 } == [3])
     }
 
     @Test("surface send reconnects and reattaches live surfaces before retry")
@@ -379,10 +713,31 @@ struct PTYDaemonClientSwiftTestingTests {
     @Test("surface send marks the surface stalled when reattach fails")
     func surfaceSendMarksSurfaceStalledWhenReattachFails() throws {
         let surfaceID = UUID()
+        let cachedFrame = PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            detectedContents: [
+                PTYDaemonDetectedContent(
+                    kind: .url,
+                    text: "https://cocxy.dev",
+                    target: "https://cocxy.dev",
+                    startRow: 0,
+                    startColumn: 0,
+                    endRow: 0,
+                    endColumn: 16
+                )
+            ]
+        )
         let connection = MockPTYDaemonClientConnection(
             responses: [
                 PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
                 PTYDaemonResponse(id: "create", ok: true, surfaceID: surfaceID.uuidString),
+                PTYDaemonResponse(id: "frame", ok: true, frame: cachedFrame),
                 PTYDaemonResponse(id: "attach", ok: false, error: "missing surface"),
             ],
             throwOnCommands: [.surfaceWrite]
@@ -390,12 +745,21 @@ struct PTYDaemonClientSwiftTestingTests {
         let client = PTYDaemonClient(connection: connection)
         try client.initialize(config: testConfig())
         let surface = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+        #expect(client.subscribeFrames(for: surface)?.revision == 1)
+        #expect(client.visibleDetectedContents(for: surface).count == 1)
 
         client.sendText("stalls", to: surface)
 
         #expect(connection.reconnectCount == 1)
-        #expect(connection.requests.map(\.command) == [.hello, .surfaceCreate, .surfaceWrite, .surfaceAttach])
+        #expect(connection.requests.map(\.command) == [
+            .hello,
+            .surfaceCreate,
+            .surfaceFrameSubscribe,
+            .surfaceWrite,
+            .surfaceAttach,
+        ])
         #expect(client.isSurfaceStalledForTesting(surface) == true)
+        #expect(client.visibleDetectedContents(for: surface).isEmpty)
     }
 
     @Test("surface closed event removes the live surface and blocks later writes")
@@ -421,13 +785,7 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(connection.requests.map(\.command) == [.hello, .surfaceCreate])
     }
 
-    @Test(
-        "process connection reuses one helper process for multiple requests",
-        .disabled(
-            if: ProcessInfo.processInfo.environment["CI"] != nil,
-            "Spawns a real /bin/sh helper; CI runners intermittently drop the transport within milliseconds of the first write, which no client-side budget can absorb."
-        )
-    )
+    @Test("process connection reuses one helper process for multiple requests")
     func processConnectionReusesHelperProcess() throws {
         let tempDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-ptydaemon-connection-\(UUID().uuidString)", isDirectory: true)
@@ -477,13 +835,7 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(starts.count == 1)
     }
 
-    @Test(
-        "process connection queues daemon events received before a response",
-        .disabled(
-            if: ProcessInfo.processInfo.environment["CI"] != nil,
-            "Spawns a real /bin/sh helper; CI runners intermittently drop the transport within milliseconds of the first write, which no client-side budget can absorb."
-        )
-    )
+    @Test("process connection queues daemon events received before a response")
     func processConnectionQueuesDaemonEventsReceivedBeforeResponse() throws {
         let tempDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-ptydaemon-events-\(UUID().uuidString)", isDirectory: true)
@@ -576,6 +928,18 @@ struct PTYDaemonClientSwiftTestingTests {
         buffer.markDisconnected(generation: oldGeneration)
 
         #expect(buffer.isDisconnected == false)
+    }
+
+    @Test("replies and events completed before the helper exits stay deliverable")
+    func messageBufferKeepsCompletedMessagesPastEndOfStream() {
+        let buffer = PTYDaemonProcessMessageBuffer()
+        let generation = buffer.reset()
+        buffer.ingest(Data(#"{"event":"surface_closed","surfaceID":"s"}\#n{"id":"bye","ok":true}\#n"#.utf8), generation: generation)
+        buffer.markDisconnected(generation: generation)
+
+        #expect(buffer.isDisconnected)
+        #expect(buffer.waitForResponse(id: "bye", timeout: 0)?.ok == true)
+        #expect(buffer.receiveEvent(timeout: 0)?.event == .surfaceClosed)
     }
 
     @Test("real helper process connection initializes, writes, streams output and frames")
@@ -693,7 +1057,7 @@ struct PTYDaemonClientSwiftTestingTests {
         client2.destroySurface(secondSurface)
     }
 
-    private func terminalSurfaceHello() -> PTYDaemonHello {
+    func terminalSurfaceHello() -> PTYDaemonHello {
         PTYDaemonHello(
             version: "dev",
             capabilities: [
@@ -701,11 +1065,12 @@ struct PTYDaemonClientSwiftTestingTests {
                 PTYDaemonProtocol.terminalSurfaceCapability,
                 PTYDaemonProtocol.terminalEngineCapability,
                 PTYDaemonProtocol.terminalHostRendererCapability,
+                PTYDaemonProtocol.terminalSemanticNavigationCapability,
             ]
         )
     }
 
-    private func testConfig() -> TerminalEngineConfig {
+    func testConfig() -> TerminalEngineConfig {
         TerminalEngineConfig(
             fontFamily: "Menlo",
             fontSize: 13,
@@ -731,7 +1096,7 @@ struct PTYDaemonClientSwiftTestingTests {
 }
 
 @MainActor
-private final class MockPTYDaemonClientConnection: PTYDaemonClientConnection {
+final class MockPTYDaemonClientConnection: PTYDaemonClientConnection {
     private var responses: [PTYDaemonResponse]
     private var events: [PTYDaemonEvent]
     private var throwOnCommands: [PTYDaemonRequest.Command]

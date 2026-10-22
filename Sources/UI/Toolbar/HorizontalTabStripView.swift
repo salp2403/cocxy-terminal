@@ -535,7 +535,7 @@ final class HorizontalTabStripView: NSView {
         moveLeftItem.target = self
         moveLeftItem.tag = index
         moveLeftItem.isEnabled = !isFirst
-        if let img = NSImage(systemSymbolName: "arrow.left", accessibilityDescription: nil) {
+        if let img = NSImage(systemSymbolName: "arrow.backward", accessibilityDescription: nil) {
             moveLeftItem.image = img
         }
         menu.addItem(moveLeftItem)
@@ -548,7 +548,7 @@ final class HorizontalTabStripView: NSView {
         moveRightItem.target = self
         moveRightItem.tag = index
         moveRightItem.isEnabled = !isLast
-        if let img = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil) {
+        if let img = NSImage(systemSymbolName: "arrow.forward", accessibilityDescription: nil) {
             moveRightItem.image = img
         }
         menu.addItem(moveRightItem)
@@ -1126,7 +1126,7 @@ final class HorizontalTabStripView: NSView {
         case .browser:
             actionStack.addArrangedSubview(
                 createActionButton(
-                    icon: "chevron.left",
+                    icon: "chevron.backward",
                     tooltip: Self.localizedBack(using: localizer),
                     accessibilityID: "action:goBack",
                     action: #selector(handleGoBack)
@@ -1134,7 +1134,7 @@ final class HorizontalTabStripView: NSView {
             )
             actionStack.addArrangedSubview(
                 createActionButton(
-                    icon: "chevron.right",
+                    icon: "chevron.forward",
                     tooltip: Self.localizedForward(using: localizer),
                     accessibilityID: "action:goForward",
                     action: #selector(handleGoForward)
@@ -1148,10 +1148,10 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleReload)
                 )
             )
-        case .markdown, .editor, .notebook, .workflow, .sessionReplay, .aiEditHistory, .templates, .macros, .dbCloud, .subagent:
+        case .markdown, .editor, .notebook, .workflow, .sessionReplay, .aiEditHistory,
+             .templates, .macros, .dbCloud, .projectHome, .subagent:
             break
         }
-
         if canClose {
             actionStack.addArrangedSubview(
                 createActionButton(
@@ -1463,8 +1463,9 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
                 : HorizontalTabStripView.localizedPanelRenamePlaceholder(using: localizer),
             icon: itemKind == .workspaceTab ? "terminal.fill" : "rectangle.split.2x1",
             localizer: localizer
-        ) { [weak self] newTitle in
+        ) { [weak self] result in
             self?.isEditing = false
+            guard case .confirmed(let newTitle) = result else { return }
             self?.onRename?(index, newTitle ?? "")
         }
     }

@@ -2,6 +2,7 @@
 // MenuBarStatusItem.swift - macOS menu bar icon with agent count badge.
 
 import AppKit
+import Combine
 
 // MARK: - Menu Bar Status Item
 
@@ -19,19 +20,19 @@ import AppKit
 /// ```swift
 /// let menuBar = MenuBarStatusItem()
 /// menuBar.install()
-/// menuBar.updateAgentCount(working: 2, waiting: 1, errors: 0)
+/// menuBar.updateAgentCount(MenuBarAgentSummary.summarize(sessions))
 /// ```
 ///
 /// - SeeAlso: `AgentDashboardViewModel` (provides the counts)
 @MainActor
-final class MenuBarStatusItem {
+final class MenuBarStatusItem: NSObject, NSMenuDelegate {
 
     // MARK: - Properties
 
     private var statusItem: NSStatusItem?
-    private var agentMenu: NSMenu?
+    private(set) var agentMenu: NSMenu?
     private var localizer: AppLocalizer
-    private var lastSessions: [(name: String, state: String, activity: String?)] = []
+    private(set) var currentSummary = MenuBarAgentSummary.empty
 
     /// Callback invoked when "Show Cocxy" is selected from the menu.
     var onShowApp: (() -> Void)?
@@ -39,14 +40,24 @@ final class MenuBarStatusItem {
     /// Callback invoked when "Show Dashboard" is selected.
     var onShowDashboard: (() -> Void)?
 
+    /// Callback invoked when the user selects a concrete session row.
+    var onNavigateToSession: ((String) -> Void)?
+
+    /// Pulls the latest summary when the menu is about to open. The publisher
+    /// remains responsible for live badge updates between menu openings.
+    var onRequestAgentSummary: (() -> MenuBarAgentSummary)?
+
     init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
         self.localizer = localizer
+        super.init()
     }
 
     // MARK: - Install
 
     /// Creates and installs the status bar item in the macOS menu bar.
     func install() {
+        guard statusItem == nil else { return }
+
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = item.button {
@@ -60,7 +71,13 @@ final class MenuBarStatusItem {
             button.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         }
 
-        self.statusItem = item
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.delegate = self
+        item.menu = menu
+
+        statusItem = item
+        agentMenu = menu
         rebuildMenu()
     }
 
@@ -71,45 +88,37 @@ final class MenuBarStatusItem {
 
     // MARK: - Update
 
-    /// Updates the menu bar icon badge with current agent counts.
-    ///
-    /// - Parameters:
-    ///   - working: Number of agents actively working.
-    ///   - waiting: Number of agents waiting for input.
-    ///   - errors: Number of agents in error state.
-    ///   - sessions: Descriptions of active sessions for the dropdown menu.
-    func updateAgentCount(
-        working: Int,
-        waiting: Int,
-        errors: Int,
-        sessions: [(name: String, state: String, activity: String?)] = []
-    ) {
-        guard let button = statusItem?.button else { return }
+    /// Binds the real dashboard publisher to this status item.
+    func bindAgentSessions(
+        _ publisher: AnyPublisher<[AgentSessionInfo], Never>,
+        surfaceIDForHookSession: @escaping (String) -> SurfaceID?
+    ) -> AnyCancellable {
+        publisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] sessions in
+                self?.updateAgentCount(
+                    MenuBarAgentSummary.summarize(
+                        sessions,
+                        surfaceIDForHookSession: surfaceIDForHookSession
+                    )
+                )
+            }
+    }
 
-        let total = working + waiting + errors
-
-        if total == 0 {
-            button.title = ""
-            lastSessions = []
-            rebuildMenu()
-        } else {
-            // Show count next to icon with color hint.
-            var parts: [String] = []
-            if working > 0 { parts.append("\(working)↻") }
-            if waiting > 0 { parts.append("\(waiting)⏳") }
-            if errors > 0 { parts.append("\(errors)⚠") }
-            button.title = " " + parts.joined(separator: " ")
-            lastSessions = sessions
-            rebuildMenu()
-        }
+    /// Stores rows independently from badge availability or badge count.
+    func updateAgentCount(_ summary: MenuBarAgentSummary) {
+        currentSummary = summary
+        statusItem?.button?.title = summary.badgeTitle
+        rebuildMenu()
     }
 
     // MARK: - Private
 
     private func rebuildMenu() {
-        let menu = NSMenu()
+        guard let menu = agentMenu else { return }
+        menu.removeAllItems()
 
-        if lastSessions.isEmpty {
+        if currentSummary.rows.isEmpty {
             let noAgents = NSMenuItem(
                 title: Self.localizedNoActiveAgents(using: localizer),
                 action: nil,
@@ -117,28 +126,56 @@ final class MenuBarStatusItem {
             )
             noAgents.isEnabled = false
             menu.addItem(noAgents)
+
+            let explanation = NSMenuItem(
+                title: Self.localizedNoActiveAgentsMessage(using: localizer),
+                action: nil,
+                keyEquivalent: ""
+            )
+            explanation.isEnabled = false
+            explanation.indentationLevel = 1
+            menu.addItem(explanation)
         } else {
-            for session in lastSessions.reversed() {
+            for session in currentSummary.rows {
                 let item = NSMenuItem(
                     title: Self.localizedSessionTitle(
                         name: session.name,
-                        state: session.state,
+                        state: session.state.rawValue,
                         activity: session.activity,
+                        using: localizer
+                    ),
+                    action: #selector(handleNavigateToSession(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = session.sessionID
+                item.isEnabled = true
+
+                // State icon
+                let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
+                item.image = NSImage(
+                    systemSymbolName: Self.symbolName(forAgentState: session.state.rawValue),
+                    accessibilityDescription: Self.localizedAgentState(
+                        session.state.rawValue,
+                        using: localizer
+                    )
+                )?.withSymbolConfiguration(config)
+
+                menu.addItem(item)
+            }
+
+            if currentSummary.overflowCount > 0 {
+                let overflow = NSMenuItem(
+                    title: Self.localizedMoreAgents(
+                        currentSummary.overflowCount,
                         using: localizer
                     ),
                     action: nil,
                     keyEquivalent: ""
                 )
-                item.isEnabled = false
-
-                // State icon
-                let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
-                item.image = NSImage(
-                    systemSymbolName: Self.symbolName(forAgentState: session.state),
-                    accessibilityDescription: Self.localizedAgentState(session.state, using: localizer)
-                )?.withSymbolConfiguration(config)
-
-                menu.addItem(item)
+                overflow.isEnabled = false
+                overflow.indentationLevel = 1
+                menu.addItem(overflow)
             }
         }
 
@@ -166,12 +203,26 @@ final class MenuBarStatusItem {
         )
         quit.keyEquivalentModifierMask = [.command]
 
-        statusItem?.menu = menu
-        agentMenu = menu
     }
 
     static func localizedNoActiveAgents(using localizer: AppLocalizer) -> String {
         localizer.string("agentDashboard.empty.all.title", fallback: "No active agents")
+    }
+
+    static func localizedNoActiveAgentsMessage(using localizer: AppLocalizer) -> String {
+        localizer
+            .string(
+                "agentDashboard.empty.all.message",
+                fallback: "Run an agent in the terminal to see its activity here."
+            )
+            .replacingOccurrences(of: "\n", with: " ")
+    }
+
+    static func localizedMoreAgents(_ count: Int, using localizer: AppLocalizer) -> String {
+        String(
+            format: localizer.string("menuBar.moreAgents", fallback: "+%d more"),
+            count
+        )
     }
 
     static func localizedShowCocxy(using localizer: AppLocalizer) -> String {
@@ -252,11 +303,26 @@ final class MenuBarStatusItem {
         onShowDashboard?()
     }
 
+    @objc private func handleNavigateToSession(_ sender: NSMenuItem) {
+        guard let sessionID = sender.representedObject as? String else { return }
+        onNavigateToSession?(sessionID)
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        if let latestSummary = onRequestAgentSummary?() {
+            currentSummary = latestSummary
+            statusItem?.button?.title = latestSummary.badgeTitle
+        }
+        rebuildMenu()
+    }
+
     /// Removes the status item from the menu bar.
     func uninstall() {
         if let item = statusItem {
             NSStatusBar.system.removeStatusItem(item)
         }
         statusItem = nil
+        agentMenu?.delegate = nil
+        agentMenu = nil
     }
 }

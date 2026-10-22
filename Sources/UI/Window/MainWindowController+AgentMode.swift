@@ -30,21 +30,24 @@ extension MainWindowController {
             onDismiss: { [weak self] in self?.dismissAgentMode() },
             localizer: appLocalizer()
         )
-        let hostingView = NSHostingView(rootView: swiftUIView)
+        let hostingView = makeShellHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
         let panelY = statusBarHostingView?.frame.height ?? 24
         hostingView.frame = NSRect(
-            x: overlayContainer.bounds.width - AgentPanelView.panelWidth,
+            x: trailingPanelOrigin(
+                containerWidth: overlayContainer.bounds.width,
+                panelWidth: AgentPanelView.panelWidth
+            ),
             y: panelY,
             width: AgentPanelView.panelWidth,
             height: max(0, overlayContainer.bounds.height - panelY)
         )
-        hostingView.autoresizingMask = [.height, .minXMargin]
+        hostingView.autoresizingMask = trailingPanelAutoresizingMask(including: .height)
 
         agentModeHostingView = hostingView
         overlayContainer.addSubview(hostingView)
         isAgentModeVisible = true
-        layoutRightDockedAgentPanels()
+        layoutTrailingDockedPanels()
     }
 
     func refreshVisibleAgentModeLocalizer() {
@@ -68,7 +71,10 @@ extension MainWindowController {
 
         isAgentModeVisible = false
 
-        let targetX = overlayContainer.bounds.width
+        let targetX = trailingPanelExitOrigin(
+            containerWidth: overlayContainer.bounds.width,
+            panelWidth: hostingView.frame.width
+        )
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = AnimationConfig.duration(AnimationConfig.overlaySlideOutDuration)
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -77,7 +83,7 @@ extension MainWindowController {
             Task { @MainActor [weak self] in
                 self?.agentModeHostingView?.removeFromSuperview()
                 self?.agentModeHostingView = nil
-                self?.layoutRightDockedAgentPanels()
+                self?.layoutTrailingDockedPanels()
                 self?.focusActiveTerminalSurface()
             }
         })
@@ -88,6 +94,7 @@ extension MainWindowController {
         if let agentPanelViewModel {
             agentPanelViewModel.updateConfiguration(configuration)
             agentPanelViewModel.updateSkillRegistry(currentAgentModeSkillRegistry())
+            bindMobileMirrorApprovals(to: agentPanelViewModel)
             return agentPanelViewModel
         }
 
@@ -113,8 +120,8 @@ extension MainWindowController {
                 self?.currentAgentModeLSPDiagnostics(limit: limit) ?? []
             },
             mcpManager: agentModeMCPManager(),
-            usageRecorder: { [weak self] usage in
-                await self?.recordCurrentAgentModeTokenUsage(usage)
+            usageRecorderProvider: { [weak self] in
+                self?.currentAgentModeUsageRecorder()
             },
             spotlightConfigProvider: { [weak self] in
                 self?.configService?.current.spotlight ?? .defaults
@@ -129,6 +136,7 @@ extension MainWindowController {
             skillRegistry: currentAgentModeSkillRegistry()
         )
         agentPanelViewModel = viewModel
+        bindMobileMirrorApprovals(to: viewModel)
         return viewModel
     }
 
@@ -200,11 +208,17 @@ extension MainWindowController {
         SkillRegistry.localDefault(projectRoot: currentAgentModeWorkingDirectory())
     }
 
-    func recordCurrentAgentModeTokenUsage(_ usage: AgentLLMUsage) {
-        guard let tabID = visibleTabID ?? tabManager.activeTabID else { return }
+    func currentAgentModeUsageRecorder() -> AgentUsageRecording? {
+        guard let tabID = visibleTabID ?? tabManager.activeTabID else { return nil }
         let surfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
             ?? activeTerminalSurfaceView?.terminalViewModel?.surfaceID
-        recordAgentTokenUsage(usage, tabID: tabID, surfaceID: surfaceID)
+        guard let context = agentUsageAttributionContext(
+            tabID: tabID,
+            surfaceID: surfaceID
+        ) else { return nil }
+        return { [weak self] usage in
+            await self?.recordAgentTokenUsage(usage, context: context)
+        }
     }
 
     func currentAgentModeWorkingDirectory() -> URL? {

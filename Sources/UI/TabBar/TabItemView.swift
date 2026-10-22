@@ -119,7 +119,7 @@ final class TabItemView: NSView {
         let label = NSTextField(labelWithString: "")
         label.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
         label.textColor = CocxyColors.overlay1
-        label.alignment = .right
+        label.alignment = .natural
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
@@ -323,9 +323,14 @@ final class TabItemView: NSView {
 
     override func layout() {
         super.layout()
-        let stripWidth = displayItem.isActive ? 5.0 : 2.0
-        accentStrip.frame = NSRect(x: 0, y: 8, width: stripWidth, height: bounds.height - 16)
+        layoutAccentStrip()
         glowLayer.frame = bounds
+    }
+
+    private func layoutAccentStrip() {
+        let stripWidth = displayItem.isActive ? 5.0 : 2.0
+        let stripX = userInterfaceLayoutDirection == .rightToLeft ? bounds.width - stripWidth : 0
+        accentStrip.frame = NSRect(x: stripX, y: 8, width: stripWidth, height: bounds.height - 16)
     }
 
     // MARK: - Update
@@ -423,7 +428,6 @@ final class TabItemView: NSView {
             titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
             timeLabel.textColor = CocxyColors.subtext1
             pathLabel.textColor = CocxyColors.subtext0
-            accentStrip.frame.size.width = 5
             accentStrip.backgroundColor = CocxyColors.blue.cgColor
         } else {
             layer?.backgroundColor = NSColor.clear.cgColor
@@ -431,7 +435,6 @@ final class TabItemView: NSView {
             titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
             timeLabel.textColor = CocxyColors.overlay1
             pathLabel.textColor = CocxyColors.subtext0
-            accentStrip.frame.size.width = 2
         }
 
         // Notification badge: show count for inactive tabs with unread notifications.
@@ -467,6 +470,11 @@ final class TabItemView: NSView {
         setAccessibilityLabel(item.displayTitle)
         setAccessibilityValue(Self.localizedAgentAccessibilityValue(item.agentState, using: localizer))
         setAccessibilityHelp(localizer.string("tabbar.tab.activate.help", fallback: "Activate this tab"))
+        ApplicationLayoutDirectionCoordinator.apply(
+            ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+            to: self
+        )
+        layoutAccentStrip()
     }
 
     // MARK: - Stats Chips
@@ -870,8 +878,9 @@ final class TabItemView: NSView {
             placeholder: Self.localizedRenamePlaceholder(using: localizer),
             icon: "terminal.fill",
             localizer: localizer,
-            onComplete: { [weak self] newTitle in
+            onComplete: { [weak self] result in
                 self?.isEditing = false
+                guard case .confirmed(let newTitle) = result else { return }
                 self?.onRename?(tabID, newTitle ?? "")
             }
         )
@@ -949,16 +958,4 @@ extension TabItemView: NSDraggingSource {
         // Allow move within the app (same or different window).
         context == .withinApplication ? .move : []
     }
-}
-
-// MARK: - Flipped Views for Top-Aligned Scroll Content
-
-/// Clip view with flipped coordinate system so content starts from the top.
-final class FlippedClipView: NSClipView {
-    override var isFlipped: Bool { true }
-}
-
-/// Document view with flipped coordinate system for top-aligned layout.
-final class FlippedDocumentView: NSView {
-    override var isFlipped: Bool { true }
 }

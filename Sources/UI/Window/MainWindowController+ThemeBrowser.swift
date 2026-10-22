@@ -54,7 +54,7 @@ extension MainWindowController {
                 closeFromView?()
             }
         )
-        let hostingView = NSHostingView(rootView: rootView)
+        let hostingView = makeShellHostingView(rootView: rootView)
         let window = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 820, height: 560),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
@@ -63,6 +63,7 @@ extension MainWindowController {
         )
         window.title = "Themes"
         window.contentView = hostingView
+        markAsApplicationManaged(window)
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 760, height: 500)
         window.center()

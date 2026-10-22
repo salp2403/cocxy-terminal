@@ -67,6 +67,131 @@ struct TerminalEngineRoutingSwiftTestingTests {
         #expect(defaultEngine.sentTexts.isEmpty)
     }
 
+    @Test("custom surface creation keeps normal tab routing and destruction")
+    func customSurfaceCreationUsesSelectedEngine() {
+        let defaultEngine = MockTerminalEngine()
+        let inProcessEngine = MockTerminalEngine()
+        let expectedSurfaceID = SurfaceID()
+        let controller = MainWindowController(
+            bridge: defaultEngine,
+            terminalEngineFactory: { preference in
+                preference == .inProcess ? inProcessEngine : nil
+            }
+        )
+
+        let tabID = controller.createTab(
+            terminalEnginePreference: .inProcess,
+            surfaceCreator: { engine, _, _ in
+                #expect(engine === inProcessEngine)
+                return expectedSurfaceID
+            }
+        )
+
+        #expect(controller.tabSurfaceMap[tabID] == expectedSurfaceID)
+        #expect(defaultEngine.createSurfaceRequests.isEmpty)
+        #expect(inProcessEngine.createSurfaceRequests.isEmpty)
+        #expect(controller.terminalEngine(for: expectedSurfaceID) === inProcessEngine)
+
+        controller.performCloseTab(tabID)
+
+        #expect(inProcessEngine.destroyedSurfaces == [expectedSurfaceID])
+        #expect(controller.remoteDaemonTerminalViewModels[expectedSurfaceID] == nil)
+    }
+
+    @Test("verified project tab preserves descriptor authority through engine routing")
+    func verifiedProjectTabUsesDescriptorBoundEngine() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-verified-tab-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        let directory = try ProjectDirectoryRoot.open(directoryURL)
+        let engine = MockTerminalEngine()
+        let controller = MainWindowController(bridge: engine)
+
+        let tabID = try controller.createTab(verifiedWorkingDirectory: directory)
+
+        #expect(controller.tabSurfaceMap[tabID] != nil)
+        #expect(engine.descriptorBoundCreateRequests == [directory.identity])
+        #expect(engine.createSurfaceRequests.last?.workingDirectory == directoryURL)
+    }
+
+    @Test("tab font updates route through the selected terminal engine")
+    func tabFontUpdatesUseSelectedEngine() {
+        let defaultEngine = MockTerminalEngine()
+        let daemonEngine = MockTerminalEngine()
+        let controller = MainWindowController(
+            bridge: defaultEngine,
+            terminalEngineFactory: { preference in
+                preference == .daemon ? daemonEngine : nil
+            }
+        )
+        let tabID = controller.createTab(terminalEnginePreference: .daemon)
+        let baselineCount = daemonEngine.fontApplications.count
+
+        controller.applyFontToTab(tabID, size: 19)
+
+        #expect(daemonEngine.fontApplications.count == baselineCount + 1)
+        #expect(daemonEngine.fontApplications.last?.family == AppearanceConfig.defaults.fontFamily)
+        #expect(daemonEngine.fontApplications.last?.size == 19)
+        #expect(defaultEngine.fontApplications.isEmpty)
+    }
+
+    @Test("global font reload updates routed defaults and live surfaces")
+    func globalFontReloadUpdatesRoutedEngine() {
+        let defaultEngine = MockTerminalEngine()
+        let daemonEngine = MockTerminalEngine()
+        let controller = MainWindowController(
+            bridge: defaultEngine,
+            terminalEngineFactory: { preference in
+                preference == .daemon ? daemonEngine : nil
+            }
+        )
+        _ = controller.createTab(terminalEnginePreference: .daemon)
+        let baselineApplications = daemonEngine.fontApplications.count
+
+        controller.applyEffectiveTerminalFonts(
+            from: .defaults,
+            defaultEngineAlreadyUpdated: true
+        )
+
+        #expect(defaultEngine.fontDefaultUpdates.isEmpty)
+        #expect(defaultEngine.fontApplications.isEmpty)
+        #expect(daemonEngine.fontDefaultUpdates.last?.family == AppearanceConfig.defaults.fontFamily)
+        #expect(daemonEngine.fontDefaultUpdates.last?.size == AppearanceConfig.defaults.fontSize)
+        #expect(daemonEngine.fontApplications.count == baselineApplications + 1)
+        #expect(daemonEngine.fontApplications.last?.family == AppearanceConfig.defaults.fontFamily)
+        #expect(daemonEngine.fontApplications.last?.size == AppearanceConfig.defaults.fontSize)
+    }
+
+    @Test("global font reload preserves project overrides without leaking them into defaults")
+    func globalFontReloadPreservesProjectOverride() {
+        let defaultEngine = MockTerminalEngine()
+        let daemonEngine = MockTerminalEngine()
+        let controller = MainWindowController(
+            bridge: defaultEngine,
+            terminalEngineFactory: { preference in
+                preference == .daemon ? daemonEngine : nil
+            }
+        )
+        let tabID = controller.createTab(terminalEnginePreference: .daemon)
+        controller.tabManager.updateTab(id: tabID) { tab in
+            tab.projectConfig = ProjectConfig(fontSize: 21)
+        }
+        let baselineApplications = daemonEngine.fontApplications.count
+
+        controller.applyEffectiveTerminalFonts(
+            from: .defaults,
+            defaultEngineAlreadyUpdated: true
+        )
+
+        #expect(daemonEngine.fontDefaultUpdates.last?.family == AppearanceConfig.defaults.fontFamily)
+        #expect(daemonEngine.fontDefaultUpdates.last?.size == AppearanceConfig.defaults.fontSize)
+        #expect(daemonEngine.fontApplications.count == baselineApplications + 1)
+        #expect(daemonEngine.fontApplications.last?.family == AppearanceConfig.defaults.fontFamily)
+        #expect(daemonEngine.fontApplications.last?.size == 21)
+        #expect(controller.tabViewModels[tabID]?.defaultFontSize == 21)
+    }
+
     @Test("system tabs keep using the default bridge")
     func systemTabUsesDefaultBridge() {
         let defaultEngine = MockTerminalEngine()

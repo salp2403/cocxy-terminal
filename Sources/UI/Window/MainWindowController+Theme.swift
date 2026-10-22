@@ -72,6 +72,12 @@ extension MainWindowController {
 
         // Apply notification toggle changes to tab bar.
         let localizer = appLocalizer(for: config)
+        if let contentView = window?.contentView {
+            ApplicationLayoutDirectionCoordinator.apply(
+                ApplicationLayoutDirectionCoordinator.resolvedDirection(for: localizer),
+                to: contentView
+            )
+        }
         tabBarView?.updateLocalizer(localizer)
         (horizontalTabStripView as? HorizontalTabStripView)?.updateLocalizer(localizer)
         auroraChromeController?.updateLocalizer(localizer)
@@ -81,6 +87,7 @@ extension MainWindowController {
         updateAIEditHistoryPanelLocalizers(localizer)
         updateDBCloudHelperPanelLocalizers(localizer)
         updateProjectTemplatePanelLocalizers(localizer)
+        updateProjectHomePanelLocalizers(localizer)
         updateMacroSnippetPanelLocalizers(localizer)
         updateBrowserPanelLocalizers(localizer)
         updateNotebookAndWorkflowPanelLocalizers(localizer)
@@ -88,7 +95,10 @@ extension MainWindowController {
         updateSearchBarLocalizer(localizer)
         updateDashboardPanelLocalizer(localizer)
         updateStatusBarLocalizer(localizer)
+        updateTaskQueueCenterLocalizer(localizer)
         updateTerminalHostLocalizers(localizer)
+        updateTerminalCommandBlockConfiguration(config.commandBlocks)
+        updateTerminalCursorClickToMove(config.terminal.cursorClickToMove)
         gitHubPaneViewModel?.updateLocalizer(localizer)
         syncVaultSidebarRootView()
         updateRemoteWorkspacePanelLocalizer(localizer)
@@ -209,6 +219,12 @@ extension MainWindowController {
         if old?.completions != config.completions {
             rewireVisibleEditorCompletions()
         }
+
+        if let hostingController = preferencesWindow?.contentViewController
+            as? NSHostingController<PreferencesView> {
+            hostingController.rootView.viewModel.applyExternalVoiceConfig(config.voice)
+        }
+        updateVoiceConsentPresentation(for: config.voice)
     }
 
     private func updateMarkdownPanelLocalizers(_ localizer: AppLocalizer) {
@@ -295,6 +311,25 @@ extension MainWindowController {
                 if let hostingView = view as? NSHostingView<ProjectTemplatePanelView> {
                     hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
                 }
+            }
+        }
+    }
+
+    private func updateProjectHomePanelLocalizers(_ localizer: AppLocalizer) {
+        func update(_ view: NSView) {
+            if let hostingView = view as? NSHostingView<ProjectHomePanelView> {
+                hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
+            } else if let hostingView = view as? NSHostingView<ProjectHomeUnavailablePanelView> {
+                hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
+            }
+        }
+
+        for view in panelContentViews.values {
+            update(view)
+        }
+        for panelViews in savedTabPanelContentViews.values {
+            for view in panelViews.values {
+                update(view)
             }
         }
     }
@@ -418,20 +453,46 @@ extension MainWindowController {
         hostingView.rootView = root
     }
 
+    private func updateTaskQueueCenterLocalizer(_ localizer: AppLocalizer) {
+        guard let sheet = window?.attachedSheet,
+              let hostingController = sheet.contentViewController
+                as? NSHostingController<TaskQueueCenterView> else { return }
+        hostingController.rootView = hostingController.rootView.updatedLocalizer(localizer)
+        sheet.title = localizer.string("taskQueue.title", fallback: "Task Queue")
+    }
+
     private func updateTerminalHostLocalizers(_ localizer: AppLocalizer) {
+        forEachTerminalHostView { view in
+            view.updateLocalizer(localizer)
+        }
+    }
+
+    private func updateTerminalCommandBlockConfiguration(_ configuration: CommandBlocksConfig) {
+        forEachTerminalHostView { view in
+            view.updateCommandBlockOverlayConfiguration(configuration)
+        }
+    }
+
+    private func updateTerminalCursorClickToMove(_ enabled: Bool) {
+        forEachTerminalHostView { view in
+            view.updateCursorClickToMoveEnabled(enabled)
+        }
+    }
+
+    private func forEachTerminalHostView(_ update: (TerminalHostView) -> Void) {
         var seen = Set<ObjectIdentifier>()
 
-        func update(_ view: TerminalHostView?) {
+        func visit(_ view: TerminalHostView?) {
             guard let view else { return }
             guard seen.insert(ObjectIdentifier(view)).inserted else { return }
-            (view as? CocxyCoreView)?.updateLocalizer(localizer)
+            update(view)
         }
 
-        update(terminalSurfaceView)
-        for view in tabSurfaceViews.values { update(view) }
-        for view in splitSurfaceViews.values { update(view) }
+        visit(terminalSurfaceView)
+        for view in tabSurfaceViews.values { visit(view) }
+        for view in splitSurfaceViews.values { visit(view) }
         for savedSplits in savedTabSplitSurfaceViews.values {
-            for view in savedSplits.values { update(view) }
+            for view in savedSplits.values { visit(view) }
         }
     }
 
