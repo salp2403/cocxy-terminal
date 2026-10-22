@@ -1,6 +1,6 @@
 # Cocxy Terminal
 
-<!-- cocxy-readme-source-sha256: c73b20f78b57d9b59ef6224360cc7b2ad5290f41454021edc5341b3e0a6063ca -->
+<!-- cocxy-readme-source-sha256: eb4d652667db96ad6c3a9e8665840389ea85864371f72b0b28d5d217e46d32cb -->
 <!-- cocxy-readme-locale: pl -->
 
 [English](README.md) | [العربية](README.ar.md) | [Bosanski](README.bs.md) | [Dansk](README.da.md) | [Deutsch](README.de.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [日本語](README.ja.md) | [ភាសាខ្មែរ](README.km.md) | [한국어](README.ko.md) | [Norsk](README.no.md) | [Polski](README.pl.md) | [Português do Brasil](README.pt-BR.md) | [Русский](README.ru.md) | [ไทย](README.th.md) | [Türkçe](README.tr.md) | [Українська](README.uk.md) | [Tiếng Việt](README.vi.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md)
