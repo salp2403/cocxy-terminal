@@ -106,6 +106,14 @@ cocxy_test_home_end() {
 
 cocxy_test_home_cleanup() {
   [[ -n "${cocxy_test_home_state:-}" ]] || return 0
-  rm -rf "$cocxy_test_home_state"
+  # Xcode mounts the Metal toolchain it downloads under the home in use, and a
+  # mounted volume cannot be removed, so detach anything mounted in the sandbox.
+  local real_state mount_point
+  real_state="$(cd "$cocxy_test_home_state" 2>/dev/null && pwd -P)" || real_state="$cocxy_test_home_state"
+  while IFS= read -r mount_point; do
+    hdiutil detach -force "$mount_point" >/dev/null 2>&1 || true
+  done < <(mount | awk -v root="$real_state/" -v alias="$cocxy_test_home_state/" \
+    '{ for (i = 3; i <= NF; i++) if ($(i - 1) == "on") { if (index($i, root) == 1 || index($i, alias) == 1) print $i; break } }')
+  rm -rf "$cocxy_test_home_state" || echo "warning: could not remove the test home $cocxy_test_home_state" >&2
   cocxy_test_home_state=""
 }
