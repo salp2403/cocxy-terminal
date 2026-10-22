@@ -142,7 +142,7 @@ run_bounded() {
     return 125
   fi
   if ! grep -Eq \
-    'Test run with [1-9][0-9]* tests? in [0-9]+ suites? passed after [0-9.]+ seconds[.]$' \
+    'Test run with [1-9][0-9]* tests?( in [0-9]+ suites?)? passed after [0-9.]+ seconds[.]$' \
     "$output_path"; then
     echo "error: Swift Testing suite '${suite}' exited without a complete passing test-run summary." >&2
     rm -f "$output_path"
