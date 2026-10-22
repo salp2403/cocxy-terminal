@@ -7,10 +7,6 @@ import Combine
 import Testing
 @testable import CocxyTerminal
 
-/// A real status item needs a window server session; without one CoreGraphics
-/// aborts the whole test process instead of failing the test.
-private let hasWindowServerSession = CGSessionCopyCurrentDictionary() != nil
-
 @MainActor
 @Suite("Menu bar status item")
 struct MenuBarStatusItemSwiftTestingTests {
@@ -121,7 +117,10 @@ struct MenuBarStatusItemSwiftTestingTests {
         #expect(summary.overflowCount == 1)
     }
 
-    @Test(.enabled(if: hasWindowServerSession, "Installs a real status item"))
+    @Test(.disabled(
+        if: ProcessInfo.processInfo.environment["CI"] != nil,
+        "Installs a real NSStatusItem; CI test processes have no window server connection and CoreGraphics aborts them."
+    ))
     func menuRefreshKeepsTheAssignedMenuAndMakesSessionRowsNavigable() throws {
         let item = MenuBarStatusItem()
         item.install()
@@ -150,7 +149,10 @@ struct MenuBarStatusItemSwiftTestingTests {
         #expect(navigatedSessionID == "fresh-session")
     }
 
-    @Test(.enabled(if: hasWindowServerSession, "Installs a real status item"))
+    @Test(.disabled(
+        if: ProcessInfo.processInfo.environment["CI"] != nil,
+        "Installs a real NSStatusItem; CI test processes have no window server connection and CoreGraphics aborts them."
+    ))
     func emptyMenuIncludesLocalizedExplanation() throws {
         let bundle = try #require(localizationBundle())
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
